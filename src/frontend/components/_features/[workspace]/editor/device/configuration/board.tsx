@@ -272,7 +272,7 @@ const Board = memo(function () {
         return
       }
 
-      const normalizedBoard = board.split('[')[0].trim()
+      const normalizedBoard = availableBoards.has(board) ? board : board.split('[')[0].trim()
 
       if (connectionStatus === 'connected' && normalizedBoard !== deviceBoard) {
         openModal('confirm-device-switch', {
@@ -686,7 +686,7 @@ const Board = memo(function () {
                 Specs
               </Label>
               <div id='board-specs-container' className='grid grid-cols-2 place-content-around gap-2'>
-                {Object.entries(availableBoards.get(deviceBoard)?.specs || {}).map(([spec, value]) => (
+                {Object.entries(currentBoardInfo?.specs ?? {}).map(([spec, value]) => (
                   <p
                     className='text-start font-caption text-cp-sm font-semibold text-neutral-850 dark:text-white'
                     key={spec}
