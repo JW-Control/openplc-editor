@@ -648,7 +648,9 @@ const Board = memo(function () {
                   viewportRef={communicationSelectRef}
                 >
                   {availableCommunicationPorts.map((port) => {
-                    const displayName = port.name?.trim() || port.address
+                    const portAddress = port.address?.trim()
+                    const portName = port.name?.trim()
+                    const displayName = portName && portName !== portAddress ? `${portAddress} (${portName})` : portAddress
                     return (
                       <SelectItem
                         key={port.address}
