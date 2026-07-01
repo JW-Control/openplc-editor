@@ -248,8 +248,6 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
 
         #elif defined(BOARD_ESP32)
     
-        #ifdef BOARD_ESP32
-
             ETH.begin();
 
             if (ip != NULL && subnet != NULL && gateway != NULL)
@@ -277,6 +275,7 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
 //        }
 
     #endif
+
     #ifdef MBTCP_WIFI
         #if defined(BOARD_ESP8266) || defined(BOARD_ESP32)
             if (ip != NULL && gateway != NULL && subnet != NULL && dns != NULL)
