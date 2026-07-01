@@ -126,6 +126,9 @@ export function generateModbusDefines(state: VppModbusScreenState): string {
     const baud = rtu.rtu_baud_rate ?? RTU_DEFAULTS.rtu_baud_rate
     const slave = typeof rtu.rtu_slave_id === 'number' ? rtu.rtu_slave_id : RTU_DEFAULTS.rtu_slave_id
     lines.push(`#define MBSERIAL_IFACE ${iface}`)
+    if (iface === 'Serial2') {
+      lines.push('#define MBSERIAL_IFACE_IS_SERIAL2')
+    }
     lines.push(`#define MBSERIAL_BAUD ${baud}`)
     lines.push(`#define MBSERIAL_SLAVE ${slave}`)
     if (rtu.enable_rs485_en_pin === true && rtu.rtu_rs485_en_pin) {

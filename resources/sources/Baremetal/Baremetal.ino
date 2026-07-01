@@ -30,6 +30,19 @@
 #include "defines.h"
 #include "arduino_runtime_glue.h"
 
+#if defined(JWPLC_BASIC)
+
+#include <JWPLC_RS485.h>
+
+#ifndef JWPLC_RS485_RX_PIN
+#define JWPLC_RS485_RX_PIN 16
+#endif
+
+#ifndef JWPLC_RS485_TX_PIN
+#define JWPLC_RS485_TX_PIN 17
+#endif
+#endif
+
 #ifdef MODBUS_ENABLED
 #include "ModbusSlave.h"
 #endif
@@ -148,11 +161,21 @@ void setup()
                 {
                     if (pinMask_AOUT[i] == MBSERIAL_TXPIN) pinMask_AOUT[i] = 255;
                 }
-                MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
-                mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, MBSERIAL_TXPIN);
+                #if defined(JWPLC_BASIC) && defined(MBSERIAL_IFACE_IS_SERIAL2)
+                    JWPLC_RS485.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&JWPLC_RS485, MBSERIAL_BAUD, MBSERIAL_TXPIN);
+                #else
+                    MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, MBSERIAL_TXPIN);
+                #endif
             #else
-                MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
-                mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, -1);
+                #if defined(JWPLC_BASIC) && defined(MBSERIAL_IFACE_IS_SERIAL2)
+                    JWPLC_RS485.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&JWPLC_RS485, MBSERIAL_BAUD, -1);
+                #else
+                    MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, -1);
+                #endif
             #endif
             modbus.slaveid = MBSERIAL_SLAVE;
         #endif
