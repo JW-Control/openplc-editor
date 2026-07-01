@@ -17,8 +17,7 @@ type Point = { t: number; y: number }
 type SeriesEntry = { points: Point[]; isBool: boolean; compositeKey: string }
 
 const MAX_BUFFER_SECONDS = 600 // Keep 10 minutes of data regardless of displayed range
-
-const HOLD_SAMPLE_INTERVAL_MS = 200
+const DEBUGGER_RENDER_INTERVAL_MS = 100
 
 const Debugger = ({ graphList }: DebuggerData) => {
   const [isPaused, setIsPaused] = useState(false)
@@ -108,34 +107,8 @@ const Debugger = ({ graphList }: DebuggerData) => {
     if (isPaused || graphList.length === 0) return
 
     const timer = window.setInterval(() => {
-      const now = Date.now()
-      const bufferCutoff = now - MAX_BUFFER_SECONDS * 1000
-      const activeKeys = new Set(graphList)
-      const histories = historiesRef.current
-
-      for (const [compositeKey, entry] of histories) {
-        if (!activeKeys.has(compositeKey)) {
-          histories.delete(compositeKey)
-          continue
-        }
-
-        const lastPoint = entry.points[entry.points.length - 1]
-        if (!lastPoint) continue
-
-        const lastTimestamp = lastPoint.t ?? 0
-        if (now - lastTimestamp < HOLD_SAMPLE_INTERVAL_MS * 0.75) continue
-
-        entry.points = [
-          ...entry.points,
-          {
-            ...lastPoint,
-            t: now,
-          },
-        ].filter((point) => point.t >= bufferCutoff)
-      }
-
       setRenderTrigger((value) => value + 1)
-    }, HOLD_SAMPLE_INTERVAL_MS)
+    }, DEBUGGER_RENDER_INTERVAL_MS)
 
     return () => window.clearInterval(timer)
   }, [isPaused, graphList])
@@ -144,13 +117,54 @@ const Debugger = ({ graphList }: DebuggerData) => {
     const now = Date.now()
     const startTime = startTimeRef.current ?? now
     const cutoff = now - range * 1000
+
     return {
       now,
       startTime,
       series: graphList.map((compositeKey) => {
         const entry = historiesRef.current.get(compositeKey)
-        const points = entry ? entry.points.filter((p) => p.t >= cutoff) : []
-        return { name: compositeKey, points, isBool: entry?.isBool ?? false }
+
+        if (!entry || entry.points.length === 0) {
+          return { name: compositeKey, points: [], isBool: entry?.isBool ?? false }
+        }
+
+        const allPoints = entry.points
+        const visiblePoints = allPoints.filter((p) => p.t >= cutoff)
+
+        let lastBeforeCutoff: Point | undefined
+
+        for (let i = allPoints.length - 1; i >= 0; i--) {
+          if (allPoints[i].t < cutoff) {
+            lastBeforeCutoff = allPoints[i]
+            break
+          }
+        }
+
+        let points = visiblePoints
+
+        if (lastBeforeCutoff && (points.length === 0 || points[0].t > cutoff)) {
+          points = [
+            {
+              t: cutoff,
+              y: lastBeforeCutoff.y,
+            },
+            ...points,
+          ]
+        }
+
+        const lastPoint = points[points.length - 1]
+
+        if (lastPoint && now > lastPoint.t) {
+          points = [
+            ...points,
+            {
+              t: now,
+              y: lastPoint.y,
+            },
+          ]
+        }
+
+        return { name: compositeKey, points, isBool: entry.isBool }
       }),
     }
   }, [graphList, range, renderTrigger])

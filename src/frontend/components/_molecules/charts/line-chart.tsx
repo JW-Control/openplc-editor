@@ -46,7 +46,7 @@ const LineChart = ({ data, isBool = false, range, now, startTime, label }: LineC
     return {
       chart: {
         id: chartId,
-        animations: { enabled: true, easing: 'linear' as const, dynamicAnimation: { speed: 500 } },
+        animations: { enabled: false },
         toolbar: { show: false },
         zoom: { enabled: false },
         background: 'transparent',
