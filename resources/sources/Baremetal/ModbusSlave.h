@@ -30,7 +30,10 @@ Copyright (C) 2022 OpenPLC - Thiago Alves
 //Platform specific defines and includes
 #ifdef MBTCP_ETHERNET
 #include <SPI.h>
-#ifdef BOARD_ESP32
+#if defined(JWPLC_BASIC)
+    // JWPLC Basic usa W5500 por SPI. No usar ETH.h / ETH.begin().
+    #include <Ethernet.h>
+#elif defined(BOARD_ESP32)
     // I²C-address of Ethernet PHY (0 or 1 for LAN8720, 31 for TLK110)
     #define ETH_PHY_ADDR 0                      // DEFAULT VALUE IS 0 YOU CAN OMIT IT
     // Type of the Ethernet PHY (LAN8720 or TLK110)
@@ -131,7 +134,9 @@ extern uint16_t mb_t15; // inter character time out
 extern uint16_t mb_t35; // frame delay
 
 #ifdef MBTCP_ETHERNET
-#ifdef BOARD_ESP32
+#if defined(JWPLC_BASIC)
+    extern EthernetServer mb_server;
+#elif defined(BOARD_ESP32)
     extern WiFiServer mb_server;
 #else
     extern EthernetServer mb_server;

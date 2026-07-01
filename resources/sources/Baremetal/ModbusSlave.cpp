@@ -12,6 +12,10 @@ Copyright (C) 2022 OpenPLC - Thiago Alves
 // of the precompiled OpenPLCUserLib archive built with -std=gnu++17.
 #include "arduino_runtime_glue.h"
 
+#if defined(JWPLC_BASIC)
+#include <JWPLC_Ethernet.h>
+#endif
+
 //Global Modbus vars
 struct MBinfo modbus;
 uint8_t mb_frame[MAX_MB_FRAME];
@@ -22,9 +26,12 @@ uint16_t mb_t15; // inter character time out
 uint16_t mb_t35; // frame delay
 
 #ifdef MBTCP_ETHERNET
-#ifdef BOARD_ESP32
+#if defined(JWPLC_BASIC)
+    EthernetServer mb_server(502);
+    static bool jwplc_mbtcp_ready = false;
+#elif defined(BOARD_ESP32)
     WiFiServer mb_server(502);
-	WiFiClient mb_serverClients[MAX_SRV_CLIENTS];
+    WiFiClient mb_serverClients[MAX_SRV_CLIENTS];
 #else
     EthernetServer mb_server(502);
 #endif
@@ -167,6 +174,80 @@ void mbconfig_serial_iface(Stream* port, long baud, int txPin)
 void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *gateway, uint8_t *subnet)
 {
     #ifdef MBTCP_ETHERNET
+
+        #if defined(JWPLC_BASIC)
+            // JWPLC Basic usa W5500 por SPI compartido. No usar ETH.begin() ni
+            // Ethernet.begin() directo: JWPLC_Ethernet inicializa CS, SPI,
+            // timeouts, DHCP/IP estatica, link y estado del W5500.
+            jwplc_mbtcp_ready = false;
+
+            bool ethOk = false;
+
+        #if defined(JWPLC_MBTCP_DEBUG)
+            Serial.begin(115200);
+            delay(300);
+            Serial.println();
+            Serial.println("[JWPLC][MBTCP] Starting Ethernet...");
+        #endif
+
+            if (ip == NULL)
+            {
+        #if defined(JWPLC_MBTCP_DEBUG)
+                Serial.println("[JWPLC][MBTCP] Mode: DHCP");
+        #endif
+                JWPLC_Ethernet.useDHCP();
+
+                // Si el MAC viene vacío desde el VPP, usa uno local por defecto.
+                uint8_t defaultMac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01 };
+                ethOk = JWPLC_Ethernet.begin(mac != NULL ? mac : defaultMac);
+            }
+            else
+            {
+        #if defined(JWPLC_MBTCP_DEBUG)
+                Serial.println("[JWPLC][MBTCP] Mode: static IP");
+        #endif
+                IPAddress localIp(ip);
+                IPAddress dnsIp = (dns != NULL) ? IPAddress(dns) : localIp;
+                IPAddress gatewayIp = (gateway != NULL) ? IPAddress(gateway) : localIp;
+                IPAddress subnetIp = (subnet != NULL) ? IPAddress(subnet) : IPAddress(255, 255, 255, 0);
+
+                uint8_t defaultMac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01 };
+                JWPLC_Ethernet.setMac(mac != NULL ? mac : defaultMac);
+                ethOk = JWPLC_Ethernet.begin(localIp, dnsIp, gatewayIp, subnetIp);
+            }
+
+            IPAddress assignedIp = JWPLC_Ethernet.localIP();
+            bool hasIp = (assignedIp != IPAddress(0, 0, 0, 0));
+
+        #if defined(JWPLC_MBTCP_DEBUG)
+            Serial.print("[JWPLC][MBTCP] ethOk: ");
+            Serial.println(ethOk ? "true" : "false");
+            Serial.print("[JWPLC][MBTCP] IP: ");
+            Serial.println(assignedIp);
+            Serial.print("[JWPLC][MBTCP] Status: ");
+            Serial.println(JWPLC_Ethernet.statusString());
+        #endif
+
+            if (ethOk || hasIp)
+            {
+                mb_server.begin();
+                jwplc_mbtcp_ready = true;
+        #if defined(JWPLC_MBTCP_DEBUG)
+                Serial.println("[JWPLC][MBTCP] Server started on port 502");
+        #endif
+            }
+            else
+            {
+                jwplc_mbtcp_ready = false;
+        #if defined(JWPLC_MBTCP_DEBUG)
+                Serial.println("[JWPLC][MBTCP] Server NOT started");
+        #endif
+            }
+
+            return;
+
+        #elif defined(BOARD_ESP32)
+    
         #ifdef BOARD_ESP32
 
             ETH.begin();
@@ -239,23 +320,47 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
 
 void mbtask()
 {
-    #ifdef MBTCP
+#ifdef MBTCP
+#if defined(JWPLC_BASIC) && defined(MBTCP_ETHERNET)
+    if (jwplc_mbtcp_ready)
+    {
         handle_tcp();
-    #endif
-    #ifdef MBSERIAL
-        handle_serial();
-    #endif
+
+        static uint32_t lastMaintainMs = 0;
+        uint32_t nowMs = millis();
+        if ((uint32_t)(nowMs - lastMaintainMs) >= 1000UL)
+        {
+            JWPLC_Ethernet.maintain();
+            lastMaintainMs = nowMs;
+        }
+    }
+
+    // Cede tiempo al scheduler ESP32 para no afectar TFT, E/S, RTC, Ethernet tick, etc.
+    delay(1);
+#else
+    handle_tcp();
+#endif
+#endif
+
+#ifdef MBSERIAL
+    handle_serial();
+#endif
 }
 
 #ifdef MBTCP
 void handle_tcp()
 {
     #ifdef MBTCP_ETHERNET
-        #ifdef BOARD_ESP32
-            WiFiClient client = mb_server.available();
-        #else
-            EthernetClient client = mb_server.available();
-        #endif
+    #if defined(JWPLC_BASIC)
+        if (!jwplc_mbtcp_ready)
+            return;
+
+        EthernetClient client = mb_server.available();
+    #elif defined(BOARD_ESP32)
+        WiFiClient client = mb_server.available();
+    #else
+        EthernetClient client = mb_server.available();
+    #endif
     #endif
 
     #if defined(MBTCP_WIFI) && !defined(BOARD_ESP8266) && !defined(BOARD_ESP32)
@@ -264,7 +369,7 @@ void handle_tcp()
 
     //ESP and Portenta boards have a slightly different implementation of the WiFi/Ethernet API - therefore their specific
     //code lies below
-    #if (defined(BOARD_ESP8266) || defined(BOARD_ESP32) || defined(BOARD_PORTENTA)) || defined(BOARD_PICOW) && (defined(MBTCP_WIFI) || defined(MBTCP_ETHERNET))
+    #if !defined(JWPLC_BASIC) && ((defined(BOARD_ESP8266) || defined(BOARD_ESP32) || defined(BOARD_PORTENTA)) || (defined(BOARD_PICOW) && (defined(MBTCP_WIFI) || defined(MBTCP_ETHERNET))))
 
 
         #if defined(BOARD_PORTENTA) || defined(BOARD_PICOW) || (defined(BOARD_ESP32) && defined(MBTCP_ETHERNET))

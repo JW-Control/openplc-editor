@@ -1,0 +1,703 @@
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2175: let vendorScreenData: Record<string, unknown> = {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2178: const deviceConfig = JSON.parse(deviceConfigRaw) as { vendorScreenData?: Record<string, unknown> }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2179: vendorScreenData = deviceConfig.vendorScreenData ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2233: const finalConfig = generateVendorPluginConfig(configTemplate, vendorScreenData, modules, devicePins)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2390: * injects them into `vendorScreenData` under a synthetic
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2398: vendorScreenData: Record<string, unknown>,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2438: vendorScreenData as Parameters<typeof buildModuleConfigEntries>[0],
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2487: vendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2741: const vendorScreenData = deviceConfig.vendorScreenData ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2743: modbus_rtu: vendorScreenData['modbus_rtu'] as VppModbusScreenState['modbus_rtu'],
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2744: modbus_tcp: vendorScreenData['modbus_tcp'] as VppModbusScreenState['modbus_tcp'],
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2760: let effectiveVendorScreenData = vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2762: const moduleConfigEntries = await this.buildVppArduinoModuleConfig(boardTarget, vendorScreenData ?? {})
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2764: effectiveVendorScreenData = { ...(vendorScreenData ?? {}), 'module-config': { entries: moduleConfigEntries } }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\editor\compiler\compiler-module.ts:2793: vendorScreenData: effectiveVendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\pipeline.ts:215: *  sourced from `DeviceConfiguration.vendorScreenData` under
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\pipeline.ts:223: *  `DeviceConfiguration.vendorScreenData`.  The platform adapter
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\pipeline.ts:225: *  and forwards the `vendorScreenData` field as-is.  Threaded into
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\pipeline.ts:236: vendorScreenData?: Record<string, unknown>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\pipeline.ts:355: vendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\pipeline.ts:713: const vppConfigH = targetCapabilities.vppIo ? generateVppConfigContent({ vendorScreenData }) : undefined
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-defines.ts:72: *  `DeviceConfiguration.vendorScreenData` under the
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:15: *   - One `#define` per leaf value in `vendorScreenData`.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:37: /** `DeviceConfiguration.vendorScreenData` from the project model.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:42: vendorScreenData: Record<string, unknown> | undefined
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:50: * `vendorScreenData` — every leaf walked through `walk()` becomes
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:54: const { vendorScreenData } = input
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:68: if (vendorScreenData) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:73: const keys = Object.keys(vendorScreenData).sort()
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\generate-vpp-config.ts:76: walk(vendorScreenData[key], prefix, lines)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:5: * The screen is declared in `packages/com.openplc.arduino/screens/modbus.json`
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:7: * `DeviceConfiguration.vendorScreenData` under keys `modbus_rtu` and
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:22: * for fishing `modbus_rtu` and `modbus_tcp` out of `vendorScreenData`.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:27: * field IDs declared in `screens/modbus.json` — keep in sync if the
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:44: tcp_wifi_password?: string
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:56: * colon-separated form the screen's `mac-address` field validates; any
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:82: // Modbus screen (`packages/com.openplc.arduino/screens/modbus.json`).
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\steps\modbus-defines.ts:168: if (tcp.tcp_wifi_password) lines.push(`#define MBTCP_PWD "${tcp.tcp_wifi_password}"`)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:14: it('emits a minimal include-guarded header when vendorScreenData is undefined', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:15: const out = generateVppConfigContent({ vendorScreenData: undefined })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:24: it('emits a minimal include-guarded header when vendorScreenData is an empty object', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:25: const out = generateVppConfigContent({ vendorScreenData: {} })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:32: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:43: const out = generateVppConfigContent({ vendorScreenData: { net: { dhcp: false, https: true } } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:50: vendorScreenData: { 'module-config': { pin_modes: [0, 1, 0, 1] } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:57: const out = generateVppConfigContent({ vendorScreenData: { 'module-config': { slots: [] } } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:64: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:82: vendorScreenData: { 'module-config': { entries: [] } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:90: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:106: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:118: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:128: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:137: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:148: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:159: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:171: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:186: it('end-to-end: serializes an Opta-shaped vendorScreenData faithfully', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\generate-vpp-config.test.ts:190: vendorScreenData: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\compile\__tests__\modbus-defines.test.ts:150: tcp_wifi_password: 'super-secret',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\debug-spec.ts:56: *  `DeviceConfiguration.vendorScreenData` — the editor passes it
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:71: { label: 'RTU', channel: 'rtu', enabledWhen: { $ref: 'screens.modbus_rtu.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:72: { label: 'TCP', channel: 'tcp', enabledWhen: { $ref: 'screens.modbus_tcp.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:84: channels: [{ label: 'RTU', channel: 'rtu', enabledWhen: { $ref: 'screens.modbus_rtu.enabled' }, params: {} }],
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:97: { label: 'RTU', channel: 'rtu', enabledWhen: { $ref: 'screens.modbus_rtu.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:98: { label: 'TCP', channel: 'tcp', enabledWhen: { $ref: 'screens.modbus_tcp.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:123: { label: 'RTU', channel: 'rtu', enabledWhen: { $ref: 'screens.modbus_rtu.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:124: { label: 'TCP', channel: 'tcp', enabledWhen: { $ref: 'screens.modbus_tcp.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:143: { label: 'RTU', channel: 'rtu', enabledWhen: { $ref: 'screens.modbus_rtu.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:144: { label: 'TCP', channel: 'tcp', enabledWhen: { $ref: 'screens.modbus_tcp.enabled' }, params: {} },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:191: baudRate: { $ref: 'screens.modbus_rtu.rtu_baud_rate' },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:218: params: { baudRate: { $ref: 'screens.modbus_rtu.rtu_baud_rate', default: '115200' } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:237: baudRate: { $ref: 'screens.modbus_rtu.rtu_baud_rate', as: 'number' },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:238: slaveId: { $ref: 'screens.modbus_rtu.rtu_slave_id', as: 'number' },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:263: params: { ipAddress: { $ref: 'screens.modbus_tcp.ip_address' } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:299: params: { baudRate: { $ref: 'screens.modbus_rtu.rtu_baud_rate', as: 'number' } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:349: params: { slaveId: { $ref: 'screens.modbus_rtu.rtu_slave_id', as: 'string' } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:382: params: { ipAddress: { $ref: 'screens.modbus_tcp.ip_address' } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\hardware\__tests__\debug-spec.test.ts:385: when: { $ref: 'screens.modbus_tcp.enable_dhcp' },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\types\PLC\open-plc.ts:446: type: z.enum(['password', 'certificate']),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\types\PLC\open-plc.ts:448: passwordHash: z.string().nullable(),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\types\PLC\devices\configuration.ts:8: // compile pipeline read. Always mirrors vendorScreenDataByBoard[deviceBoard].
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\types\PLC\devices\configuration.ts:9: vendorScreenData: z.record(z.string(), z.unknown()).optional(),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\types\PLC\devices\configuration.ts:13: // (flat vendorScreenData only) are migrated on load.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\types\PLC\devices\configuration.ts:14: vendorScreenDataByBoard: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:71: type VendorScreenData = Record<string, unknown>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:223: function buildSlots(vendorScreenData: VendorScreenData, modules: VppModuleDefinition[]): PluginSlot[] {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:224: const moduleConfig = (vendorScreenData['module-configuration'] as ModuleConfiguration | undefined) ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:225: const ioMapping = (vendorScreenData['io-mapping'] as IoMapping | undefined) ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:311: * 1-based slot, so the caller can inject them into `vendorScreenData`
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:321: vendorScreenData: VendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:324: const moduleConfig = (vendorScreenData['module-configuration'] as ModuleConfiguration | undefined) ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:463: vendorScreenData: VendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:472: for (const [key, value] of Object.entries(vendorScreenData)) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:480: result.slots = buildSlots(vendorScreenData, modules)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\generate-vendor-plugin-config.ts:492: export type { PluginSlot, PluginSlotIoMapping, VendorScreenData, VppModuleDefinition }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:4: type VendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:140: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:152: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:171: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:193: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:208: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:223: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:247: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:269: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:302: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:340: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:354: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:363: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:382: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:394: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:409: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:428: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:446: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:454: it('falls through gracefully when vendorScreenData is empty', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:470: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:495: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:520: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:546: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:558: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:573: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:590: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:615: const data: VendorScreenData = { 'module-configuration': { slots: ['bad-screen'] } }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:629: const data: VendorScreenData = { 'module-configuration': { slots: ['null-def'] } }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:659: const data: VendorScreenData = { 'module-configuration': { slots: ['short'] } }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:666: const data: VendorScreenData = {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:753: } as unknown as VendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:765: } as unknown as VendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:776: } as unknown as VendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\backend\shared\utils\vpp\__tests__\generate-vendor-plugin-config.test.ts:781: expect(buildModuleConfigEntries({} as VendorScreenData, modules)).toEqual([])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\generic-table-inputs\generic-select-cell.tsx:6: import { Select, SelectContent, SelectItem, SelectTrigger } from '../select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\generic-table-inputs\generic-select-cell.tsx:44: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\generic-table-inputs\generic-select-cell.tsx:63: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\generic-table-inputs\generic-select-cell.tsx:74: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\select\index.tsx:9: type ISelectTriggerProps = ComponentPropsWithoutRef<typeof PrimitiveSelect.Trigger> & {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\select\index.tsx:13: const SelectTrigger = forwardRef<ElementRef<typeof PrimitiveSelect.Trigger>, ISelectTriggerProps>(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\select\index.tsx:33: * otherwise jumps focus to the first SelectItem whose label
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\select\index.tsx:115: type ISelectItemProps = ComponentPropsWithoutRef<typeof PrimitiveSelect.Item> & {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\select\index.tsx:119: const SelectItem = forwardRef<ElementRef<typeof PrimitiveSelect.Item>, ISelectItemProps>(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_atoms\select\index.tsx:149: export { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[start]\new-project\steps\third-step.tsx:9: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[start]\new-project\steps\third-step.tsx:82: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[start]\new-project\steps\third-step.tsx:97: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[start]\new-project\steps\third-step.tsx:108: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:10: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:313: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:329: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:337: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:438: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:454: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:468: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:573: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:589: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:603: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:708: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:731: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\create-element\element-card\index.tsx:744: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:18: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:192: // currently-focused SelectItem unmounts — which happens every
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:482: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:530: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:541: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:550: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:557: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:571: <div id='runtime-ip-address-field' className='flex w-full items-center justify-start gap-1'>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:573: id='runtime-ip-address-label'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:635: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:655: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\board.tsx:666: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\index.tsx:12: * `configuration.vendorScreenData[screenId]`.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\components\pin-mapping-table.tsx:65: state.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:2: import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend/components/_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:22: // Honored by text-like inputs (text, password, ip-address, mac-address).
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:34: // Shared input styling for every <input> branch (text, number, password,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:35: // ip-address, mac-address). Keeping it in one place avoids style drift
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:36: // when new field types land.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:78: const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:79: const setVendorScreenData = useOpenPLCStore((s) => s.deviceActions.setVendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:88: ? (vendorScreenData?.[persistenceKey] as Record<string, string | number | boolean> | undefined)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:97: setVendorScreenData(persistenceKey, { ...storedValues, [id]: value })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:114: {field.type === 'boolean' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:135: {field.type === 'number' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:150: ) : field.type === 'select' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:152: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:169: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:177: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:182: ) : field.type === 'password' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:184: type='password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:190: autoComplete='new-password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:193: ) : field.type === 'ip-address' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\form-layout.tsx:204: ) : field.type === 'mac-address' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\io-table-layout.tsx:33: const vsd = state.deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\io-table-layout.tsx:51: const setVendorScreenData = useOpenPLCStore((s) => s.deviceActions.setVendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\io-table-layout.tsx:55: s.deviceDefinitions.configuration.vendorScreenData?.['module-configuration'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\io-table-layout.tsx:146: setVendorScreenData(persistenceKey, { entries: newEntries })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\io-table-layout.tsx:199: setVendorScreenData(persistenceKey, { entries: updated })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:8: import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend/components/_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:261: const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:262: const setVendorScreenData = useOpenPLCStore((s) => s.deviceActions.setVendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:265: const moduleConfig = (vendorScreenData?.[persistenceKey] as ModuleConfigState | undefined) ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:416: const vsd = state.deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:470: setVendorScreenData('io-mapping', { entries: newEntries })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:481: setVendorScreenData(persistenceKey, next)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:564: const vsd = useOpenPLCStore.getState().deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:567: setVendorScreenData('io-mapping', { entries: shifted })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:614: const vsd = useOpenPLCStore.getState().deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:619: setVendorScreenData('io-mapping', { entries: shifted })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:640: const vsd = state.deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:687: setVendorScreenData('io-mapping', { entries })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:709: const vsd = state.deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:718: setVendorScreenData('module-configuration', { ...moduleConfig, slotsConfig: nextSlotsConfig })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:753: const entries = (vendorScreenData?.['io-mapping'] as { entries?: IoMappingEntry[] } | undefined)?.entries ?? []
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:1032: {field.type === 'boolean' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:1056: {field.type === 'number' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:1073: ) : field.type === 'select' ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:1075: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:1092: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\configuration\vendor-screen\layouts\module-slots-layout.tsx:1100: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\ethercat-device-editor.tsx:67: const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\ethercat-device-editor.tsx:116: vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\ethercat-device-editor.tsx:131: }, [project.data.remoteDevices, vendorScreenData])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:43: vendorScreenData: ReturnType<
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:45: >['deviceDefinitions']['configuration']['vendorScreenData'],
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:51: vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:116: const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:422: const usedAddresses = buildClaimedAddressSet(project.data.remoteDevices, vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:504: vendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:519: const usedAddresses = buildClaimedAddressSet(project.data.remoteDevices, vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\index.tsx:549: [configuredDevices, syncDevicesToStore, deviceName, project.data.remoteDevices, vendorScreenData, esi],
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\components\global-settings-tab.tsx:4: import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend/components/_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\components\global-settings-tab.tsx:91: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\components\global-settings-tab.tsx:98: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\ethercat\components\global-settings-tab.tsx:114: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:15: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:244: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:251: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:262: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:303: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:310: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:321: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:775: const selectTriggerStyles =
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:781: const selectItemStyles = cn(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:800: <SelectTrigger withIndicator placeholder='Select transport' className={selectTriggerStyles} />
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:803: <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:807: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:856: <SelectTrigger withIndicator placeholder='Select baud rate' className={selectTriggerStyles} />
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:859: <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:863: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:871: <SelectTrigger withIndicator placeholder='Select parity' className={selectTriggerStyles} />
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:874: <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:878: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:886: <SelectTrigger withIndicator placeholder='Select stop bits' className={selectTriggerStyles} />
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:889: <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:893: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:901: <SelectTrigger withIndicator placeholder='Select data bits' className={selectTriggerStyles} />
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:904: <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\device\remote-device\index.tsx:908: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\monaco\completion\cpp.completion.ts:1528: signature: 'int WiFi.begin(const char *ssid, const char *password)',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\monaco\completion\cpp.completion.ts:1533: { name: 'password', type: 'const char *', description: 'Network password' },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\modbus-server\index.tsx:11: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\modbus-server\index.tsx:335: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\modbus-server\index.tsx:342: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\modbus-server\index.tsx:353: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\index.tsx:9: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\index.tsx:349: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\index.tsx:356: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\index.tsx:367: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\certificates-tab.tsx:8: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\certificates-tab.tsx:156: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\certificates-tab.tsx:162: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\certificates-tab.tsx:172: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\certificates-tab.tsx:173: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\certificates-tab.tsx:183: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:9: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:226: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:233: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:244: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:258: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:270: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:281: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\security-profile-modal.tsx:330: <Label className='text-xs text-neutral-950 dark:text-white'>Username / Password</Label>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:10: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:13: type AuthType = 'password' | 'certificate'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:42: * Hash a password using PBKDF2-HMAC-SHA256.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:46: const hashPassword = async (password: string): Promise<string> => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:50: // Import password as key material
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:51: const passwordKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, [
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:63: passwordKey,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:87: const [authType, setAuthType] = useState<AuthType>('password')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:89: const [password, setPassword] = useState('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:90: const [confirmPassword, setConfirmPassword] = useState('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:91: const [showPassword, setShowPassword] = useState(false)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:100: setPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:101: setConfirmPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:102: setShowPassword(false)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:107: setAuthType('password')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:109: setPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:110: setConfirmPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:111: setShowPassword(false)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:126: // pattern the password-mismatch label uses.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:128: // The mismatch and "passwords-not-yet-confirmed" gates live in their
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:131: // typed in confirmPassword; missing confirmPassword silently
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:135: if (authType !== 'password') return null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:147: const passwordError = useMemo<string | null>(() => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:148: if (authType !== 'password') return null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:149: // Editing path: an empty password means "keep existing" — not an error.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:150: if (isEditing && !password) return null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:151: if (!password) return 'Password is required'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:152: if (password.length < 4) return 'Password must be at least 4 characters'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:154: }, [authType, password, isEditing])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:168: // Password mismatch handling has two flavours:
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:169: //   - `passwordsMismatchVisible`: drives the inline red label under the
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:170: //     Confirm Password input. Only true once the user has typed something
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:171: //     in confirmPassword, so the error doesn't flicker while they're still
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:173: //   - `passwordsOk`: gates the Save button. Requires both fields to be
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:174: //     filled AND match when a password is being set (new user, or editing
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:175: //     user with non-empty password). Empty confirmPassword keeps Save
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:178: const isSettingPassword = authType === 'password' && (!isEditing || password.length > 0)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:179: const passwordsMismatchVisible = isSettingPassword && confirmPassword.length > 0 && password !== confirmPassword
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:180: const passwordsOk = !isSettingPassword || (confirmPassword.length > 0 && password === confirmPassword)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:182: const isValid = !usernameError && !passwordError && !certificateError && passwordsOk
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:188: let passwordHash: string | null = null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:190: if (authType === 'password' && password) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:191: passwordHash = await hashPassword(password)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:192: } else if (authType === 'password' && isEditing && existingUser?.passwordHash) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:193: // Keep existing password hash if not changing
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:194: passwordHash = existingUser.passwordHash
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:200: username: authType === 'password' ? username.trim() : null,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:201: passwordHash: authType === 'password' ? passwordHash : null,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:208: }, [isValid, authType, username, password, certificateId, role, existingUser, isEditing, onSave, onClose])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:222: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:228: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:229: value='password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:236: Password
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:238: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:239: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:249: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:254: {/* Password Authentication Section */}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:255: {authType === 'password' && (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:258: Password Authentication
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:277: {/* Password */}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:280: {isEditing ? 'New Password (leave blank to keep current)' : 'Password'}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:284: type={showPassword ? 'text' : 'password'}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:285: value={password}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:286: onChange={(e) => setPassword(e.target.value)}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:292: onClick={() => setShowPassword(!showPassword)}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:293: disabled={!password}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:296: password
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:301: !password
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:302: ? 'Enter a password to toggle visibility'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:303: : showPassword
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:304: ? 'Hide password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:305: : 'Show password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:308: {showPassword ? (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:315: {passwordError && (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:316: <span className='font-caption text-cp-xs font-normal text-red-500'>{passwordError}</span>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:320: {/* Confirm Password */}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:322: <Label className='text-xs text-neutral-950 dark:text-white'>Confirm Password</Label>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:324: type={showPassword ? 'text' : 'password'}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:325: value={confirmPassword}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:326: onChange={(e) => setConfirmPassword(e.target.value)}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:330: {passwordsMismatchVisible && (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:331: <span className='font-caption text-cp-xs font-normal text-red-500'>Passwords do not match</span>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:352: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:359: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:370: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:392: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:399: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\user-modal.tsx:410: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:22: if (user.type === 'password') {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:42: // Check if we have any password users when username auth is enabled
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:43: const passwordUserCount = useMemo(() => config.users.filter((u) => u.type === 'password').length, [config.users])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:47: () => config.users.filter((u) => u.type === 'password' && u.username).map((u) => u.username as string),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:101: {usernameAuthEnabled && passwordUserCount === 0 && (
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:104: Warning: Username authentication is enabled but no password users exist. Add at least one user for clients
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:123: No users configured. Add users for password or certificate authentication.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\users-tab.tsx:145: {user.type === 'password' ? 'Password' : 'Certificate'}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:8: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:137: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:146: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:153: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:154: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:161: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:162: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:169: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:446: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:452: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:462: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:463: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:473: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:474: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:484: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:493: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:499: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:509: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:510: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:520: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:521: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:531: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:540: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:546: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:556: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:557: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:567: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:568: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\components\variable-config-modal.tsx:578: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\hooks\use-project-variables.ts:167: const fieldTypeName = field.type.value
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\hooks\use-project-variables.ts:169: const fieldType = field.type as { definition: string; value: string; data?: ArrayData }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\opcua-server\hooks\use-project-variables.ts:174: field.type.definition,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:10: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:238: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:245: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:256: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:571: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:578: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\server\s7comm-server\index.tsx:589: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:8: * Stable serialisation of the slice of `vendorScreenData` this screen
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:14: function serializeOwnedSlice(vendorScreenData: Record<string, unknown> | undefined, ownedKeys: string[]): string {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:17: if (vendorScreenData && Object.prototype.hasOwnProperty.call(vendorScreenData, k)) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:18: slice[k] = vendorScreenData[k]
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:29: const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:52: cleanState: serializeOwnedSlice(vendorScreenData, ownedKeys),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:55: // vendorScreenData would reset cleanState on every keystroke,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:65: const current = serializeOwnedSlice(vendorScreenData, ownedKeys)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_features\[workspace]\editor\vendor-screen\index.tsx:71: }, [screenName, ownedKeys, vendorScreenData, getFile, updateFile])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\array\header\base-type.tsx:2: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\array\header\base-type.tsx:12: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\array\header\base-type.tsx:25: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\array\header\base-type.tsx:33: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:9: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:208: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:213: </SelectTrigger>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:215: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:220: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:224: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\data-types\enumerated\index.tsx:232: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\global-variables-table\selectable-cell.tsx:16: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\global-variables-table\selectable-cell.tsx:392: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\global-variables-table\selectable-cell.tsx:406: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\global-variables-table\selectable-cell.tsx:414: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:8: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:43: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:61: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:69: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:104: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:121: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\instances-table\selectable-cell.tsx:129: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\select-field\index.tsx:2: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\select-field\index.tsx:31: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\select-field\index.tsx:47: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\select-field\index.tsx:55: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\task-table\selectable-cell.tsx:6: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\task-table\selectable-cell.tsx:30: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\task-table\selectable-cell.tsx:41: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\task-table\selectable-cell.tsx:49: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\variables-table\selectable-cell.tsx:16: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\variables-table\selectable-cell.tsx:486: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\variables-table\selectable-cell.tsx:503: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_molecules\variables-table\selectable-cell.tsx:511: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\debugger-ip-input-modal.tsx:57: <Label htmlFor='ip-address' className='mb-2 block text-sm'>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\debugger-ip-input-modal.tsx:61: id='ip-address'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:13: const [password, setPassword] = useState('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:14: const [confirmPassword, setConfirmPassword] = useState('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:26: if (!username || !password) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:27: setError('Username and password are required')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:31: if (password !== confirmPassword) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:32: setError('Passwords do not match')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:38: const result = await runtime.createUser({ username, password })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:41: const loginResult = await runtime.login({ username, password })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:45: deviceActions.setStoredCredentials({ username, password })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:48: setPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:49: setConfirmPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:67: setPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:68: setConfirmPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:118: Password
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:123: type='password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:125: value={password}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:126: onChange={(e) => setPassword(e.target.value)}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:127: placeholder='Enter password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:135: Confirm Password
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:140: type='password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:142: value={confirmPassword}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:143: onChange={(e) => setConfirmPassword(e.target.value)}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-create-user-modal.tsx:144: placeholder='Confirm password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:13: const [password, setPassword] = useState('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:25: if (!username || !password) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:26: setError('Username and password are required')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:33: const result = await runtime.login({ username, password })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:38: deviceActions.setStoredCredentials({ username, password })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:41: setPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:56: setPassword('')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:106: Password
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:111: type='password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:113: value={password}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:114: onChange={(e) => setPassword(e.target.value)}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\modals\runtime-login-modal.tsx:115: placeholder='Enter password'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:30: import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:1067: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:1080: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:1088: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:1126: <SelectTrigger
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:1139: <SelectItem
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\variables-editor\index.tsx:1147: </SelectItem>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\workspace-activity-bar\default.tsx:275: vendorScreenData: deviceDefinitions.configuration.vendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\workspace-activity-bar\default.tsx:676: // `vendorScreenData` is already keyed by section ID (e.g.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\components\_organisms\workspace-activity-bar\default.tsx:679: const screens = (cfg.vendorScreenData ?? {}) as Record<string, Record<string, unknown>>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-alias-registry.ts:45: const vsd = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-device-configuration.ts:141: state.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-store-selectors.ts:128: const vendorScreenData = useOpenPLCStore((state) => state.deviceDefinitions.configuration.vendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-store-selectors.ts:131: if (!vendorScreenData) return []
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-store-selectors.ts:133: // Look through all vendorScreenData keys for io-mapping entries
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-store-selectors.ts:134: for (const [, value] of Object.entries(vendorScreenData)) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\hooks\use-store-selectors.ts:144: }, [vendorScreenData])
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:578: // replace only the `vendorScreenData` keys this screen owns
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:827: * Resolve the `vendorScreenData` keys this screen tab owns.  Looks
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:842: const vendorScreenData = state.deviceDefinitions.configuration.vendorScreenData ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:845: if (Object.prototype.hasOwnProperty.call(vendorScreenData, k)) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:846: slice[k] = vendorScreenData[k]
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:855: * `vendorScreenData` keys this screen owns (the rest of
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:856: * vendorScreenData and every other configuration field stay verbatim
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:878: const memVendor = state.deviceDefinitions.configuration.vendorScreenData ?? {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:894: onDisk.vendorScreenData && typeof onDisk.vendorScreenData === 'object'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:895: ? ({ ...(onDisk.vendorScreenData as Record<string, unknown>) } as Record<string, unknown>)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:905: onDisk.vendorScreenData = diskVendor
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:913: onDisk.vendorScreenDataByBoard && typeof onDisk.vendorScreenDataByBoard === 'object'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:914: ? ({ ...(onDisk.vendorScreenDataByBoard as Record<string, unknown>) } as Record<string, unknown>)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\services\save-actions.ts:917: onDisk.vendorScreenDataByBoard = diskByBoard
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:397: cfg.vendorScreenData = { ...(cfg.vendorScreenDataByBoard?.[deviceBoard] ?? {}) }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:527: setVendorScreenData: (persistenceKey, data): void => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:531: if (!deviceDefinitions.configuration.vendorScreenData) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:532: deviceDefinitions.configuration.vendorScreenData = {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:534: deviceDefinitions.configuration.vendorScreenData[persistenceKey] = data
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:540: * Restore a contiguous slice of `vendorScreenData` from a snapshot.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:552: if (!deviceDefinitions.configuration.vendorScreenData) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:553: deviceDefinitions.configuration.vendorScreenData = {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:555: const target = deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:571: * Keep the active board's bucket in `vendorScreenDataByBoard` in lock-step
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:572: * with the flat `vendorScreenData` view. Called from every vendor-data
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:578: if (!configuration.vendorScreenDataByBoard) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:579: configuration.vendorScreenDataByBoard = {}
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:581: configuration.vendorScreenDataByBoard[configuration.deviceBoard] = { ...(configuration.vendorScreenData ?? {}) }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:588: * - When a project already carries `vendorScreenDataByBoard`, it wins: the
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:591: * - Legacy projects only have the flat `vendorScreenData`. It's attributed to
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:595: function migrateVendorScreenData(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:598: ): Pick<DeviceConfiguration, 'vendorScreenData' | 'vendorScreenDataByBoard'> {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:599: const flat = provided.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:600: const archive = provided.vendorScreenDataByBoard
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:605: vendorScreenData: active,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:606: vendorScreenDataByBoard: active !== undefined ? { ...archive, [deviceBoard]: active } : { ...archive },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:611: return { vendorScreenData: flat, vendorScreenDataByBoard: { [deviceBoard]: flat } }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:614: return { vendorScreenData: undefined, vendorScreenDataByBoard: undefined }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:622: const { vendorScreenData, vendorScreenDataByBoard } = migrateVendorScreenData(provided, deviceBoard)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:627: vendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\slice.ts:628: vendorScreenDataByBoard,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\types.ts:57: password: string
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\types.ts:156: setVendorScreenData: (persistenceKey: string, data: unknown) => void
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\device\types.ts:157: /** Restore `vendorScreenData[k]` for every k in `ownedKeys`: from
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\project\slice.ts:207: live.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\project\slice.ts:782: live.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\project\slice.ts:1505: live.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\project\slice.ts:1567: live.deviceDefinitions?.configuration?.vendorScreenData?.['io-mapping'] as
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\slices\project\types.ts:308: * `setDeviceDefinitions` / `setVendorScreenData` lives in the device
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:288: store.getState().deviceActions.setStoredCredentials({ username: 'u', password: 'p' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:957: // The snapshot-vs-current model: the tab captures `vendorScreenData`
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:965: store.getState().deviceActions.setVendorScreenData('modbus_rtu', { enabled: true, baud: '115200' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:970: store.getState().deviceActions.setVendorScreenData('modbus_rtu', { enabled: false, baud: '57600' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:973: expect(store.getState().deviceDefinitions.configuration.vendorScreenData?.modbus_rtu).toEqual({
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:983: store.getState().deviceActions.setVendorScreenData('modbus_rtu', { enabled: true })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:986: expect(store.getState().deviceDefinitions.configuration.vendorScreenData?.modbus_rtu).toBeUndefined()
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:991: // (or the device editor itself) may have written to vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:994: store.getState().deviceActions.setVendorScreenData('modbus_rtu', { enabled: true })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:995: store.getState().deviceActions.setVendorScreenData('io-mapping', { rows: ['from-other-tab'] })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1000: expect(store.getState().deviceDefinitions.configuration.vendorScreenData?.modbus_rtu).toEqual({
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1004: expect(store.getState().deviceDefinitions.configuration.vendorScreenData?.['io-mapping']).toEqual({
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1009: it('initializes vendorScreenData when the store has no prior key', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1014: // Make sure vendorScreenData starts absent.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1015: expect(store.getState().deviceDefinitions.configuration.vendorScreenData).toEqual(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1016: defaultDeviceConfiguration.vendorScreenData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1019: expect(store.getState().deviceDefinitions.configuration.vendorScreenData?.modbus_rtu).toEqual({
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1033: const vsd = (state: ReturnType<typeof store.getState>) => state.deviceDefinitions.configuration.vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1035: state.deviceDefinitions.configuration.vendorScreenDataByBoard
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1038: it('mirrors setVendorScreenData into the active board’s bucket', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1041: store.getState().deviceActions.setVendorScreenData('module-configuration', { slots: ['mod-a'] })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1050: store.getState().deviceActions.setVendorScreenData('module-configuration', { slots: ['mod-a'] })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1062: actions.setVendorScreenData('module-configuration', { slots: ['slm-mod'] })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1066: actions.setVendorScreenData('module-configuration', { slots: ['p1am-mod'] })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1078: store.getState().deviceActions.setVendorScreenData('modbus_rtu', { enabled: true })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1087: // mergeDeviceConfigWithDefaults ? migrateVendorScreenData)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1095: configuration: { deviceBoard: 'SLM-RP4', vendorScreenData: { 'module-configuration': { slots: ['x'] } } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1097: expect(cfg(store).vendorScreenData).toEqual({ 'module-configuration': { slots: ['x'] } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1098: expect(cfg(store).vendorScreenDataByBoard).toEqual({ 'SLM-RP4': { 'module-configuration': { slots: ['x'] } } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1106: vendorScreenDataByBoard: {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1112: expect(cfg(store).vendorScreenData).toEqual({ 'module-configuration': { slots: ['p1am'] } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1120: vendorScreenData: { 'module-configuration': { slots: ['flat'] } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1121: vendorScreenDataByBoard: { 'SLM-RP4': { 'module-configuration': { slots: ['slm'] } } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1124: expect(cfg(store).vendorScreenData).toEqual({ 'module-configuration': { slots: ['flat'] } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1126: expect(cfg(store).vendorScreenDataByBoard?.['P1AM-100']).toEqual({ 'module-configuration': { slots: ['flat'] } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1127: expect(cfg(store).vendorScreenDataByBoard?.['SLM-RP4']).toEqual({ 'module-configuration': { slots: ['slm'] } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1135: vendorScreenDataByBoard: { 'SLM-RP4': { 'module-configuration': { slots: ['slm'] } } },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1138: expect(cfg(store).vendorScreenData).toBeUndefined()
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1139: expect(cfg(store).vendorScreenDataByBoard).toEqual({ 'SLM-RP4': { 'module-configuration': { slots: ['slm'] } } })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1145: expect(cfg(store).vendorScreenData).toBeUndefined()
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1146: expect(cfg(store).vendorScreenDataByBoard).toBeUndefined()
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1275: store.getState().deviceActions.setStoredCredentials({ username: 'admin', password: 'pass' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1278: password: 'pass',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1284: store.getState().deviceActions.setStoredCredentials({ username: 'u', password: 'p' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-slice.test.ts:1399: store.getState().deviceActions.setStoredCredentials({ username: 'u', password: 'p' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-types.test.ts:72: it('has username and password', () => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-types.test.ts:73: const creds: StoredCredentials = { username: 'admin', password: 'secret' }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-types.test.ts:75: expect(creds.password).toBe('secret')
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\device-types.test.ts:146: storedCredentials: { username: 'u', password: 'p' },
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\project-slice.test.ts:184: type: 'password',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\project-slice.test.ts:186: passwordHash: 'hash',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\project-slice.test.ts:2306: // entries in vendorScreenData.io-mapping. When the user switches
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\project-slice.test.ts:2310: store.getState().deviceActions.setVendorScreenData('io-mapping', {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\project-slice.test.ts:2599: type: 'password',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\project-slice.test.ts:2601: passwordHash: 'hash',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:124: function seedVendorScreenData(store: ReturnType<typeof makeStore>, data: Record<string, unknown>) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:126: store.getState().deviceActions.setVendorScreenData(k, v as Record<string, unknown>)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:134: seedVendorScreenData(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:152: seedVendorScreenData(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:169: seedVendorScreenData(store, withVppEntries([])) // no VPP entries at all
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:193: seedVendorScreenData(store, withVppEntries([{ slot: 1, channelName: 'DO1', iecAddress: '%QX0.0', alias: 'motor' }]))
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:210: seedVendorScreenData(
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:229: seedVendorScreenData(store, withVppEntries([{ slot: 1, channelName: 'DO1', iecAddress: '%QX0.0', alias: 'a' }]))
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:269: seedVendorScreenData(store, withVppEntries([{ slot: 1, channelName: 'DO1', iecAddress: '%QX0.0', alias: 'motor' }]))
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\store\__tests__\sync-variable-aliases-action.test.ts:290: seedVendorScreenData(store, withVppEntries([{ slot: 1, channelName: 'DO1', iecAddress: '%QX0.0', alias: 'motor' }]))
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:279: if (field.type.definition === 'base-type') {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:286: field.type.value.toUpperCase(),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:290: } else if (field.type.definition === 'user-data-type') {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:291: const childTypeDef = isFunctionBlock(field.type.value, projectPous, systemLibraries)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:299: field.type.value,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:305: } else if (field.type.definition === 'array' && field.type.data) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\debug-tree-traversal.ts:315: field.type.data as ArrayTypeData,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\location-dropdown-options.ts:71: /** VPP module IO mappings from `vendorScreenData['io-mapping']`.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\pou-helpers.ts:248: const fieldTypeName = field.type.value
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\pou-helpers.ts:250: if (field.type.definition === 'base-type' && isBaseType(fieldTypeName)) {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\remote-device-options.ts:94: * @param entries - Array of vendor IO mapping entries from vendorScreenData
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\cpp\__tests__\generateSTCode.test.ts:40: // field type is `strucpp::IEC_INT *` so user writes via the macro
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\cpp\__tests__\generateSTCode.test.ts:104: // matches the field type exactly, so we point directly and let
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\opcua\generate-opcua-config.ts:68: password_hash: string | null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\opcua\generate-opcua-config.ts:199: password_hash: user.passwordHash,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\opcua\__tests__\generate-opcua-config.test.ts:213: type: 'password',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\opcua\__tests__\generate-opcua-config.test.ts:215: passwordHash: '$2b$x',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\opcua\__tests__\generate-opcua-config.test.ts:527: type: 'password',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\opcua\__tests__\generate-opcua-config.test.ts:529: passwordHash: 'x',
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\vpp\persistence-keys.ts:3: * for which key under `vendorScreenData` a given screen section
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\vpp\persistence-keys.ts:9: *     write side: `setVendorScreenData(getSectionPersistenceKey(sec), …)`.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\vpp\persistence-keys.ts:15: *     of `vendorScreenData` to read-modify-write.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\vpp\persistence-keys.ts:38: * `vendorScreenData` does this section persist into?"
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\vpp\persistence-keys.ts:52: * Resolve every `vendorScreenData` key a screen definition will
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\frontend\utils\vpp\__tests__\persistence-keys.test.ts:4: * Failures here indicate the shared `vendorScreenData` key resolution
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:68: private runtimeCredentials: { ipAddress: string; username: string; password: string } | null = null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:192: password: string,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:198: body: JSON.stringify({ username, password, role: 'user' }),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:212: password: string,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:218: body: JSON.stringify({ username, password }),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:234: handleRuntimeLogin = async (_event: IpcMainInvokeEvent, ipAddress: string, username: string, password: string) => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:235: const result = await this.performAuthentication(ipAddress, username, password)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:237: this.runtimeCredentials = { ipAddress, username, password }
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:251: const { ipAddress, username, password } = this.runtimeCredentials
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\main.ts:253: this.tokenRefreshInFlight = this.performAuthentication(ipAddress, username, password).finally(() => {
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\renderer.ts:446: password: string,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\renderer.ts:448: ipcRenderer.invoke('runtime:create-user', ipAddress, username, password),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\renderer.ts:452: password: string,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\main\modules\ipc\renderer.ts:454: ipcRenderer.invoke('runtime:login', ipAddress, username, password),
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\compiler-adapter.ts:226: args.vendorScreenData ?? null,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\runtime-adapter.ts:47: const result = await window.bridge.runtimeLogin(ip, params.username, params.password)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\runtime-adapter.ts:60: return await window.bridge.runtimeCreateUser(ip, params.username, params.password)
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\compiler-adapter.test.ts:215: //   cleanBuild, communicationPort, vendorScreenData.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\compiler-adapter.test.ts:216: // `vendorScreenData` is the 10th slot — threaded through to
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:38: const result = await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:45: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:53: ;(window.bridge.runtimeLogin as jest.Mock).mockResolvedValue({ success: false, error: 'Bad password' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:54: await adapter.login({ username: 'admin', password: 'wrong' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:62: const result = await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:70: const result = await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:82: const result = await adapter.createUser({ username: 'newuser', password: 'pass123' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:90: const result = await adapter.createUser({ username: 'newuser', password: 'pass123' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:97: const result = await adapter.createUser({ username: 'newuser', password: 'pass123' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:136: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:170: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:198: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:226: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:263: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:291: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:319: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:452: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\adapters\editor\__tests__\runtime-adapter.test.ts:459: await adapter.login({ username: 'admin', password: 'secret' })
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\compiler-port.ts:49: *  (`DeviceConfiguration.vendorScreenData`).  Threaded through the
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\compiler-port.ts:54: vendorScreenData?: Record<string, unknown>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\debug-spec-types.ts:14: * `DeviceConfiguration.vendorScreenData` is indexed by.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\debug-spec-types.ts:39: * `screens.modbus_rtu.enabled`,
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\runtime-port.ts:55: password: string
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\runtime-port.ts:66: password: string
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:321: type: 'password' | 'certificate'
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:323: passwordHash: string | null
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:450: *  legacy fixtures and projects without the field type-check; the
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:927: * pipeline read — it always mirrors `vendorScreenDataByBoard[deviceBoard]`.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:929: vendorScreenData?: Record<string, unknown>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:934: * `vendorScreenData` instead of carrying stale modules across targets.
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:935: * Legacy projects (flat `vendorScreenData` only) are migrated on load by
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\middleware\shared\ports\types.ts:938: vendorScreenDataByBoard?: Record<string, Record<string, unknown>>
+C:\Users\jeykc\Documentos\GitHub\openplc-editor\src\types\PLC\devices\configuration.ts:7: vendorScreenData: z.record(z.string(), z.unknown()).optional(),
