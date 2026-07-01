@@ -18,6 +18,8 @@ type SeriesEntry = { points: Point[]; isBool: boolean; compositeKey: string }
 
 const MAX_BUFFER_SECONDS = 600 // Keep 10 minutes of data regardless of displayed range
 
+const HOLD_SAMPLE_INTERVAL_MS = 200
+
 const Debugger = ({ graphList }: DebuggerData) => {
   const [isPaused, setIsPaused] = useState(false)
   const [range, setRange] = useState(10)
@@ -101,6 +103,42 @@ const Debugger = ({ graphList }: DebuggerData) => {
     }
     setRenderTrigger((prev) => prev + 1)
   }, [debugBoolValues, debugNonBoolValues, isPaused, graphList])
+
+  useEffect(() => {
+    if (isPaused || graphList.length === 0) return
+
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      const bufferCutoff = now - MAX_BUFFER_SECONDS * 1000
+      const activeKeys = new Set(graphList)
+      const histories = historiesRef.current
+
+      for (const [compositeKey, entry] of histories) {
+        if (!activeKeys.has(compositeKey)) {
+          histories.delete(compositeKey)
+          continue
+        }
+
+        const lastPoint = entry.points[entry.points.length - 1]
+        if (!lastPoint) continue
+
+        const lastTimestamp = lastPoint.t ?? 0
+        if (now - lastTimestamp < HOLD_SAMPLE_INTERVAL_MS * 0.75) continue
+
+        entry.points = [
+          ...entry.points,
+          {
+            ...lastPoint,
+            t: now,
+          },
+        ].filter((point) => point.t >= bufferCutoff)
+      }
+
+      setRenderTrigger((value) => value + 1)
+    }, HOLD_SAMPLE_INTERVAL_MS)
+
+    return () => window.clearInterval(timer)
+  }, [isPaused, graphList])
 
   const renderSeries = useMemo(() => {
     const now = Date.now()
