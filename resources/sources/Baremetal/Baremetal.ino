@@ -187,16 +187,22 @@ void setup()
             uint8_t gateway[] = { MBTCP_GATEWAY };
             uint8_t subnet[] = { MBTCP_SUBNET };
 
+        #if defined(JWPLC_BASIC)
+            uint8_t *mbtcpMac = (sizeof(mac) / sizeof(uint8_t) >= 6) ? mac : NULL;
+        #else
+            uint8_t *mbtcpMac = mac;
+        #endif
+
             if (sizeof(ip)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, NULL, NULL, NULL, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, NULL, NULL, NULL, NULL);
             else if (sizeof(dns)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, ip, NULL, NULL, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, ip, NULL, NULL, NULL);
             else if (sizeof(gateway)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, ip, dns, NULL, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, ip, dns, NULL, NULL);
             else if (sizeof(subnet)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, ip, dns, gateway, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, ip, dns, gateway, NULL);
             else
-                mbconfig_ethernet_iface(mac, ip, dns, gateway, subnet);
+                mbconfig_ethernet_iface(mbtcpMac, ip, dns, gateway, subnet);
         #endif
 
         init_mbregs(MAX_ANALOG_OUTPUT + MAX_MEMORY_WORD, MAX_MEMORY_DWORD, MAX_MEMORY_LWORD, MAX_DIGITAL_OUTPUT, MAX_ANALOG_INPUT, MAX_DIGITAL_INPUT);

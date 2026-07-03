@@ -95,7 +95,8 @@ const RTU_DEFAULTS = {
 
 const TCP_DEFAULTS = {
   tcp_interface: 'Ethernet' as const,
-}
+  tcp_mac_address: 'DE:AD:BE:EF:00:01',
+} as const
 
 /**
  * Build the `//Comms Configuration` block. Returns an empty string when
@@ -149,7 +150,8 @@ export function generateModbusDefines(state: VppModbusScreenState): string {
     // falls back to the DHCP/NULL path. Wi-Fi mode ignores these args
     // inside `mbconfig_ethernet_iface` (see `ModbusSlave.cpp:199-225`),
     // so the placeholder values are harmless there too.
-    const macLiteral = tcp.tcp_mac_address ? formatMacForDefine(tcp.tcp_mac_address) : '0'
+    const rawMac = (tcp.tcp_mac_address ?? TCP_DEFAULTS.tcp_mac_address).trim()
+    const macLiteral = rawMac ? formatMacForDefine(rawMac) : formatMacForDefine(TCP_DEFAULTS.tcp_mac_address)
     lines.push(`#define MBTCP_MAC ${macLiteral}`)
 
     const dhcpOn = tcp.enable_dhcp === true
