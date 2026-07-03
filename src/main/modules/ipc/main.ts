@@ -4,6 +4,7 @@ import { getRuntimeHttpsOptions } from '@root/backend/editor/utils/runtime-https
 import { parseESIDeviceFull } from '@root/backend/shared/ethercat/esi-parser-main'
 import { listPublicLibraries } from '@root/backend/shared/library/public-catalog-client'
 import { PLCProjectData } from '@root/backend/shared/types/PLC/open-plc'
+import { discoverJwplcDevices } from '@root/backend/shared/network/jwplc-device-discovery'
 import { getErrorMessage } from '@root/frontend/utils/get-error-message'
 import { RuntimeLogEntry } from '@root/middleware/shared/ports'
 import type {
@@ -130,9 +131,9 @@ class MainProcessBridge implements MainIpcModule {
           ...options.headers,
           ...(options.body
             ? {
-                'Content-Type': 'application/json',
-                'Content-Length': String(Buffer.byteLength(options.body)),
-              }
+              'Content-Type': 'application/json',
+              'Content-Length': String(Buffer.byteLength(options.body)),
+            }
             : {}),
         },
         ...getRuntimeHttpsOptions(),
@@ -768,6 +769,15 @@ class MainProcessBridge implements MainIpcModule {
     this.registeredHandleChannels = []
   }
 
+  handleHardwareDiscoverJwplcDevices = async (_event: IpcMainInvokeEvent) => {
+    try {
+      const devices = await discoverJwplcDevices()
+      return { success: true, devices }
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) }
+    }
+  }
+
   setupMainIpcListener() {
     this.cleanupHandlers()
 
@@ -835,6 +845,7 @@ class MainProcessBridge implements MainIpcModule {
     this.registerHandle('hardware:get-available-boards', this.handleHardwareGetAvailableBoards)
     this.registerHandle('hardware:refresh-communication-ports', this.handleHardwareRefreshCommunicationPorts)
     this.registerHandle('hardware:refresh-available-boards', this.handleHardwareRefreshAvailableBoards)
+    this.registerHandle('hardware:discover-jwplc-devices', this.handleHardwareDiscoverJwplcDevices)
 
     // ===================== PACKAGE MANAGER =====================
     this.registerHandle('packages:import-from-file', this.handlePackagesImportFromFile)
@@ -1371,7 +1382,7 @@ class MainProcessBridge implements MainIpcModule {
       if (tempPath) {
         // Best-effort cleanup — never fail the install because the temp
         // file lingered; OS will reap it on reboot anyway.
-        await unlink(tempPath).catch(() => {})
+        await unlink(tempPath).catch(() => { })
       }
     }
   }

@@ -35,6 +35,10 @@ export function createEditorDeviceAdapter(): DevicePort {
       return window.bridge.refreshCommunicationPorts()
     },
 
+    discoverJwplcDevices() {
+      return window.bridge.discoverJwplcDevices()
+    },
+
     getPreviewImage(imageName: string, packagePath?: string): Promise<string> {
       return window.bridge.getPreviewImage(imageName, packagePath)
     },
