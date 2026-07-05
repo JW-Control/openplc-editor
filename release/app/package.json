@@ -1,10 +1,10 @@
 {
   "name": "open-plc-editor-jwplc",
-  "version": "4.2.7-jwplc.1",
+  "version": "4.2.8-jwplc.1",
   "description": "OpenPLC Editor - JWPLC Edition, build maintained by JW Control for JWPLC Basic integration",
   "license": "GPL-3.0",
   "author": {
-    "name": "Autonomy Logic"
+    "name": "open-plc-editor-jwplc"
   },
   "main": "./dist/main/main.js",
   "scripts": {
