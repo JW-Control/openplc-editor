@@ -30,6 +30,19 @@
 #include "defines.h"
 #include "arduino_runtime_glue.h"
 
+#if defined(JWPLC_BASIC)
+
+#include <JWPLC_RS485.h>
+
+#ifndef JWPLC_RS485_RX_PIN
+#define JWPLC_RS485_RX_PIN 16
+#endif
+
+#ifndef JWPLC_RS485_TX_PIN
+#define JWPLC_RS485_TX_PIN 17
+#endif
+#endif
+
 #ifdef MODBUS_ENABLED
 #include "ModbusSlave.h"
 #endif
@@ -148,11 +161,21 @@ void setup()
                 {
                     if (pinMask_AOUT[i] == MBSERIAL_TXPIN) pinMask_AOUT[i] = 255;
                 }
-                MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
-                mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, MBSERIAL_TXPIN);
+                #if defined(JWPLC_BASIC) && defined(MBSERIAL_IFACE_IS_SERIAL2)
+                    JWPLC_RS485.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&JWPLC_RS485, MBSERIAL_BAUD, MBSERIAL_TXPIN);
+                #else
+                    MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, MBSERIAL_TXPIN);
+                #endif
             #else
-                MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
-                mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, -1);
+                #if defined(JWPLC_BASIC) && defined(MBSERIAL_IFACE_IS_SERIAL2)
+                    JWPLC_RS485.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&JWPLC_RS485, MBSERIAL_BAUD, -1);
+                #else
+                    MBSERIAL_IFACE.begin(MBSERIAL_BAUD);
+                    mbconfig_serial_iface(&MBSERIAL_IFACE, MBSERIAL_BAUD, -1);
+                #endif
             #endif
             modbus.slaveid = MBSERIAL_SLAVE;
         #endif
@@ -164,16 +187,22 @@ void setup()
             uint8_t gateway[] = { MBTCP_GATEWAY };
             uint8_t subnet[] = { MBTCP_SUBNET };
 
+        #if defined(JWPLC_BASIC)
+            uint8_t *mbtcpMac = (sizeof(mac) / sizeof(uint8_t) >= 6) ? mac : NULL;
+        #else
+            uint8_t *mbtcpMac = mac;
+        #endif
+
             if (sizeof(ip)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, NULL, NULL, NULL, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, NULL, NULL, NULL, NULL);
             else if (sizeof(dns)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, ip, NULL, NULL, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, ip, NULL, NULL, NULL);
             else if (sizeof(gateway)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, ip, dns, NULL, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, ip, dns, NULL, NULL);
             else if (sizeof(subnet)/sizeof(uint8_t) < 4)
-                mbconfig_ethernet_iface(mac, ip, dns, gateway, NULL);
+                mbconfig_ethernet_iface(mbtcpMac, ip, dns, gateway, NULL);
             else
-                mbconfig_ethernet_iface(mac, ip, dns, gateway, subnet);
+                mbconfig_ethernet_iface(mbtcpMac, ip, dns, gateway, subnet);
         #endif
 
         init_mbregs(MAX_ANALOG_OUTPUT + MAX_MEMORY_WORD, MAX_MEMORY_DWORD, MAX_MEMORY_LWORD, MAX_DIGITAL_OUTPUT, MAX_ANALOG_INPUT, MAX_DIGITAL_INPUT);

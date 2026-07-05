@@ -1,10 +1,14 @@
+import { RefreshIcon } from '@root/frontend/assets/icons/interface/Refresh'
 import { Label } from '@root/frontend/components/_atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend/components/_atoms/select'
 import { ToggleSwitch } from '@root/frontend/components/_atoms/toggle-switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@root/frontend/components/_atoms/tooltip'
+import { boardSelectors } from '@root/frontend/hooks/use-store-selectors'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { evalVisible, type VisibleCondition } from '@root/frontend/utils/vpp/eval-visible'
 import { getSectionPersistenceKey } from '@root/frontend/utils/vpp/persistence-keys'
+import { useDevice } from '@root/middleware/shared/providers/platform-context'
+import { type MouseEvent, useCallback, useRef, useState } from 'react'
 
 import type { ScreenSection } from '../index'
 
@@ -19,15 +23,10 @@ type FieldDef = {
   unit?: string
   help?: string
   options?: string[] | Array<{ value: string; label: string }>
-  // Honored by text-like inputs (text, password, ip-address, mac-address).
-  // Mirrors the VPP screen schema's optional field props — empty strings
-  // are skipped so HTML5 placeholder/maxLength/pattern stay unset when
-  // the screen author didn't supply them.
   placeholder?: string
+  fallbackLabel?: string
   maxLength?: number
   validation?: string
-  // Optional conditional-visibility clause (VPP screen schema). Fields
-  // without it always render; see `evalVisible`.
   visible?: VisibleCondition
 }
 
@@ -43,6 +42,7 @@ const TEXT_INPUT_CLASS =
 // the screen author didn't ship a regex.
 const IPV4_PATTERN = '^(\\d{1,3}\\.){3}\\d{1,3}$'
 const MAC_PATTERN = '^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$'
+const COMMUNICATION_PORT_FALLBACK_VALUE = '__use_communication_port__'
 
 type FormLayoutProps = {
   section: ScreenSection
@@ -75,6 +75,24 @@ function FieldHelpIcon({ text }: { text: string }) {
 function FormLayout({ section }: FormLayoutProps) {
   const fields = (section.fields ?? []) as FieldDef[]
 
+  const device = useDevice()
+  const availableCommunicationPorts = boardSelectors.useAvailableCommunicationPorts()
+  const setAvailableOptions = boardSelectors.useSetAvailableOptions()
+  const portsReqIdRef = useRef<number>(0)
+  const [isRefreshingPorts, setIsRefreshingPorts] = useState(false)
+
+  const [isDiscoveringJwplc, setIsDiscoveringJwplc] = useState(false)
+  const [jwplcDiscoveryResults, setJwplcDiscoveryResults] = useState<
+    Array<{
+      ipAddress: string
+      port: number
+      label: string
+      interfaceName: string
+      sourceAddress: string
+    }>
+  >([])
+  const [jwplcDiscoveryError, setJwplcDiscoveryError] = useState<string | null>(null)
+
   const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
   const setVendorScreenData = useOpenPLCStore((s) => s.deviceActions.setVendorScreenData)
   // Single-source-of-truth for the per-section storage key — see
@@ -96,6 +114,59 @@ function FormLayout({ section }: FormLayoutProps) {
     if (persistenceKey === null) return
     setVendorScreenData(persistenceKey, { ...storedValues, [id]: value })
   }
+
+  const refreshCommunicationPorts = useCallback(
+    async (e?: MouseEvent<HTMLButtonElement>) => {
+      e?.preventDefault()
+      if (isRefreshingPorts) return
+
+      try {
+        setIsRefreshingPorts(true)
+
+        portsReqIdRef.current += 1
+        const currentReqId = portsReqIdRef.current
+
+        const ports = await device.refreshCommunicationPorts()
+
+        if (currentReqId === portsReqIdRef.current) {
+          setAvailableOptions({ availableCommunicationPorts: ports })
+        }
+      } catch (error: unknown) {
+        console.error(error)
+      } finally {
+        setIsRefreshingPorts(false)
+      }
+    },
+    [device, setAvailableOptions, isRefreshingPorts],
+  )
+
+  const discoverJwplcDevices = useCallback(
+    async (e?: MouseEvent<HTMLButtonElement>) => {
+      e?.preventDefault()
+      if (isDiscoveringJwplc) return
+
+      try {
+        setIsDiscoveringJwplc(true)
+        setJwplcDiscoveryError(null)
+        setJwplcDiscoveryResults([])
+
+        const result = await device.discoverJwplcDevices()
+
+        if (!result.success) {
+          setJwplcDiscoveryError(result.error ?? 'No se pudo buscar dispositivos JWPLC.')
+          return
+        }
+
+        setJwplcDiscoveryResults(result.devices ?? [])
+      } catch (error: unknown) {
+        console.error(error)
+        setJwplcDiscoveryError(error instanceof Error ? error.message : 'Error buscando dispositivos JWPLC.')
+      } finally {
+        setIsDiscoveringJwplc(false)
+      }
+    },
+    [device, isDiscoveringJwplc],
+  )
 
   return (
     <TooltipProvider>
@@ -147,6 +218,122 @@ function FormLayout({ section }: FormLayoutProps) {
                         <span className='text-xs text-neutral-500 dark:text-neutral-400'>{field.unit}</span>
                       )}
                     </div>
+
+                  ) : field.type === 'jwplc-device-discovery' ? (
+                    <div className='flex flex-col gap-2'>
+                      <div className='flex items-center gap-2'>
+                        <button
+                          type='button'
+                          onClick={discoverJwplcDevices}
+                          disabled={isDiscoveringJwplc}
+                          className='inline-flex h-[30px] items-center justify-center rounded-md border border-neutral-100 bg-white px-3 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-900'
+                        >
+                          {isDiscoveringJwplc ? 'Buscando...' : 'Buscar JWPLC en la red'}
+                        </button>
+                      </div>
+
+                      {jwplcDiscoveryError && (
+                        <span className='text-xs text-red-500'>{jwplcDiscoveryError}</span>
+                      )}
+
+                      {jwplcDiscoveryResults.length > 0 && (
+                        <div className='flex flex-col gap-1'>
+                          {jwplcDiscoveryResults.map((foundDevice) => (
+                            <div
+                              key={`${foundDevice.ipAddress}:${foundDevice.port}`}
+                              className='flex items-center gap-2 rounded-md border border-neutral-100 px-2 py-1 dark:border-neutral-850'
+                            >
+                              <span className='min-w-0 flex-1 text-xs text-neutral-700 dark:text-neutral-300'>
+                                {foundDevice.ipAddress}:{foundDevice.port} · {foundDevice.interfaceName}
+                              </span>
+
+                              <button
+                                type='button'
+                                onClick={() => updateField('tcp_debug_ip_address', foundDevice.ipAddress)}
+                                className='inline-flex h-[24px] items-center justify-center rounded-md bg-brand px-2 font-caption text-xs font-medium text-white hover:opacity-90'
+                              >
+                                Usar para Debug
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {!isDiscoveringJwplc && jwplcDiscoveryResults.length === 0 && !jwplcDiscoveryError && (
+                        <span className='text-xs text-neutral-400 dark:text-neutral-500'>
+                          Busca equipos con Modbus TCP abierto en puerto 502.
+                        </span>
+                      )}
+                    </div>
+
+                  ) : field.type === 'communication-port' ? (
+                    <div className='flex items-center gap-1'>
+                      <Select
+                        value={
+                          String(values[field.id] ?? '').trim()
+                            ? String(values[field.id])
+                            : COMMUNICATION_PORT_FALLBACK_VALUE
+                        }
+                        onValueChange={(v) =>
+                          updateField(field.id, v === COMMUNICATION_PORT_FALLBACK_VALUE ? '' : v)
+                        }
+                      >
+                        <SelectTrigger
+                          aria-label={field.label}
+                          placeholder={field.placeholder ?? 'Select communication port'}
+                          withIndicator
+                          className='flex h-[30px] w-48 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                        />
+                        <SelectContent
+                          className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-100 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'
+                          sideOffset={5}
+                          position='popper'
+                          align='center'
+                          side='bottom'
+                        >
+                          <SelectItem
+                            value={COMMUNICATION_PORT_FALLBACK_VALUE}
+                            className='flex w-full cursor-pointer items-center px-2 py-[6px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850'
+                          >
+                            <span className='font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                              {field.fallbackLabel ?? 'Use Communication Port'}
+                            </span>
+                          </SelectItem>
+
+                          {availableCommunicationPorts.map((port) => {
+                            const portAddress = String(port.address ?? '').trim()
+                            const portName = String(port.name ?? '').trim()
+                            if (!portAddress) return null
+
+                            const displayName =
+                              portName && portName !== portAddress ? `${portAddress} (${portName})` : portAddress
+
+                            return (
+                              <SelectItem
+                                key={portAddress}
+                                value={portAddress}
+                                className='flex w-full cursor-pointer items-center px-2 py-[6px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850'
+                              >
+                                <span className='font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                                  {displayName}
+                                </span>
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+
+                      <button
+                        type='button'
+                        onClick={refreshCommunicationPorts}
+                        disabled={isRefreshingPorts}
+                        aria-label='Refresh debug ports'
+                        className='inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-neutral-400 hover:text-neutral-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-500 dark:hover:text-neutral-300'
+                      >
+                        <RefreshIcon size='sm' className={isRefreshingPorts ? 'spin-refresh' : ''} />
+                      </button>
+                    </div>
+
                   ) : field.type === 'select' ? (
                     <Select value={String(values[field.id] ?? '')} onValueChange={(v) => updateField(field.id, v)}>
                       <SelectTrigger

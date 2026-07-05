@@ -47,6 +47,7 @@ export type DebugPrecondition = 'runtimeConnected' | 'jwtToken'
  */
 export interface DebugRef {
   $ref: string
+  fallback?: string
   default?: string | number | boolean
   as?: 'number' | 'string' | 'boolean'
   required?: string
