@@ -337,6 +337,17 @@ const rendererProcessBridge = {
     ipcRenderer.invoke('hardware:refresh-available-boards'),
   refreshCommunicationPorts: (): Promise<{ name: string; address: string }[]> =>
     ipcRenderer.invoke('hardware:refresh-communication-ports'),
+  discoverJwplcDevices: (): Promise<{
+    success: boolean
+    devices?: Array<{
+      ipAddress: string
+      port: number
+      label: string
+      interfaceName: string
+      sourceAddress: string
+    }>
+    error?: string
+  }> => ipcRenderer.invoke('hardware:discover-jwplc-devices'),
 
   // ===================== PACKAGE MANAGER METHODS =====================
   importPackageFromFile: (): Promise<{

@@ -23,6 +23,20 @@
 
 import type { BoardInfo, CommunicationPort } from './types'
 
+export type JwplcDiscoveredDevice = {
+  ipAddress: string
+  port: number
+  label: string
+  interfaceName: string
+  sourceAddress: string
+}
+
+export type JwplcDeviceDiscoveryResult = {
+  success: boolean
+  devices?: JwplcDiscoveredDevice[]
+  error?: string
+}
+
 export interface DevicePort {
   /**
    * Get all available boards with their hardware specs and pin configurations.
@@ -51,6 +65,12 @@ export interface DevicePort {
    * Web: re-queries orchestrator for available ports.
    */
   refreshCommunicationPorts(): Promise<CommunicationPort[]>
+
+  /**
+   * Discover JWPLC/Modbus TCP devices reachable from local network interfaces.
+   * Fase 1: TCP scan on Modbus TCP port 502.
+   */
+  discoverJwplcDevices(): Promise<JwplcDeviceDiscoveryResult>
 
   /**
    * Get a board preview image for display in the UI.

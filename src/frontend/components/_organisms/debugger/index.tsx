@@ -17,6 +17,7 @@ type Point = { t: number; y: number }
 type SeriesEntry = { points: Point[]; isBool: boolean; compositeKey: string }
 
 const MAX_BUFFER_SECONDS = 600 // Keep 10 minutes of data regardless of displayed range
+const DEBUGGER_RENDER_INTERVAL_MS = 100
 
 const Debugger = ({ graphList }: DebuggerData) => {
   const [isPaused, setIsPaused] = useState(false)
@@ -102,17 +103,68 @@ const Debugger = ({ graphList }: DebuggerData) => {
     setRenderTrigger((prev) => prev + 1)
   }, [debugBoolValues, debugNonBoolValues, isPaused, graphList])
 
+  useEffect(() => {
+    if (isPaused || graphList.length === 0) return
+
+    const timer = window.setInterval(() => {
+      setRenderTrigger((value) => value + 1)
+    }, DEBUGGER_RENDER_INTERVAL_MS)
+
+    return () => window.clearInterval(timer)
+  }, [isPaused, graphList])
+
   const renderSeries = useMemo(() => {
     const now = Date.now()
     const startTime = startTimeRef.current ?? now
     const cutoff = now - range * 1000
+
     return {
       now,
       startTime,
       series: graphList.map((compositeKey) => {
         const entry = historiesRef.current.get(compositeKey)
-        const points = entry ? entry.points.filter((p) => p.t >= cutoff) : []
-        return { name: compositeKey, points, isBool: entry?.isBool ?? false }
+
+        if (!entry || entry.points.length === 0) {
+          return { name: compositeKey, points: [], isBool: entry?.isBool ?? false }
+        }
+
+        const allPoints = entry.points
+        const visiblePoints = allPoints.filter((p) => p.t >= cutoff)
+
+        let lastBeforeCutoff: Point | undefined
+
+        for (let i = allPoints.length - 1; i >= 0; i--) {
+          if (allPoints[i].t < cutoff) {
+            lastBeforeCutoff = allPoints[i]
+            break
+          }
+        }
+
+        let points = visiblePoints
+
+        if (lastBeforeCutoff && (points.length === 0 || points[0].t > cutoff)) {
+          points = [
+            {
+              t: cutoff,
+              y: lastBeforeCutoff.y,
+            },
+            ...points,
+          ]
+        }
+
+        const lastPoint = points[points.length - 1]
+
+        if (lastPoint && now > lastPoint.t) {
+          points = [
+            ...points,
+            {
+              t: now,
+              y: lastPoint.y,
+            },
+          ]
+        }
+
+        return { name: compositeKey, points, isBool: entry.isBool }
       }),
     }
   }, [graphList, range, renderTrigger])

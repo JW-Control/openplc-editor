@@ -130,16 +130,31 @@ function lookupRef(path: string, state: DebugResolverState): unknown {
   return cursor
 }
 
+function isBlank(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
+}
+
 function evaluateRef(ref: DebugRef, state: DebugResolverState): unknown {
-  const raw = lookupRef(ref.$ref, state)
-  const resolved = raw === undefined ? ref.default : raw
-  if (resolved === undefined) return undefined
+  let resolved = lookupRef(ref.$ref, state)
+
+  if (isBlank(resolved) && ref.fallback) {
+    resolved = lookupRef(ref.fallback, state)
+  }
+
+  if (isBlank(resolved) && ref.default !== undefined) {
+    resolved = ref.default
+  }
+
+  if (isBlank(resolved)) return undefined
+
   if (ref.as === 'number') {
     const n = typeof resolved === 'number' ? resolved : Number(resolved)
     return Number.isFinite(n) ? n : undefined
   }
-  if (ref.as === 'boolean') return Boolean(resolved)
+
+  if (ref.as === 'boolean') return resolved === true || resolved === 'true'
   if (ref.as === 'string') return String(resolved)
+
   return resolved
 }
 

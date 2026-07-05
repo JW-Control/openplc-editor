@@ -58,3 +58,21 @@ resources/strucpp/
 playwright-report
 /blob-report/
 /playwright/.cache/
+
+# ---------------------------------------------------------------------------
+# JWPLC local analysis / search dumps
+# ---------------------------------------------------------------------------
+jwplc-*-search.txt
+jwplc-*search*.txt
+*-jwplc-search.txt
+*jwplc*search*.txt
+
+# Local downloaded CI/log artifacts
+logs_*.zip
+logs_*/
+*.log.zip
+
+# Temporary local notes generated during debugging
+*_search.txt
+*_debug_search.txt
+*_local_search.txt

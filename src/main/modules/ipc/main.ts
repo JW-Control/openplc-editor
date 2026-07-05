@@ -3,6 +3,7 @@ import { createDesktopCatalogTransport } from '@root/backend/editor/library-mana
 import { getRuntimeHttpsOptions } from '@root/backend/editor/utils/runtime-https-config'
 import { parseESIDeviceFull } from '@root/backend/shared/ethercat/esi-parser-main'
 import { listPublicLibraries } from '@root/backend/shared/library/public-catalog-client'
+import { discoverJwplcDevices } from '@root/backend/shared/network/jwplc-device-discovery'
 import { PLCProjectData } from '@root/backend/shared/types/PLC/open-plc'
 import { getErrorMessage } from '@root/frontend/utils/get-error-message'
 import { RuntimeLogEntry } from '@root/middleware/shared/ports'
@@ -768,6 +769,15 @@ class MainProcessBridge implements MainIpcModule {
     this.registeredHandleChannels = []
   }
 
+  handleHardwareDiscoverJwplcDevices = async (_event: IpcMainInvokeEvent) => {
+    try {
+      const devices = await discoverJwplcDevices()
+      return { success: true, devices }
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) }
+    }
+  }
+
   setupMainIpcListener() {
     this.cleanupHandlers()
 
@@ -835,6 +845,7 @@ class MainProcessBridge implements MainIpcModule {
     this.registerHandle('hardware:get-available-boards', this.handleHardwareGetAvailableBoards)
     this.registerHandle('hardware:refresh-communication-ports', this.handleHardwareRefreshCommunicationPorts)
     this.registerHandle('hardware:refresh-available-boards', this.handleHardwareRefreshAvailableBoards)
+    this.registerHandle('hardware:discover-jwplc-devices', this.handleHardwareDiscoverJwplcDevices)
 
     // ===================== PACKAGE MANAGER =====================
     this.registerHandle('packages:import-from-file', this.handlePackagesImportFromFile)
@@ -1080,11 +1091,13 @@ class MainProcessBridge implements MainIpcModule {
       nativeTheme.themeSource = savedTheme
     }
 
+    const isWindowMaximized = this.mainWindow && !this.mainWindow.isDestroyed() ? this.mainWindow.isMaximized() : false
+
     return {
       OS: platform,
       architecture: 'x64',
       prefersDarkMode: nativeTheme.shouldUseDarkColors,
-      isWindowMaximized: this.mainWindow?.isMaximized(),
+      isWindowMaximized,
     }
   }
 
