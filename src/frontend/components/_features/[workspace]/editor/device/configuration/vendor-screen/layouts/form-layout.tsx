@@ -218,7 +218,6 @@ function FormLayout({ section }: FormLayoutProps) {
                         <span className='text-xs text-neutral-500 dark:text-neutral-400'>{field.unit}</span>
                       )}
                     </div>
-
                   ) : field.type === 'jwplc-device-discovery' ? (
                     <div className='flex flex-col gap-2'>
                       <div className='flex items-center gap-2'>
@@ -232,9 +231,7 @@ function FormLayout({ section }: FormLayoutProps) {
                         </button>
                       </div>
 
-                      {jwplcDiscoveryError && (
-                        <span className='text-xs text-red-500'>{jwplcDiscoveryError}</span>
-                      )}
+                      {jwplcDiscoveryError && <span className='text-xs text-red-500'>{jwplcDiscoveryError}</span>}
 
                       {jwplcDiscoveryResults.length > 0 && (
                         <div className='flex flex-col gap-1'>
@@ -265,7 +262,6 @@ function FormLayout({ section }: FormLayoutProps) {
                         </span>
                       )}
                     </div>
-
                   ) : field.type === 'communication-port' ? (
                     <div className='flex items-center gap-1'>
                       <Select
@@ -274,9 +270,7 @@ function FormLayout({ section }: FormLayoutProps) {
                             ? String(values[field.id])
                             : COMMUNICATION_PORT_FALLBACK_VALUE
                         }
-                        onValueChange={(v) =>
-                          updateField(field.id, v === COMMUNICATION_PORT_FALLBACK_VALUE ? '' : v)
-                        }
+                        onValueChange={(v) => updateField(field.id, v === COMMUNICATION_PORT_FALLBACK_VALUE ? '' : v)}
                       >
                         <SelectTrigger
                           aria-label={field.label}
@@ -333,7 +327,6 @@ function FormLayout({ section }: FormLayoutProps) {
                         <RefreshIcon size='sm' className={isRefreshingPorts ? 'spin-refresh' : ''} />
                       </button>
                     </div>
-
                   ) : field.type === 'select' ? (
                     <Select value={String(values[field.id] ?? '')} onValueChange={(v) => updateField(field.id, v)}>
                       <SelectTrigger

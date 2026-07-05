@@ -650,7 +650,8 @@ const Board = memo(function () {
                   {availableCommunicationPorts.map((port) => {
                     const portAddress = port.address?.trim()
                     const portName = port.name?.trim()
-                    const displayName = portName && portName !== portAddress ? `${portAddress} (${portName})` : portAddress
+                    const displayName =
+                      portName && portName !== portAddress ? `${portAddress} (${portName})` : portAddress
                     return (
                       <SelectItem
                         key={port.address}

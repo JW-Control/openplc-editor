@@ -271,7 +271,7 @@ const rendererProcessBridge = {
     const { port1: rendererProcessPort, port2: mainProcessPort } = new MessageChannel()
     ipcRenderer.postMessage('compiler:build-st-program', xmlPath, [mainProcessPort])
     rendererProcessPort.onmessage = (event) => callback(event.data as CompilerPortMessage)
-    rendererProcessPort.addEventListener('close', () => { })
+    rendererProcessPort.addEventListener('close', () => {})
   },
   createBuildDirectory: async (pathToUserProject: string): Promise<{ success: boolean; message: string }> =>
     ipcRenderer.invoke('compiler:create-build-directory', pathToUserProject) as Promise<{
@@ -292,14 +292,14 @@ const rendererProcessBridge = {
     const { port1: rendererProcessPort, port2: mainProcessPort } = new MessageChannel()
     ipcRenderer.postMessage('compiler:generate-c-files', pathToStProgram, [mainProcessPort])
     rendererProcessPort.onmessage = (event) => callback(event.data as CompilerPortMessage)
-    rendererProcessPort.addEventListener('close', () => { })
+    rendererProcessPort.addEventListener('close', () => {})
   },
   removeExportProjectListener: () => ipcRenderer.removeAllListeners('compiler:export-project-request'),
   setupCompilerEnvironment: (callback: (args: CompilerPortMessage) => void) => {
     const { port1: rendererProcessPort, port2: mainProcessPort } = new MessageChannel()
     ipcRenderer.postMessage('compiler:setup-environment', '', [mainProcessPort])
     rendererProcessPort.onmessage = (event) => callback(event.data as CompilerPortMessage)
-    rendererProcessPort.addEventListener('close', () => { })
+    rendererProcessPort.addEventListener('close', () => {})
   },
 
   // ===================== HARDWARE METHODS =====================

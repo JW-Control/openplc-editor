@@ -19,16 +19,10 @@ const DEFAULT_PORT = 502
 const DEFAULT_TIMEOUT_MS = 250
 const DEFAULT_CONCURRENCY = 64
 
-const ipToLong = (ip: string) =>
-  ip.split('.').reduce((acc, octet) => ((acc << 8) + Number(octet)) >>> 0, 0)
+const ipToLong = (ip: string) => ip.split('.').reduce((acc, octet) => ((acc << 8) + Number(octet)) >>> 0, 0)
 
 const longToIp = (value: number) =>
-  [
-    (value >>> 24) & 255,
-    (value >>> 16) & 255,
-    (value >>> 8) & 255,
-    value & 255,
-  ].join('.')
+  [(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join('.')
 
 const isIpv4 = (family: string | number) => family === 'IPv4' || family === 4
 
@@ -120,10 +114,7 @@ export const discoverJwplcDevices = async (
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(concurrency, Math.max(targets.length, 1)) },
-    () => worker(),
-  )
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(targets.length, 1)) }, () => worker())
 
   await Promise.all(workers)
 

@@ -131,9 +131,9 @@ class MainProcessBridge implements MainIpcModule {
           ...options.headers,
           ...(options.body
             ? {
-              'Content-Type': 'application/json',
-              'Content-Length': String(Buffer.byteLength(options.body)),
-            }
+                'Content-Type': 'application/json',
+                'Content-Length': String(Buffer.byteLength(options.body)),
+              }
             : {}),
         },
         ...getRuntimeHttpsOptions(),
@@ -1382,7 +1382,7 @@ class MainProcessBridge implements MainIpcModule {
       if (tempPath) {
         // Best-effort cleanup — never fail the install because the temp
         // file lingered; OS will reap it on reboot anyway.
-        await unlink(tempPath).catch(() => { })
+        await unlink(tempPath).catch(() => {})
       }
     }
   }
