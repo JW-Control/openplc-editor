@@ -262,13 +262,21 @@ function FormLayout({ section }: FormLayoutProps) {
                               ? foundDevice.model || 'JWPLC Basic confirmado'
                               : 'Equipo Modbus TCP detectado'
                             const badgeText = foundDevice.isJwplc ? 'JWPLC confirmado' : 'Solo puerto 502'
+                            const modeLabel =
+                              foundDevice.networkMode === 'STATIC'
+                                ? 'IP estatica'
+                                : foundDevice.networkMode === 'DHCP'
+                                  ? 'DHCP'
+                                  : foundDevice.networkMode
+
                             const networkInfo = [
+                              foundDevice.discoveryType === 'jwplc-native' ? 'Discovery nativo' : 'Fallback TCP 502',
                               foundDevice.macAddress ? 'MAC ' + foundDevice.macAddress : null,
-                              foundDevice.networkMode,
+                              modeLabel,
                               foundDevice.interfaceName,
                             ]
                               .filter(Boolean)
-                              .join(' ? ')
+                              .join(' | ')
 
                             return (
                               <div
