@@ -29,6 +29,12 @@ export type JwplcDiscoveredDevice = {
   label: string
   interfaceName: string
   sourceAddress: string
+  discoveryType: 'jwplc-native' | 'modbus-tcp'
+  isJwplc: boolean
+  vendor?: string
+  model?: string
+  macAddress?: string
+  networkMode?: string
 }
 
 export type JwplcDeviceDiscoveryResult = {
