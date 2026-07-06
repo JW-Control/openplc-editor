@@ -89,9 +89,16 @@ function FormLayout({ section }: FormLayoutProps) {
       label: string
       interfaceName: string
       sourceAddress: string
+      discoveryType: 'jwplc-native' | 'modbus-tcp'
+      isJwplc: boolean
+      vendor?: string
+      model?: string
+      macAddress?: string
+      networkMode?: string
     }>
   >([])
   const [jwplcDiscoveryError, setJwplcDiscoveryError] = useState<string | null>(null)
+  const [hasJwplcDiscoverySearched, setHasJwplcDiscoverySearched] = useState(false)
 
   const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
   const setVendorScreenData = useOpenPLCStore((s) => s.deviceActions.setVendorScreenData)
@@ -113,6 +120,11 @@ function FormLayout({ section }: FormLayoutProps) {
   const updateField = (id: string, value: string | number | boolean) => {
     if (persistenceKey === null) return
     setVendorScreenData(persistenceKey, { ...storedValues, [id]: value })
+  }
+
+  const updateFields = (updates: Record<string, string | number | boolean>) => {
+    if (persistenceKey === null) return
+    setVendorScreenData(persistenceKey, { ...storedValues, ...updates })
   }
 
   const refreshCommunicationPorts = useCallback(
@@ -149,6 +161,7 @@ function FormLayout({ section }: FormLayoutProps) {
         setIsDiscoveringJwplc(true)
         setJwplcDiscoveryError(null)
         setJwplcDiscoveryResults([])
+        setHasJwplcDiscoverySearched(true)
 
         const result = await device.discoverJwplcDevices()
 
@@ -219,7 +232,7 @@ function FormLayout({ section }: FormLayoutProps) {
                       )}
                     </div>
                   ) : field.type === 'jwplc-device-discovery' ? (
-                    <div className='flex flex-col gap-2'>
+                    <div className='flex max-w-[520px] flex-col gap-2'>
                       <div className='flex items-center gap-2'>
                         <button
                           type='button'
@@ -227,38 +240,111 @@ function FormLayout({ section }: FormLayoutProps) {
                           disabled={isDiscoveringJwplc}
                           className='inline-flex h-[30px] items-center justify-center rounded-md border border-neutral-100 bg-white px-3 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-900'
                         >
-                          {isDiscoveringJwplc ? 'Buscando...' : 'Buscar JWPLC en la red'}
+                          {isDiscoveringJwplc ? 'Buscando dispositivos...' : 'Buscar JWPLC en la red'}
                         </button>
+
+                        {jwplcDiscoveryResults.length > 0 && (
+                          <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                            {jwplcDiscoveryResults.length === 1
+                              ? '1 dispositivo encontrado'
+                              : jwplcDiscoveryResults.length + ' dispositivos encontrados'}
+                          </span>
+                        )}
                       </div>
 
                       {jwplcDiscoveryError && <span className='text-xs text-red-500'>{jwplcDiscoveryError}</span>}
 
                       {jwplcDiscoveryResults.length > 0 && (
                         <div className='flex flex-col gap-1'>
-                          {jwplcDiscoveryResults.map((foundDevice) => (
-                            <div
-                              key={`${foundDevice.ipAddress}:${foundDevice.port}`}
-                              className='flex items-center gap-2 rounded-md border border-neutral-100 px-2 py-1 dark:border-neutral-850'
-                            >
-                              <span className='min-w-0 flex-1 text-xs text-neutral-700 dark:text-neutral-300'>
-                                {foundDevice.ipAddress}:{foundDevice.port} · {foundDevice.interfaceName}
-                              </span>
+                          {jwplcDiscoveryResults.map((foundDevice) => {
+                            const isDhcpEnabled = values.enable_dhcp === true
+                            const title = foundDevice.isJwplc
+                              ? foundDevice.model || 'JWPLC Basic confirmado'
+                              : 'Equipo Modbus TCP detectado'
+                            const badgeText = foundDevice.isJwplc ? 'JWPLC confirmado' : 'Solo puerto 502'
+                            const networkInfo = [
+                              foundDevice.macAddress ? 'MAC ' + foundDevice.macAddress : null,
+                              foundDevice.networkMode,
+                              foundDevice.interfaceName,
+                            ]
+                              .filter(Boolean)
+                              .join(' ? ')
 
-                              <button
-                                type='button'
-                                onClick={() => updateField('tcp_debug_ip_address', foundDevice.ipAddress)}
-                                className='inline-flex h-[24px] items-center justify-center rounded-md bg-brand px-2 font-caption text-xs font-medium text-white hover:opacity-90'
+                            return (
+                              <div
+                                key={foundDevice.ipAddress + ':' + foundDevice.port}
+                                className='flex items-center gap-2 rounded-md border border-neutral-100 px-2 py-2 dark:border-neutral-850'
                               >
-                                Usar para Debug
-                              </button>
-                            </div>
-                          ))}
+                                <div className='min-w-0 flex-1'>
+                                  <div className='flex items-center gap-2'>
+                                    <span className='truncate text-xs font-medium text-neutral-800 dark:text-neutral-200'>
+                                      {title}
+                                    </span>
+                                    <span
+                                      className={
+                                        foundDevice.isJwplc
+                                          ? 'rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                          : 'rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                      }
+                                    >
+                                      {badgeText}
+                                    </span>
+                                  </div>
+
+                                  <div className='mt-0.5 text-xs text-neutral-600 dark:text-neutral-400'>
+                                    {foundDevice.ipAddress}:{foundDevice.port}
+                                  </div>
+
+                                  {networkInfo && (
+                                    <div className='mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-500'>
+                                      {networkInfo}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <button
+                                  type='button'
+                                  onClick={() => {
+                                    if (isDhcpEnabled) {
+                                      updateFields({ tcp_debug_ip_address: foundDevice.ipAddress })
+                                      return
+                                    }
+
+                                    updateFields({
+                                      tcp_debug_ip_address: foundDevice.ipAddress,
+                                      ip_address: foundDevice.ipAddress,
+                                    })
+                                  }}
+                                  className='inline-flex h-[26px] shrink-0 items-center justify-center rounded-md bg-brand px-2 font-caption text-xs font-medium text-white hover:opacity-90'
+                                >
+                                  Usar para Debug
+                                </button>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
 
-                      {!isDiscoveringJwplc && jwplcDiscoveryResults.length === 0 && !jwplcDiscoveryError && (
+                      {!isDiscoveringJwplc &&
+                        hasJwplcDiscoverySearched &&
+                        jwplcDiscoveryResults.length === 0 &&
+                        !jwplcDiscoveryError && (
+                          <span className='text-xs text-amber-500'>
+                            No se encontraron dispositivos. Verifica que el JWPLC est? encendido, conectado a la red y
+                            con Modbus TCP activo.
+                          </span>
+                        )}
+
+                      {!isDiscoveringJwplc && !hasJwplcDiscoverySearched && !jwplcDiscoveryError && (
                         <span className='text-xs text-neutral-400 dark:text-neutral-500'>
-                          Busca equipos con Modbus TCP abierto en puerto 502.
+                          Busca JWPLC Basic por discovery nativo. Si no responde, se usa respaldo por Modbus TCP puerto
+                          502.
+                        </span>
+                      )}
+
+                      {values.enable_dhcp === true && !String(values.tcp_debug_ip_address ?? '').trim() && (
+                        <span className='text-[11px] text-neutral-400 dark:text-neutral-500'>
+                          Con DHCP activo, usa Discovery o escribe la IP asignada en Debug IP Address.
                         </span>
                       )}
                     </div>
