@@ -14,6 +14,9 @@ Copyright (C) 2022 OpenPLC - Thiago Alves
 
 #if defined(JWPLC_BASIC)
 #include <JWPLC_Ethernet.h>
+#if defined(MBTCP_ETHERNET)
+#include <EthernetUdp.h>
+#endif
 #endif
 
 //Global Modbus vars
@@ -29,6 +32,90 @@ uint16_t mb_t35; // frame delay
 #if defined(JWPLC_BASIC)
     EthernetServer mb_server(502);
     static bool jwplc_mbtcp_ready = false;
+
+    static EthernetUDP jwplc_discovery_udp;
+    static bool jwplc_discovery_ready = false;
+    static const uint16_t JWPLC_DISCOVERY_PORT = 54880;
+    static const char JWPLC_DISCOVERY_REQUEST[] = "JWPLC_DISCOVER_V1";
+
+    static void jwplc_format_ip(char *buffer, size_t size, IPAddress ip)
+    {
+        snprintf(buffer, size, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+    }
+
+    static void jwplc_format_mac(char *buffer, size_t size, const uint8_t *mac)
+    {
+        if (mac == NULL)
+        {
+            snprintf(buffer, size, "00:00:00:00:00:00");
+            return;
+        }
+
+        snprintf(
+            buffer,
+            size,
+            "%02X:%02X:%02X:%02X:%02X:%02X",
+            mac[0],
+            mac[1],
+            mac[2],
+            mac[3],
+            mac[4],
+            mac[5]);
+    }
+
+    static void jwplc_discovery_begin()
+    {
+        jwplc_discovery_ready = (jwplc_discovery_udp.begin(JWPLC_DISCOVERY_PORT) == 1);
+    }
+
+    static void jwplc_discovery_task()
+    {
+        if (!jwplc_discovery_ready)
+            return;
+
+        int packetSize = jwplc_discovery_udp.parsePacket();
+        if (packetSize <= 0)
+            return;
+
+        char request[40];
+        int len = jwplc_discovery_udp.read(request, sizeof(request) - 1);
+        if (len <= 0)
+            return;
+
+        request[len] = '\0';
+
+        for (int i = 0; i < len; i++)
+        {
+            if (request[i] == '\r' || request[i] == '\n')
+            {
+                request[i] = '\0';
+                break;
+            }
+        }
+
+        if (strncmp(request, JWPLC_DISCOVERY_REQUEST, strlen(JWPLC_DISCOVERY_REQUEST)) != 0)
+            return;
+
+        char ipBuffer[16];
+        char macBuffer[18];
+        jwplc_format_ip(ipBuffer, sizeof(ipBuffer), JWPLC_Ethernet.localIP());
+        jwplc_format_mac(macBuffer, sizeof(macBuffer), JWPLC_Ethernet.mac());
+
+        const char *mode = (JWPLC_Ethernet.mode() == JWPLC_ETH_MODE_DHCP) ? "DHCP" : "STATIC";
+
+        char response[220];
+        snprintf(
+            response,
+            sizeof(response),
+            "JWPLC_DEVICE_V1;vendor=JW Control;model=JWPLC BASIC [2.0.0];ip=%s;mac=%s;modbusTcp=1;port=502;mode=%s",
+            ipBuffer,
+            macBuffer,
+            mode);
+
+        jwplc_discovery_udp.beginPacket(jwplc_discovery_udp.remoteIP(), jwplc_discovery_udp.remotePort());
+        jwplc_discovery_udp.write((const uint8_t *)response, strlen(response));
+        jwplc_discovery_udp.endPacket();
+    }
 #elif defined(BOARD_ESP32)
     WiFiServer mb_server(502);
     WiFiClient mb_serverClients[MAX_SRV_CLIENTS];
@@ -180,6 +267,7 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
             // Ethernet.begin() directo: JWPLC_Ethernet inicializa CS, SPI,
             // timeouts, DHCP/IP estatica, link y estado del W5500.
             jwplc_mbtcp_ready = false;
+            jwplc_discovery_ready = false;
 
             bool ethOk = false;
 
@@ -231,6 +319,7 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
             if (ethOk || hasIp)
             {
                 mb_server.begin();
+                jwplc_discovery_begin();
                 jwplc_mbtcp_ready = true;
         #if defined(JWPLC_MBTCP_DEBUG)
                 Serial.println("[JWPLC][MBTCP] Server started on port 502");
@@ -239,6 +328,7 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
             else
             {
                 jwplc_mbtcp_ready = false;
+                jwplc_discovery_ready = false;
         #if defined(JWPLC_MBTCP_DEBUG)
                 Serial.println("[JWPLC][MBTCP] Server NOT started");
         #endif
@@ -324,6 +414,7 @@ void mbtask()
     if (jwplc_mbtcp_ready)
     {
         handle_tcp();
+        jwplc_discovery_task();
 
         static uint32_t lastMaintainMs = 0;
         uint32_t nowMs = millis();
