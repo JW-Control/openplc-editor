@@ -14,7 +14,7 @@
  *   util:get-preview-image                      (invoke)
  */
 
-import type { DevicePort } from '../../shared/ports/device-port'
+import type { DevicePort, JwplcDeviceDiscoveryResult } from '../../shared/ports/device-port'
 import type { BoardInfo, CommunicationPort } from '../../shared/ports/types'
 
 export function createEditorDeviceAdapter(): DevicePort {
@@ -35,8 +35,8 @@ export function createEditorDeviceAdapter(): DevicePort {
       return window.bridge.refreshCommunicationPorts()
     },
 
-    discoverJwplcDevices() {
-      return window.bridge.discoverJwplcDevices()
+    discoverJwplcDevices(): Promise<JwplcDeviceDiscoveryResult> {
+      return window.bridge.discoverJwplcDevices() as Promise<JwplcDeviceDiscoveryResult>
     },
 
     getPreviewImage(imageName: string, packagePath?: string): Promise<string> {

@@ -169,11 +169,10 @@ const discoverNativeOnNetwork = (network: LocalNetwork, timeoutMs: number): Prom
       try {
         socket.setBroadcast(true)
 
-        const request = Buffer.from(JWPLC_DISCOVERY_REQUEST)
         const targets = [...new Set(['255.255.255.255', network.broadcastAddress])]
 
         for (const target of targets) {
-          socket.send(request, JWPLC_DISCOVERY_PORT, target)
+          socket.send(JWPLC_DISCOVERY_REQUEST, JWPLC_DISCOVERY_PORT, target)
         }
       } catch {
         clearTimeout(timer)
