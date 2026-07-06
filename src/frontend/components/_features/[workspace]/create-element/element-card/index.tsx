@@ -136,6 +136,9 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
   const isArduinoTarget = checkIsArduinoTarget(currentBoardInfo)
   const isSimulator = isSimulatorTarget(currentBoardInfo)
   const isRuntimeV4 = isOpenPLCRuntimeV4Target(deviceBoard, currentBoardInfo)
+  const boardInfoText = currentBoardInfo ? JSON.stringify(currentBoardInfo).toLowerCase() : ''
+  const isJwplcTarget = deviceBoard.toLowerCase().includes('jwplc') || boardInfoText.includes('jwplc')
+  const supportsRemoteDevices = isRuntimeV4 || isSimulator || isJwplcTarget
 
   const handleCreatePou: SubmitHandler<CreatePouFormProps> = (data) => {
     const pouWasCreated = create(data)
@@ -511,13 +514,13 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                   </div>
                   <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
                 </div>
-                {!(isRuntimeV4 || isSimulator) ? (
+                {!supportsRemoteDevices ? (
                   <div className='flex flex-col gap-2 py-2'>
                     <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-                      Remote device configuration is only available for OpenPLC Runtime v4 targets.
+                      Remote device configuration is available for OpenPLC Runtime v4, Simulator and JWPLC targets.
                     </p>
                     <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-                      Please select OpenPLC Runtime v4 in the Device Configuration to enable this feature.
+                      Please select a compatible target in the Device Configuration to enable this feature.
                     </p>
                   </div>
                 ) : (
