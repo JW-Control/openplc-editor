@@ -1,6 +1,6 @@
 {
   "name": "open-plc-editor-jwplc",
-  "version": "4.2.8-jwplc.1",
+  "version": "4.2.8-jwplc.2",
   "description": "OpenPLC Editor - JWPLC Edition, build maintained by JW Control for JWPLC Basic integration",
   "license": "GPL-3.0",
   "author": {
