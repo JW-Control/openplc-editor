@@ -74,6 +74,42 @@ const DATA_BITS_OPTIONS = [
   { value: '8', label: '8' },
 ]
 
+type RemoteIOPresetGroup = {
+  name: string
+  functionCode: '1' | '2' | '3' | '4' | '5' | '6' | '15' | '16'
+  cycleTime: number
+  offset: string
+  length: number
+  errorHandling: 'keep-last-value' | 'set-to-zero'
+}
+
+const JWPLC_BASIC_REMOTE_IO_PRESET_GROUPS: RemoteIOPresetGroup[] = [
+  {
+    name: 'JWPLC Remote Digital Inputs',
+    functionCode: '2',
+    cycleTime: 100,
+    offset: '0',
+    length: 8,
+    errorHandling: 'keep-last-value',
+  },
+  {
+    name: 'JWPLC Remote Digital Outputs',
+    functionCode: '15',
+    cycleTime: 100,
+    offset: '0',
+    length: 8,
+    errorHandling: 'keep-last-value',
+  },
+  {
+    name: 'JWPLC Remote Output Feedback',
+    functionCode: '1',
+    cycleTime: 250,
+    offset: '0',
+    length: 8,
+    errorHandling: 'keep-last-value',
+  },
+]
+
 // Slave ID validation ranges per transport type
 const SLAVE_ID_TCP_MIN = 0
 const SLAVE_ID_TCP_MAX = 255
@@ -699,6 +735,42 @@ const RemoteDeviceEditor = () => {
     setIsModalOpen(true)
   }, [])
 
+  const hasJwplcBasicRemoteIoPreset = useMemo(
+    () => JWPLC_BASIC_REMOTE_IO_PRESET_GROUPS.some((preset) => ioGroups.some((group) => group.name === preset.name)),
+    [ioGroups],
+  )
+
+  const handleAddJwplcBasicRemoteIoPreset = useCallback(() => {
+    const existingPresetGroups = JWPLC_BASIC_REMOTE_IO_PRESET_GROUPS.filter((preset) =>
+      ioGroups.some((group) => group.name === preset.name),
+    )
+
+    if (existingPresetGroups.length > 0) {
+      consoleActions.addLog({
+        id: crypto.randomUUID(),
+        level: 'warning',
+        message: `JWPLC Basic Remote I/O preset was not added because these groups already exist: ${existingPresetGroups
+          .map((group) => group.name)
+          .join(', ')}.`,
+      })
+      return
+    }
+
+    for (const group of JWPLC_BASIC_REMOTE_IO_PRESET_GROUPS) {
+      projectActions.addIOGroup(deviceName, {
+        id: uuidv4(),
+        ...group,
+      })
+    }
+
+    sharedWorkspaceActions.handleFileAndWorkspaceSavedState(deviceName)
+    consoleActions.addLog({
+      id: crypto.randomUUID(),
+      level: 'info',
+      message: 'JWPLC Basic Remote I/O preset added: 8 remote inputs, 8 remote outputs and output feedback.',
+    })
+  }, [consoleActions, deviceName, ioGroups, projectActions, sharedWorkspaceActions])
+
   const handleOpenEditModal = useCallback(
     (groupId: string) => {
       const group = ioGroups.find((g) => g.id === groupId)
@@ -943,20 +1015,36 @@ const RemoteDeviceEditor = () => {
       <div className='flex flex-1 flex-col overflow-hidden'>
         <div className='mb-2 flex items-center justify-between'>
           <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>IO Tag Mapping</h3>
-          <TableActions
-            actions={[
-              {
-                ariaLabel: 'Add IO Group',
-                onClick: handleOpenAddModal,
-                icon: <PlusIcon className='h-4 w-4 stroke-brand' />,
-                id: 'add-io-group-button',
-              },
-            ]}
-            buttonProps={{
-              className:
-                'rounded-md p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed',
-            }}
-          />
+          <div className='flex items-center gap-2'>
+            <button
+              type='button'
+              onClick={handleAddJwplcBasicRemoteIoPreset}
+              disabled={hasJwplcBasicRemoteIoPreset}
+              title={
+                hasJwplcBasicRemoteIoPreset
+                  ? 'JWPLC Basic Remote I/O preset already added'
+                  : 'Add JWPLC Basic Remote I/O preset'
+              }
+              className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand disabled:cursor-not-allowed disabled:border-neutral-400 disabled:text-neutral-400 disabled:hover:bg-transparent dark:disabled:border-neutral-700 dark:disabled:text-neutral-600'
+            >
+              JWPLC Basic Remote I/O
+            </button>
+
+            <TableActions
+              actions={[
+                {
+                  ariaLabel: 'Add IO Group',
+                  onClick: handleOpenAddModal,
+                  icon: <PlusIcon className='h-4 w-4 stroke-brand' />,
+                  id: 'add-io-group-button',
+                },
+              ]}
+              buttonProps={{
+                className:
+                  'rounded-md p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed',
+              }}
+            />
+          </div>
         </div>
 
         <div className='flex-1 overflow-auto rounded-lg border border-neutral-200 dark:border-neutral-800'>
