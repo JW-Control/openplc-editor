@@ -76,3 +76,6 @@ logs_*/
 *_search.txt
 *_debug_search.txt
 *_local_search.txt
+
+# JWPLC local release exports
+/release/jwplc-final/
