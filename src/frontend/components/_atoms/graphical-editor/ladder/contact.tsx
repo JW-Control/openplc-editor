@@ -1,4 +1,4 @@
-import * as Popover from '@radix-ui/react-popover'
+﻿import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useRef, useState } from 'react'
 
 import { useDebugger } from '../../../../../middleware/shared/providers'
@@ -8,6 +8,7 @@ import { forceDebugVariable, releaseDebugVariable } from '../../../../services/d
 import { isExpressionValidForType } from '../../../../services/graphical-scope'
 import { useOpenPLCStore } from '../../../../store'
 import { cn } from '../../../../utils/cn'
+import { validateVariableType } from '../../../../utils/PLC/validate-variable-type'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { VariablesBlockAutoComplete } from './autocomplete'
@@ -93,6 +94,15 @@ export const Contact = (block: ContactProps) => {
    */
   useEffect(() => {
     const name = data.variable?.name?.trim() ?? ''
+    const localVariable = pous
+      .find((pou) => pou.name === pouName)
+      ?.interface?.variables?.find((variable) => variable.name.toLowerCase() === name.toLowerCase())
+
+    if (localVariable?.type?.value && validateVariableType(localVariable.type.value, 'BOOL').isValid) {
+      setWrongVariable(false)
+      return
+    }
+
     let cancelled = false
     void isExpressionValidForType(pouName, name, 'BOOL').then((valid) => {
       if (!cancelled) setWrongVariable(!valid)
@@ -212,6 +222,8 @@ export const Contact = (block: ContactProps) => {
             readOnly={isDebuggerVisible}
             onFocus={(e) => {
               e.target.select()
+              setOpenAutocomplete(true)
+              setKeyPressedAtTextarea('')
               const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
                 nodeId: id ?? '',
               })

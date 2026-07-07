@@ -1,5 +1,5 @@
 import { Node } from '@xyflow/react'
-import { ComponentPropsWithRef, forwardRef, useEffect, useState } from 'react'
+import { ComponentPropsWithRef, forwardRef, useEffect, useMemo, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import { PLCVariable } from '../../../../../../middleware/shared/ports'
@@ -12,6 +12,7 @@ import {
 import { useOpenPLCStore } from '../../../../../store'
 import { cn } from '../../../../../utils/cn'
 import { getLiteralType } from '../../../../../utils/keywords'
+import { validateVariableType } from '../../../../../utils/PLC/validate-variable-type'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
 import { GraphicalEditorAutocomplete } from '../../autocomplete'
@@ -82,6 +83,42 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         cancelled = true
       }
     }, [pouName, valueToSearch, expectedType, blockType, pous])
+
+    const localVariableCandidates = useMemo<ScopeCompletion[]>(() => {
+      if (blockType === 'block') return []
+
+      const needle = valueToSearch.toLowerCase()
+      const variables = pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []
+
+      return variables
+        .filter((variable) => variable.name.toLowerCase().includes(needle))
+        .filter((variable) => {
+          if (!expectedType) return true
+          const variableType = variable.type?.value
+          if (!variableType) return false
+          return validateVariableType(variableType, expectedType).isValid
+        })
+        .map((variable) => ({
+          label: variable.name,
+          insertText: variable.name,
+          type: variable.type?.value,
+        }))
+    }, [blockType, expectedType, pous, pouName, valueToSearch])
+
+    const mergedCandidates = useMemo<ScopeCompletion[]>(() => {
+      const byInsertText = new Map<string, ScopeCompletion>()
+
+      for (const candidate of candidates) {
+        byInsertText.set(candidate.insertText.toLowerCase(), candidate)
+      }
+
+      for (const candidate of localVariableCandidates) {
+        const key = candidate.insertText.toLowerCase()
+        if (!byInsertText.has(key)) byInsertText.set(key, candidate)
+      }
+
+      return [...byInsertText.values()]
+    }, [candidates, localVariableCandidates])
 
     const submitVariableToBlock = (variable: PLCVariable) => {
       const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
@@ -237,7 +274,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
 
       // The dropdown items are LSP candidates keyed by their full insert text
       // (e.g. `TON0.Q`); bind the node to the chosen one, carrying its type.
-      const candidate = candidates.find((c) => c.insertText.toLowerCase() === variable.name.toLowerCase())
+      const candidate = mergedCandidates.find((c) => c.insertText.toLowerCase() === variable.name.toLowerCase())
       if (!candidate) return
 
       submitVariableToBlock(scopeCompletionToVariable(candidate))
@@ -251,7 +288,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         setIsOpen={setIsOpen}
         keyPressed={keyPressed}
         searchValue={valueToSearch}
-        variables={candidates.map((c) => ({ id: c.insertText, name: c.insertText }))}
+        variables={mergedCandidates.map((c) => ({ id: c.insertText, name: c.insertText }))}
         submit={submit}
       />
     )
