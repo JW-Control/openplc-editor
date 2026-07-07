@@ -98,6 +98,7 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
 
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const reactFlowViewportRef = useRef<HTMLDivElement>(null)
+  const lastNodeClickRef = useRef<{ nodeId: string; clickedAt: number } | null>(null)
 
   /**
    * -- Which means, by default, the flow panel extent is:
@@ -662,10 +663,11 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
     }
   }
 
-  /**
-   * Handle the double click of a node
-   */ //
-  const handleNodeDoubleClick = (node: FlowNode) => {
+  const isLadderVariableEditorTarget = (target: EventTarget | null): boolean => {
+    return target instanceof HTMLElement && Boolean(target.closest("[data-ladder-variable-editor='true']"))
+  }
+
+  const handleNodeEditRequest = (node: FlowNode) => {
     const modalToOpen =
       node.type === 'block'
         ? 'block-ladder-element'
@@ -677,6 +679,23 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
     if (!modalToOpen) return
 
     openModal(modalToOpen, node)
+  }
+
+  const handleNodeClick = (event: MouseEvent, node: FlowNode) => {
+    if (isLadderVariableEditorTarget(event.target)) return
+
+    const clickedAt = window.performance.now()
+    const previousClick = lastNodeClickRef.current
+
+    lastNodeClickRef.current = {
+      nodeId: node.id,
+      clickedAt,
+    }
+
+    if (previousClick?.nodeId === node.id && clickedAt - previousClick.clickedAt <= 750) {
+      lastNodeClickRef.current = null
+      handleNodeEditRequest(node)
+    }
   }
 
   /**
@@ -913,7 +932,11 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
               onInit: setReactFlowInstance,
 
               onNodesChange: onNodesChange,
-              onNodeClick: isDebuggerActive ? () => {} : undefined,
+              onNodeClick: isDebuggerActive
+                ? () => {}
+                : (event, node) => {
+                    handleNodeClick(event, node)
+                  },
               onNodesDelete: isDebuggerActive
                 ? undefined
                 : (nodes) => {
@@ -934,11 +957,7 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
                 : (_event, node) => {
                     handleNodeDragStop(node)
                   },
-              onNodeDoubleClick: isDebuggerActive
-                ? undefined
-                : (_event, node) => {
-                    handleNodeDoubleClick(node)
-                  },
+              onNodeDoubleClick: undefined,
 
               onDragEnter: onDragEnterViewport,
               onDragLeave: onDragLeaveViewport,

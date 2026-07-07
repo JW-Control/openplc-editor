@@ -23,6 +23,7 @@ export type GraphicalEditorAutocompleteProps = ComponentPropsWithRef<'div'> & {
     }
   }
   keepOpenForElementId?: string
+  keepOpenForSelector?: string
 }
 
 export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalEditorAutocompleteProps>(
@@ -38,6 +39,7 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       canCreateNewVariable = true,
       newBlock = { canCreate: false },
       keepOpenForElementId,
+      keepOpenForSelector,
     }: GraphicalEditorAutocompleteProps,
     ref,
   ) => {
@@ -94,8 +96,10 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
     }
 
     const shouldKeepOpenForOutsideTarget = (target: EventTarget | null) => {
-      if (!keepOpenForElementId || !(target instanceof HTMLElement)) return false
-      return target.id === keepOpenForElementId
+      if (!(target instanceof HTMLElement)) return false
+      if (keepOpenForElementId && target.id === keepOpenForElementId) return true
+      if (keepOpenForSelector && target.closest(keepOpenForSelector)) return true
+      return false
     }
 
     const handleOutsideInteraction = (event: { target: EventTarget | null; preventDefault: () => void }) => {

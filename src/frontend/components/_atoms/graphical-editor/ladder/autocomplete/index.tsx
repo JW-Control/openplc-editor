@@ -27,6 +27,7 @@ type VariablesBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
   keyPressed?: string
   valueToSearch: string
   keepOpenForElementId?: string
+  keepOpenForSelector?: string
 }
 
 /**
@@ -60,6 +61,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
       keyPressed,
       valueToSearch,
       keepOpenForElementId,
+      keepOpenForSelector,
     }: VariablesBlockAutoCompleteProps,
     ref,
   ) => {
@@ -300,6 +302,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         variables={mergedCandidates.map((c) => ({ id: c.insertText, name: c.insertText }))}
         submit={submit}
         keepOpenForElementId={keepOpenForElementId}
+        keepOpenForSelector={keepOpenForSelector}
       />
     )
   },
