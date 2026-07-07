@@ -77,13 +77,15 @@ export const Contact = (block: ContactProps) => {
   }, [data.variable.name])
 
   /**
-   * useEffect to focus the variable input when the block is selected
+   * Focus the variable input and open autocomplete when the block is selected.
    */
   useEffect(() => {
     if (inputVariableRef.current && selected) {
       inputVariableRef.current.focus()
+      setOpenAutocomplete(true)
+      setKeyPressedAtTextarea('')
     }
-  }, [])
+  }, [selected])
 
   /**
    * Validate the contact's variable against the full project scope via the
