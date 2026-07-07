@@ -8,6 +8,7 @@ import { forceDebugVariable, releaseDebugVariable } from '../../../../services/d
 import { isExpressionValidForType } from '../../../../services/graphical-scope'
 import { useOpenPLCStore } from '../../../../store'
 import { cn } from '../../../../utils/cn'
+import { validateVariableType } from '../../../../utils/PLC/validate-variable-type'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { VariablesBlockAutoComplete } from './autocomplete'
@@ -55,33 +56,41 @@ export const Coil = (block: CoilProps) => {
     }
   >(null)
 
+  const skipNextVariableBlurSubmitRef = useRef(false)
+
   const [openAutocomplete, setOpenAutocomplete] = useState<boolean>(false)
   const [keyPressedAtTextarea, setKeyPressedAtTextarea] = useState<string>('')
 
-  useEffect(() => {
-    if (inputVariableRef.current && inputWrapperRef.current) {
-      inputWrapperRef.current.style.top = inputVariableRef.current.scrollHeight >= 24 ? '-24px' : '-20px'
-    }
-  }, [coilVariableValue])
+  const variableEditorElementId = 'coil-variable-input-' + id
 
-  /**
-   * useEffect to sync coilVariableValue with data.variable.name when it changes externally
-   * (e.g., from variable rename propagation)
-   */
-  useEffect(() => {
-    if (data.variable && data.variable.name !== '') {
-      setCoilVariableValue(data.variable.name)
+  const openVariableAutocomplete = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('openplc:ladder-variable-autocomplete-open', {
+          detail: { id: variableEditorElementId },
+        }),
+      )
     }
-  }, [data.variable.name])
 
-  /**
-   * useEffect to focus the variable input when the block is selected
-   */
+    setOpenAutocomplete(true)
+    setKeyPressedAtTextarea('')
+  }
+
   useEffect(() => {
-    if (inputVariableRef.current && selected) {
-      inputVariableRef.current.focus()
+    const handleAutocompleteOpen = (event: Event) => {
+      const openedId = (event as CustomEvent<{ id: string }>).detail?.id
+      if (openedId !== variableEditorElementId) {
+        setOpenAutocomplete(false)
+        setKeyPressedAtTextarea('')
+      }
     }
-  }, [])
+
+    window.addEventListener('openplc:ladder-variable-autocomplete-open', handleAutocompleteOpen)
+
+    return () => {
+      window.removeEventListener('openplc:ladder-variable-autocomplete-open', handleAutocompleteOpen)
+    }
+  }, [variableEditorElementId])
 
   /**
    * Validate the coil's variable against the full project scope via the
@@ -92,6 +101,15 @@ export const Coil = (block: CoilProps) => {
    */
   useEffect(() => {
     const name = data.variable?.name?.trim() ?? ''
+    const localVariable = pous
+      .find((pou) => pou.name === pouName)
+      ?.interface?.variables?.find((variable) => variable.name.toLowerCase() === name.toLowerCase())
+
+    if (localVariable?.type?.value && validateVariableType(localVariable.type.value, 'BOOL').isValid) {
+      setWrongVariable(false)
+      return
+    }
+
     let cancelled = false
     void isExpressionValidForType(pouName, name, 'BOOL').then((valid) => {
       if (!cancelled) setWrongVariable(!valid)
@@ -148,6 +166,11 @@ export const Coil = (block: CoilProps) => {
    * Handle with the variable input onBlur event
    */
   const handleSubmitCoilVariableOnTextareaBlur = (variableName?: string) => {
+    if (skipNextVariableBlurSubmitRef.current) {
+      skipNextVariableBlurSubmitRef.current = false
+      return
+    }
+
     const variableNameToSubmit = variableName || coilVariableValue
     const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: id,
@@ -173,7 +196,7 @@ export const Coil = (block: CoilProps) => {
 
   const onChangeHandler = () => {
     if (!openAutocomplete) {
-      setOpenAutocomplete(true)
+      openVariableAutocomplete()
     }
   }
 
@@ -194,7 +217,23 @@ export const Coil = (block: CoilProps) => {
         onClick={isDebuggerVisible ? handleClick : undefined}
       >
         {coil.svg(wrongVariable, debuggerFillColor)}
-        <div className='absolute left-1/2 w-[72px] -translate-x-1/2' ref={inputWrapperRef}>
+        <div
+          className='absolute -top-8 left-1/2 z-20 h-6 w-[96px] -translate-x-1/2'
+          data-ladder-variable-editor='true'
+          ref={inputWrapperRef}
+          onPointerDownCapture={(event) => {
+            event.stopPropagation()
+            openVariableAutocomplete()
+          }}
+          onClickCapture={(event) => {
+            event.stopPropagation()
+            openVariableAutocomplete()
+          }}
+          onDoubleClickCapture={(event) => {
+            event.stopPropagation()
+            openVariableAutocomplete()
+          }}
+        >
           <HighlightedTextArea
             id={`coil-variable-input-${id}`}
             textAreaValue={coilVariableValue}
@@ -211,6 +250,7 @@ export const Coil = (block: CoilProps) => {
             readOnly={isDebuggerVisible}
             onFocus={(e) => {
               e.target.select()
+              openVariableAutocomplete()
               const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
                 nodeId: id ?? '',
               })
@@ -266,6 +306,12 @@ export const Coil = (block: CoilProps) => {
                   isOpen={openAutocomplete}
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
+                  keepOpenForSelector="[data-ladder-variable-editor='true']"
+                  onBeforeSubmit={(variableName) => {
+                    skipNextVariableBlurSubmitRef.current = true
+                    setCoilVariableValue(variableName)
+                  }}
+                  keepOpenForElementId={`coil-variable-input-${id}`}
                 />
               </div>
             </div>

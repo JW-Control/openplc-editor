@@ -22,6 +22,9 @@ export type GraphicalEditorAutocompleteProps = ComponentPropsWithRef<'div'> & {
       }
     }
   }
+  keepOpenForElementId?: string
+  keepOpenForSelector?: string
+  onBeforeSubmit?: ({ variable }: { variable: { id: string; name: string } }) => void
 }
 
 export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalEditorAutocompleteProps>(
@@ -36,6 +39,9 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       variables,
       canCreateNewVariable = true,
       newBlock = { canCreate: false },
+      keepOpenForElementId,
+      keepOpenForSelector,
+      onBeforeSubmit,
     }: GraphicalEditorAutocompleteProps,
     ref,
   ) => {
@@ -91,9 +97,26 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       if (setIsOpen) setIsOpen(false)
     }
 
-    const submitAutocompletion = ({ variable }: { variable: { id: string; name: string } }) => {
+    const shouldKeepOpenForOutsideTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false
+      if (keepOpenForElementId && target.id === keepOpenForElementId) return true
+      if (keepOpenForSelector && target.closest(keepOpenForSelector)) return true
+      return false
+    }
+
+    const handleOutsideInteraction = (event: { target: EventTarget | null; preventDefault: () => void }) => {
+      if (shouldKeepOpenForOutsideTarget(event.target)) {
+        if (setIsOpen) setIsOpen(true)
+        return
+      }
+
       closeModal()
+    }
+
+    const submitAutocompletion = ({ variable }: { variable: { id: string; name: string } }) => {
+      onBeforeSubmit?.({ variable })
       submit({ variable })
+      closeModal()
     }
 
     /**
@@ -237,9 +260,9 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
               onOpenAutoFocus={(e) => e.preventDefault()}
               onCloseAutoFocus={closeModal}
               onEscapeKeyDown={closeModal}
-              onPointerDownOutside={closeModal}
-              onFocusOutside={closeModal}
-              onInteractOutside={closeModal}
+              onPointerDownOutside={handleOutsideInteraction}
+              onFocusOutside={handleOutsideInteraction}
+              onInteractOutside={handleOutsideInteraction}
               onFocus={(e) => {
                 if (focusEvent) focusEvent(e)
                 setAutocompleteFocus(true)
@@ -260,12 +283,9 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
                               'bg-neutral-400 dark:bg-neutral-800': selectedVariable.variable.name === variable.name,
                             },
                           )}
-                          // Keep the editor textarea focused through the click: some
-                          // consumers (LD contact/coil) refocus their container on the
-                          // textarea's blur, which would close this popover before the
-                          // click resolves and swallow the selection.
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
                             submitAutocompletion({
                               variable: {
                                 id: variable.id ?? '',
@@ -297,14 +317,15 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
                         'rounded-lg': !variables || variables.length === 0,
                       },
                     )}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() =>
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
                       submitAutocompletion({
                         variable: newBlock.canCreate
                           ? selectableValues[selectableValues.length - 2].variable
                           : selectableValues[selectableValues.length - 1].variable,
                       })
-                    }
+                    }}
                   >
                     <PlusIcon className='h-3 w-3 stroke-brand' />
                     <div className='ml-2'>Add variable</div>
@@ -323,8 +344,9 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
                       'rounded-lg': !variables || variables.length === 0,
                     },
                   )}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
                     if (newBlock.options) {
                       submitAutocompletion({ variable: selectableValues[selectableValues.length - 1].variable })
                     }
