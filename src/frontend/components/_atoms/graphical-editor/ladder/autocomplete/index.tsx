@@ -28,6 +28,7 @@ type VariablesBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
   valueToSearch: string
   keepOpenForElementId?: string
   keepOpenForSelector?: string
+  onBeforeSubmit?: (variableName: string) => void
 }
 
 /**
@@ -62,6 +63,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
       valueToSearch,
       keepOpenForElementId,
       keepOpenForSelector,
+      onBeforeSubmit,
     }: VariablesBlockAutoCompleteProps,
     ref,
   ) => {
@@ -303,6 +305,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         submit={submit}
         keepOpenForElementId={keepOpenForElementId}
         keepOpenForSelector={keepOpenForSelector}
+        onBeforeSubmit={({ variable }) => onBeforeSubmit?.(variable.name)}
       />
     )
   },

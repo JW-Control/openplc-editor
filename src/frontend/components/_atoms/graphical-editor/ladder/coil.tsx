@@ -56,6 +56,8 @@ export const Coil = (block: CoilProps) => {
     }
   >(null)
 
+  const skipNextVariableBlurSubmitRef = useRef(false)
+
   const [openAutocomplete, setOpenAutocomplete] = useState<boolean>(false)
   const [keyPressedAtTextarea, setKeyPressedAtTextarea] = useState<string>('')
 
@@ -164,6 +166,11 @@ export const Coil = (block: CoilProps) => {
    * Handle with the variable input onBlur event
    */
   const handleSubmitCoilVariableOnTextareaBlur = (variableName?: string) => {
+    if (skipNextVariableBlurSubmitRef.current) {
+      skipNextVariableBlurSubmitRef.current = false
+      return
+    }
+
     const variableNameToSubmit = variableName || coilVariableValue
     const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: id,
@@ -300,6 +307,10 @@ export const Coil = (block: CoilProps) => {
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
                   keepOpenForSelector="[data-ladder-variable-editor='true']"
+                  onBeforeSubmit={(variableName) => {
+                    skipNextVariableBlurSubmitRef.current = true
+                    setCoilVariableValue(variableName)
+                  }}
                   keepOpenForElementId={`coil-variable-input-${id}`}
                 />
               </div>

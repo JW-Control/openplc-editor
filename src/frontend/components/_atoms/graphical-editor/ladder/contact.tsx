@@ -56,6 +56,8 @@ export const Contact = (block: ContactProps) => {
     }
   >(null)
 
+  const skipNextVariableBlurSubmitRef = useRef(false)
+
   const [openAutocomplete, setOpenAutocomplete] = useState<boolean>(false)
   const [keyPressedAtTextarea, setKeyPressedAtTextarea] = useState<string>('')
 
@@ -164,6 +166,11 @@ export const Contact = (block: ContactProps) => {
    * Handle with the variable input onBlur event
    */
   const handleSubmitContactVariableOnTextareaBlur = (variableName?: string) => {
+    if (skipNextVariableBlurSubmitRef.current) {
+      skipNextVariableBlurSubmitRef.current = false
+      return
+    }
+
     const variableNameToSubmit = variableName || contactVariableValue
     const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: id,
@@ -300,6 +307,10 @@ export const Contact = (block: ContactProps) => {
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
                   keepOpenForSelector="[data-ladder-variable-editor='true']"
+                  onBeforeSubmit={(variableName) => {
+                    skipNextVariableBlurSubmitRef.current = true
+                    setContactVariableValue(variableName)
+                  }}
                   keepOpenForElementId={`contact-variable-input-${id}`}
                 />
               </div>
