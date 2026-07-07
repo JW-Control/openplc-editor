@@ -104,7 +104,6 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
 
     const handleOutsideInteraction = (event: { target: EventTarget | null; preventDefault: () => void }) => {
       if (shouldKeepOpenForOutsideTarget(event.target)) {
-        event.preventDefault()
         if (setIsOpen) setIsOpen(true)
         return
       }

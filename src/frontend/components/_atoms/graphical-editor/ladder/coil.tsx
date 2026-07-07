@@ -215,17 +215,14 @@ export const Coil = (block: CoilProps) => {
           data-ladder-variable-editor='true'
           ref={inputWrapperRef}
           onPointerDownCapture={(event) => {
-            event.preventDefault()
             event.stopPropagation()
             openVariableAutocomplete()
           }}
           onClickCapture={(event) => {
-            event.preventDefault()
             event.stopPropagation()
             openVariableAutocomplete()
           }}
           onDoubleClickCapture={(event) => {
-            event.preventDefault()
             event.stopPropagation()
             openVariableAutocomplete()
           }}
