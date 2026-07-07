@@ -207,7 +207,14 @@ export const Contact = (block: ContactProps) => {
         onClick={isDebuggerVisible ? handleClick : undefined}
       >
         {contact.svg(wrongVariable, debuggerStrokeColor)}
-        <div className='absolute left-1/2 w-[72px] -translate-x-1/2' ref={inputWrapperRef}>
+        <div
+          className='absolute left-1/2 w-[72px] -translate-x-1/2'
+          ref={inputWrapperRef}
+          onMouseDownCapture={() => {
+            setOpenAutocomplete(true)
+            setKeyPressedAtTextarea('')
+          }}
+        >
           <HighlightedTextArea
             id={`contact-variable-input-${id}`}
             textAreaValue={contactVariableValue}
@@ -281,6 +288,7 @@ export const Contact = (block: ContactProps) => {
                   isOpen={openAutocomplete}
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
+                  keepOpenForElementId={`contact-variable-input-${id}`}
                 />
               </div>
             </div>

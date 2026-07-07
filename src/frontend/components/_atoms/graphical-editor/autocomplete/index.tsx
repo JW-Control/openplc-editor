@@ -22,6 +22,7 @@ export type GraphicalEditorAutocompleteProps = ComponentPropsWithRef<'div'> & {
       }
     }
   }
+  keepOpenForElementId?: string
 }
 
 export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalEditorAutocompleteProps>(
@@ -36,6 +37,7 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       variables,
       canCreateNewVariable = true,
       newBlock = { canCreate: false },
+      keepOpenForElementId,
     }: GraphicalEditorAutocompleteProps,
     ref,
   ) => {
@@ -89,6 +91,21 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       setAutocompleteFocus(false)
       setSelectedVariable({ positionInArray: -1, variable: { id: '', name: '' } })
       if (setIsOpen) setIsOpen(false)
+    }
+
+    const shouldKeepOpenForOutsideTarget = (target: EventTarget | null) => {
+      if (!keepOpenForElementId || !(target instanceof HTMLElement)) return false
+      return target.id === keepOpenForElementId
+    }
+
+    const handleOutsideInteraction = (event: { target: EventTarget | null; preventDefault: () => void }) => {
+      if (shouldKeepOpenForOutsideTarget(event.target)) {
+        event.preventDefault()
+        if (setIsOpen) setIsOpen(true)
+        return
+      }
+
+      closeModal()
     }
 
     const submitAutocompletion = ({ variable }: { variable: { id: string; name: string } }) => {
@@ -237,9 +254,9 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
               onOpenAutoFocus={(e) => e.preventDefault()}
               onCloseAutoFocus={closeModal}
               onEscapeKeyDown={closeModal}
-              onPointerDownOutside={closeModal}
-              onFocusOutside={closeModal}
-              onInteractOutside={closeModal}
+              onPointerDownOutside={handleOutsideInteraction}
+              onFocusOutside={handleOutsideInteraction}
+              onInteractOutside={handleOutsideInteraction}
               onFocus={(e) => {
                 if (focusEvent) focusEvent(e)
                 setAutocompleteFocus(true)

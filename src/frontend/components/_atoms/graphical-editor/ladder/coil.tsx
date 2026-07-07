@@ -206,7 +206,14 @@ export const Coil = (block: CoilProps) => {
         onClick={isDebuggerVisible ? handleClick : undefined}
       >
         {coil.svg(wrongVariable, debuggerFillColor)}
-        <div className='absolute left-1/2 w-[72px] -translate-x-1/2' ref={inputWrapperRef}>
+        <div
+          className='absolute left-1/2 w-[72px] -translate-x-1/2'
+          ref={inputWrapperRef}
+          onMouseDownCapture={() => {
+            setOpenAutocomplete(true)
+            setKeyPressedAtTextarea('')
+          }}
+        >
           <HighlightedTextArea
             id={`coil-variable-input-${id}`}
             textAreaValue={coilVariableValue}
@@ -280,6 +287,7 @@ export const Coil = (block: CoilProps) => {
                   isOpen={openAutocomplete}
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
+                  keepOpenForElementId={`coil-variable-input-${id}`}
                 />
               </div>
             </div>

@@ -26,6 +26,7 @@ type VariablesBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
   setIsOpen?: (isOpen: boolean) => void
   keyPressed?: string
   valueToSearch: string
+  keepOpenForElementId?: string
 }
 
 /**
@@ -51,7 +52,15 @@ const expectedTypeForBlock = (
 
 const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAutoCompleteProps>(
   (
-    { block, blockType = 'other', isOpen, setIsOpen, keyPressed, valueToSearch }: VariablesBlockAutoCompleteProps,
+    {
+      block,
+      blockType = 'other',
+      isOpen,
+      setIsOpen,
+      keyPressed,
+      valueToSearch,
+      keepOpenForElementId,
+    }: VariablesBlockAutoCompleteProps,
     ref,
   ) => {
     const pouName = useBoundPou()
@@ -290,6 +299,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         searchValue={valueToSearch}
         variables={mergedCandidates.map((c) => ({ id: c.insertText, name: c.insertText }))}
         submit={submit}
+        keepOpenForElementId={keepOpenForElementId}
       />
     )
   },
