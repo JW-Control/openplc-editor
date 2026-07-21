@@ -9,7 +9,6 @@ import { restampFlowLibraryVariants } from '../../../utils/PLC/restamp-library-v
 import { collectAllSlaveNames } from '../../../utils/unique-slave-name'
 import type { FBDFlowType } from '../fbd'
 import type { FileSliceDataObject } from '../file'
-import type { HistorySnapshot } from '../history'
 import type { LadderFlowType } from '../ladder'
 import type { TabsProps } from '../tabs'
 import {
@@ -18,7 +17,8 @@ import {
   CreateServerEditor,
   LIBRARY_MANIFEST_TAB_NAME,
 } from '../tabs/utils'
-import type { SharedRootState, SharedSlice } from './types'
+import { cancelFlowWriteBacks, flushFlowWriteBacks } from './flow-writeback'
+import type { PouHistorySnapshot, SharedRootState, SharedSlice } from './types'
 import { createDatatypeObject, createEditorObjectForDatatype, createEditorObjectForPou, createPouObject } from './utils'
 
 const MAX_HISTORY_SIZE = 50
@@ -524,6 +524,10 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
     },
 
     handleOpenProjectResponse: (data) => {
+      // A write-back scheduled against the previous project must not fire
+      // into the one being opened (project load flips `updated` flags as a
+      // side effect, which would let a stale timer persist a fresh flow).
+      cancelFlowWriteBacks()
       getState().sharedWorkspaceActions.clearStatesOnCloseProject()
       getState().workspaceActions.setEditingState('saved')
       // Any in-place reload (branch switch, restore, discard, stash) can move
@@ -916,6 +920,9 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
     },
 
     undo: (pouName) => {
+      // A debounced graphical write-back may still be pending — flush it so
+      // the redo snapshot below can't pair a stale body with a fresh flow.
+      flushFlowWriteBacks(getState, pouName)
       const state = getState()
       const history = state.undoRedo[pouName]
       if (!history || history.past.length === 0) return
@@ -924,17 +931,15 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
       const pou = state.project.data.pous.find((p) => p.name === pouName)
       if (!pou) return
 
-      // Save current state to future (deep copy to avoid mutation)
-      const ladderFlow = state.ladderFlows.find((f) => f.name === pouName)
-      const fbdFlow = state.fbdFlows.find((f) => f.name === pouName)
-      const currentSnapshot: HistorySnapshot = {
-        variables: JSON.parse(JSON.stringify(pou.interface?.variables ?? [])) as PLCVariable[],
-        body: JSON.parse(JSON.stringify(pou.body.value)) as unknown,
-        ladderFlow: ladderFlow ? JSON.parse(JSON.stringify(ladderFlow)) : undefined,
-        fbdFlow: fbdFlow ? JSON.parse(JSON.stringify(fbdFlow)) : undefined,
-        globalVariables: JSON.parse(
-          JSON.stringify(state.project.data.configurations.resource.globalVariables),
-        ) as PLCVariable[],
+      // Save current state to future. Plain references — the store is
+      // immer-managed (frozen, copy-on-write), so later edits can never
+      // reach a captured snapshot.
+      const currentSnapshot: PouHistorySnapshot = {
+        variables: pou.interface?.variables ?? [],
+        body: pou.body.value,
+        ladderFlow: state.ladderFlows.find((f) => f.name === pouName),
+        fbdFlow: state.fbdFlows.find((f) => f.name === pouName),
+        globalVariables: state.project.data.configurations.resource.globalVariables,
       }
 
       setState(
@@ -973,6 +978,8 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
     },
 
     redo: (pouName) => {
+      // See undo — same pending write-back consistency requirement.
+      flushFlowWriteBacks(getState, pouName)
       const state = getState()
       const history = state.undoRedo[pouName]
       if (!history || history.future.length === 0) return
@@ -981,17 +988,13 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
       const pou = state.project.data.pous.find((p) => p.name === pouName)
       if (!pou) return
 
-      // Save current state to past (deep copy to avoid mutation)
-      const ladderFlow = state.ladderFlows.find((f) => f.name === pouName)
-      const fbdFlow = state.fbdFlows.find((f) => f.name === pouName)
-      const currentSnapshot: HistorySnapshot = {
-        variables: JSON.parse(JSON.stringify(pou.interface?.variables ?? [])) as PLCVariable[],
-        body: JSON.parse(JSON.stringify(pou.body.value)) as unknown,
-        ladderFlow: ladderFlow ? JSON.parse(JSON.stringify(ladderFlow)) : undefined,
-        fbdFlow: fbdFlow ? JSON.parse(JSON.stringify(fbdFlow)) : undefined,
-        globalVariables: JSON.parse(
-          JSON.stringify(state.project.data.configurations.resource.globalVariables),
-        ) as PLCVariable[],
+      // Save current state to past. Plain references — see undo.
+      const currentSnapshot: PouHistorySnapshot = {
+        variables: pou.interface?.variables ?? [],
+        body: pou.body.value,
+        ladderFlow: state.ladderFlows.find((f) => f.name === pouName),
+        fbdFlow: state.fbdFlows.find((f) => f.name === pouName),
+        globalVariables: state.project.data.configurations.resource.globalVariables,
       }
 
       setState(
