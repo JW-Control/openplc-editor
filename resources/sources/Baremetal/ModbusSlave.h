@@ -31,8 +31,9 @@ Copyright (C) 2022 OpenPLC - Thiago Alves
 #ifdef MBTCP_ETHERNET
 #include <SPI.h>
 #if defined(JWPLC_BASIC)
-    // JWPLC Basic usa W5500 por SPI. No usar ETH.h / ETH.begin().
-    #include <Ethernet.h>
+    // JWPLC Basic usa su backend W5x00 integrado. No mezclarlo con la
+    // libreria Ethernet generica de Arduino: ambas exponen las mismas clases.
+    #include <JWPLC_Ethernet.h>
 #elif defined(BOARD_ESP32)
     // I²C-address of Ethernet PHY (0 or 1 for LAN8720, 31 for TLK110)
     #define ETH_PHY_ADDR 0                      // DEFAULT VALUE IS 0 YOU CAN OMIT IT
