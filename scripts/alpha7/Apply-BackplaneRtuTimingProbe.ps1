@@ -15,10 +15,14 @@ function Replace-ExactOnce {
     )
 
     $first = $Text.IndexOf($Old, [System.StringComparison]::Ordinal)
-    if ($first -lt 0) { throw "No se encontro anchor requerido: $Label" }
+    if ($first -lt 0) {
+        throw "No se encontro anchor requerido: $Label"
+    }
 
     $second = $Text.IndexOf($Old, $first + $Old.Length, [System.StringComparison]::Ordinal)
-    if ($second -ge 0) { throw "Anchor no unico; se cancela: $Label" }
+    if ($second -ge 0) {
+        throw "Anchor no unico; se cancela: $Label"
+    }
 
     return $Text.Substring(0, $first) + $New + $Text.Substring($first + $Old.Length)
 }
@@ -38,7 +42,9 @@ if (-not (Test-Path $manifestPath)) { throw "No existe manifest: $manifestPath" 
 Push-Location $repo
 try {
     $branch = (git branch --show-current).Trim()
-    if ($LASTEXITCODE -ne 0) { throw 'No se pudo leer la rama de platform-jwplc.' }
+    if ($LASTEXITCODE -ne 0) {
+        throw 'No se pudo leer la rama de platform-jwplc.'
+    }
     if ($branch -ne $expectedBranch) {
         throw "Rama inesperada '$branch'. Esperada '$expectedBranch'."
     }
@@ -85,34 +91,38 @@ try {
 #define JWPLC_ALPHA7_RTU_TIMING_DIAGNOSTICS 1
 #endif
 '@
-    $hal = Replace-ExactOnce $hal $includeOld $includeNew 'include ModbusRTU'
+    $hal = Replace-ExactOnce -Text $hal -Old $includeOld -New $includeNew -Label 'include ModbusRTU'
 
     $probe = [System.IO.File]::ReadAllText($assetPath).Replace("`r`n", "`n").TrimEnd()
     $stateOld = 'static uint8_t jwplcRemoteOutputBits = 0;'
     $stateNew = $stateOld + "`n`n" + $probe
-    $hal = Replace-ExactOnce $hal $stateOld $stateNew 'estado remoto + timing probe'
+    $hal = Replace-ExactOnce -Text $hal -Old $stateOld -New $stateNew -Label 'estado remoto + timing probe'
 
-    $hal = Replace-ExactOnce $hal '    JWPLC_ModbusRTU.task();' @'
+    $serviceOld = '    JWPLC_ModbusRTU.task();'
+    $serviceNew = @'
     JWPLC_ModbusRTU.task();
     jwplcTimingOnService();
-'@ 'service timestamp'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $serviceOld -New $serviceNew -Label 'service timestamp'
 
-    $hal = Replace-ExactOnce $hal @'
+    $writeAcceptedOld = @'
                 &jwplcRemoteOutputBits,
                 JWPLC_MODBUS_TIMEOUT_MS))
         {
             jwplcRemotePhase = JWPLC_REMOTE_WRITE_WAIT;
         }
-'@ @'
+'@
+    $writeAcceptedNew = @'
                 &jwplcRemoteOutputBits,
                 JWPLC_MODBUS_TIMEOUT_MS))
         {
             jwplcTimingOnFc15Accepted();
             jwplcRemotePhase = JWPLC_REMOTE_WRITE_WAIT;
         }
-'@ 'FC15 request accepted'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $writeAcceptedOld -New $writeAcceptedNew -Label 'FC15 request accepted'
 
-    $hal = Replace-ExactOnce $hal @'
+    $writeWaitOld = @'
     case JWPLC_REMOTE_WRITE_WAIT:
         if (JWPLC_ModbusRTU.masterDone())
         {
@@ -120,7 +130,8 @@ try {
             jwplcRemotePhase = JWPLC_REMOTE_READ_START;
         }
         break;
-'@ @'
+'@
+    $writeWaitNew = @'
     case JWPLC_REMOTE_WRITE_WAIT:
         if (JWPLC_ModbusRTU.masterDone())
         {
@@ -130,24 +141,27 @@ try {
             jwplcRemotePhase = JWPLC_REMOTE_READ_START;
         }
         break;
-'@ 'FC15 completion'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $writeWaitOld -New $writeWaitNew -Label 'FC15 completion'
 
-    $hal = Replace-ExactOnce $hal @'
+    $readAcceptedOld = @'
                 &jwplcRemoteInputBits,
                 JWPLC_MODBUS_TIMEOUT_MS))
         {
             jwplcRemotePhase = JWPLC_REMOTE_READ_WAIT;
         }
-'@ @'
+'@
+    $readAcceptedNew = @'
                 &jwplcRemoteInputBits,
                 JWPLC_MODBUS_TIMEOUT_MS))
         {
             jwplcTimingOnFc02Accepted();
             jwplcRemotePhase = JWPLC_REMOTE_READ_WAIT;
         }
-'@ 'FC02 request accepted'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $readAcceptedOld -New $readAcceptedNew -Label 'FC02 request accepted'
 
-    $hal = Replace-ExactOnce $hal @'
+    $readWaitOld = @'
     case JWPLC_REMOTE_READ_WAIT:
         if (JWPLC_ModbusRTU.masterDone())
         {
@@ -160,7 +174,8 @@ try {
             jwplcRemotePhase = JWPLC_REMOTE_WRITE_START;
         }
         break;
-'@ @'
+'@
+    $readWaitNew = @'
     case JWPLC_REMOTE_READ_WAIT:
         if (JWPLC_ModbusRTU.masterDone())
         {
@@ -176,21 +191,27 @@ try {
             jwplcRemotePhase = JWPLC_REMOTE_WRITE_START;
         }
         break;
-'@ 'FC02 completion/apply'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $readWaitOld -New $readWaitNew -Label 'FC02 completion/apply'
 
-    $hal = Replace-ExactOnce $hal "void hardwareInit()`n{" @'
+    $hardwareInitOld = "void hardwareInit()`n{"
+    $hardwareInitNew = @'
 void hardwareInit()
 {
     jwplcTimingInit();
-'@ 'timing Serial0 init'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $hardwareInitOld -New $hardwareInitNew -Label 'timing Serial0 init'
 
-    $hal = Replace-ExactOnce $hal "void updateInputBuffers()`n{" @'
+    $inputBuffersOld = "void updateInputBuffers()`n{"
+    $inputBuffersNew = @'
 void updateInputBuffers()
 {
     jwplcTimingOnScanStart();
-'@ 'scan timestamp'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $inputBuffersOld -New $inputBuffersNew -Label 'scan timestamp'
 
-    $hal = Replace-ExactOnce $hal "void updateOutputBuffers()`n{" @'
+    $outputBuffersOld = "void updateOutputBuffers()`n{"
+    $outputBuffersNew = @'
 void updateOutputBuffers()
 {
     jwplcTimingOnOutputUpdate();
@@ -198,13 +219,19 @@ void updateOutputBuffers()
     {
         jwplcTimingObserveRemoteOutputs(jwplcPackRemoteOutputs());
     }
-'@ 'output timestamp'
+'@
+    $hal = Replace-ExactOnce -Text $hal -Old $outputBuffersOld -New $outputBuffersNew -Label 'output timestamp'
 
     $outputFunctionIndex = $hal.IndexOf('void updateOutputBuffers()', [System.StringComparison]::Ordinal)
-    if ($outputFunctionIndex -lt 0) { throw 'No se encontro updateOutputBuffers.' }
+    if ($outputFunctionIndex -lt 0) {
+        throw 'No se encontro updateOutputBuffers.'
+    }
+
     $tailOld = "    jwplcServiceRemoteRtu();`n}"
     $tailIndex = $hal.IndexOf($tailOld, $outputFunctionIndex, [System.StringComparison]::Ordinal)
-    if ($tailIndex -lt 0) { throw 'No se encontro tail de updateOutputBuffers.' }
+    if ($tailIndex -lt 0) {
+        throw 'No se encontro tail de updateOutputBuffers.'
+    }
     $tailNew = "    jwplcServiceRemoteRtu();`n    jwplcTimingMaybePrint();`n}"
     $hal = $hal.Substring(0, $tailIndex) + $tailNew + $hal.Substring($tailIndex + $tailOld.Length)
 
@@ -225,7 +252,9 @@ void updateOutputBuffers()
 
     Write-Host "`n=== DIFF CHECK ===" -ForegroundColor Cyan
     git diff --check -- $halRel $manifestRel
-    if ($LASTEXITCODE -ne 0) { throw 'DIFF_CHECK=FAIL' }
+    if ($LASTEXITCODE -ne 0) {
+        throw 'DIFF_CHECK=FAIL'
+    }
     Write-Host 'DIFF_CHECK=PASS' -ForegroundColor Green
 
     Write-Host "`n=== DIFF STAT ===" -ForegroundColor Cyan
