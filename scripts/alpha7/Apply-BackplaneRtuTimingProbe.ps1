@@ -238,12 +238,13 @@ void updateOutputBuffers()
     [System.IO.File]::WriteAllText($halPath, $hal, $utf8NoBom)
 
     $manifestText = [System.IO.File]::ReadAllText($manifestPath).Replace("`r`n", "`n")
-    $versionRegex = New-Object System.Text.RegularExpressions.Regex('"version"\s*:\s*"2\.1\.0-alpha\.16"')
+    $versionPattern = '"version"\s*:\s*"2\.1\.0-alpha\.16"'
+    $versionRegex = New-Object System.Text.RegularExpressions.Regex -ArgumentList $versionPattern
     $matches = $versionRegex.Matches($manifestText)
     if ($matches.Count -ne 1) {
         throw "Se esperaba una sola version alpha.16 en manifest; encontradas: $($matches.Count)"
     }
-    $manifestText = $versionRegex.Replace($manifestText, '"version": "2.1.0-alpha.17"', 1)
+    $manifestText = $versionRegex.Replace($manifestText, '"version": "2.1.0-alpha.17"'.Replace('\', ''), 1)
     [System.IO.File]::WriteAllText($manifestPath, $manifestText, $utf8NoBom)
 
     Write-Host "`n=== CONSTANTES RTU ===" -ForegroundColor Cyan
