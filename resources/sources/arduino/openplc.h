@@ -79,6 +79,9 @@ extern IEC_ULINT *lint_memory[MAX_MEMORY_LWORD];
 extern "C" {
 #endif
 void hardwareInit();
+// Optional nonblocking hook called only while the PLC scan is idle.
+// Baremetal.ino supplies a weak no-op default for existing HALs.
+void hardwareService();
 void updateInputBuffers();
 void updateOutputBuffers();
 #ifdef __cplusplus

@@ -111,6 +111,13 @@ extern uint8_t pinMask_AIN[];
 extern uint8_t pinMask_DOUT[];
 extern uint8_t pinMask_AOUT[];
 
+// Alpha7.18 cooperative idle hardware service hook.
+// Existing HALs remain source-compatible through this weak no-op default.
+// A HAL may override it with a short, nonblocking implementation.
+void __attribute__((weak)) hardwareService()
+{
+}
+
 // ---------------------------------------------------------------------------
 // Scan cycle delay setup
 // ---------------------------------------------------------------------------
@@ -419,6 +426,11 @@ void loop()
     {
         scheduler();
         last_run += scan_cycle;
+    }
+    else
+    {
+        // Cooperatively service nonblocking HAL work only in PLC idle time.
+        hardwareService();
     }
 
     #ifdef MODBUS_ENABLED
