@@ -271,25 +271,25 @@ export default function LadderEditor() {
         </DndContext>
         <CreateRung onClick={handleAddNewRung} />
         <Portal.Root>
-          {modals['block-ladder-element']?.open && (
+          {blockElementModal?.open && (
             <BlockElement
               onClose={handleModalClose}
-              selectedNode={modals['block-ladder-element'].data as BlockNode<BlockVariant>}
-              isOpen={modals['block-ladder-element'].open}
+              selectedNode={blockElementModal.data as BlockNode<BlockVariant>}
+              isOpen={blockElementModal.open}
             />
           )}
-          {modals['contact-ladder-element']?.open && (
+          {contactElementModal?.open && (
             <ContactElement
               onClose={handleModalClose}
-              node={modals['contact-ladder-element'].data as ContactNode}
-              isOpen={modals['contact-ladder-element'].open}
+              node={contactElementModal.data as ContactNode}
+              isOpen={contactElementModal.open}
             />
           )}
-          {modals['coil-ladder-element']?.open && (
+          {coilElementModal?.open && (
             <CoilElement
               onClose={handleModalClose}
-              node={modals['coil-ladder-element'].data as CoilNode}
-              isOpen={modals['coil-ladder-element'].open}
+              node={coilElementModal.data as CoilNode}
+              isOpen={coilElementModal.open}
             />
           )}
         </Portal.Root>
