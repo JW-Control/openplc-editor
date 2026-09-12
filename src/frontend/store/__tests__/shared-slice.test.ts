@@ -2312,5 +2312,98 @@ describe('createSharedSlice', () => {
         expect(store.getState().fileActions.getSavedState({ name: 'Main' })).toBe(true)
       })
     })
+
+    describe('against library symbols', () => {
+      const librarySymbol = (name: string, type: 'function' | 'function-block') => ({
+        name,
+        type,
+        language: 'st' as const,
+        variables: [],
+        body: '',
+        documentation: '',
+      })
+
+      const seedLibraries = () =>
+        store.getState().libraryActions.setSystemLibraries([
+          {
+            name: 'oscat-basic',
+            author: 'OSCAT',
+            version: '3.3.4',
+            stPath: '',
+            cPath: '',
+            pous: [librarySymbol('MATRIX', 'function-block'), librarySymbol('LIMITS_TYPE', 'function-block')],
+          },
+          {
+            name: 'iec-std-functions',
+            author: 'IEC',
+            version: '1.0.0',
+            stPath: '',
+            cPath: '',
+            pous: [librarySymbol('SIN', 'function')],
+          },
+        ])
+
+      beforeEach(() => {
+        seedLibraries()
+      })
+
+      it('refuses a POU create, naming the library and the symbol kind', () => {
+        const result = store.getState().pouActions.create({ type: 'program', name: 'Matrix', language: 'st' })
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"Matrix" is a function block in the oscat-basic library')
+        expect(store.getState().project.data.pous).toHaveLength(0)
+      })
+
+      it('refuses a data type create, case-insensitively', () => {
+        const result = store.getState().datatypeActions.create({ name: 'matrix', derivation: 'structure' })
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"matrix" is a function block in the oscat-basic library')
+        expect(store.getState().project.data.dataTypes).toHaveLength(0)
+      })
+
+      it('names a library function as a function', () => {
+        const result = store.getState().pouActions.create({ type: 'function', name: 'Sin', language: 'st' })
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"Sin" is a function in the iec-std-functions library')
+      })
+
+      it('refuses a POU rename onto a library symbol', () => {
+        store.getState().pouActions.create({ type: 'program', name: 'Pump', language: 'st' })
+        const result = store.getState().pouActions.rename('Pump', 'MATRIX')
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"MATRIX" is a function block in the oscat-basic library')
+        expect(store.getState().project.data.pous[0].name).toBe('Pump')
+      })
+
+      it('refuses a data type rename onto a library symbol', () => {
+        store.getState().datatypeActions.create({ name: 'Motor', derivation: 'structure' })
+        const result = store.getState().datatypeActions.rename('Motor', 'MATRIX')
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"MATRIX" is a function block in the oscat-basic library')
+        expect(store.getState().project.data.dataTypes[0].name).toBe('Motor')
+      })
+
+      it('refuses a POU duplicate onto a library symbol', () => {
+        store.getState().pouActions.create({ type: 'program', name: 'Pump', language: 'st' })
+        const result = store.getState().pouActions.duplicate('Pump', 'MATRIX')
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"MATRIX" is a function block in the oscat-basic library')
+        expect(store.getState().project.data.pous).toHaveLength(1)
+      })
+
+      it('refuses a data type duplicate onto a library symbol', () => {
+        store.getState().datatypeActions.create({ name: 'Motor', derivation: 'structure' })
+        const result = store.getState().datatypeActions.duplicate('Motor', 'MATRIX')
+        expect(result.ok).toBe(false)
+        expect(result.message).toBe('"MATRIX" is a function block in the oscat-basic library')
+        expect(store.getState().project.data.dataTypes).toHaveLength(1)
+      })
+
+      it('allows a name no library symbol owns', () => {
+        expect(store.getState().pouActions.create({ type: 'program', name: 'Matrices', language: 'st' })).toEqual({
+          ok: true,
+        })
+      })
+    })
   })
 })

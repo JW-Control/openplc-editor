@@ -72,14 +72,66 @@ function renameElement(
   return { ok: true as const }
 }
 
+const nameMatches = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
+
+const LIBRARY_SYMBOL_KIND: Record<string, string> = {
+  function: 'function',
+  'function-block': 'function block',
+}
+
+function librarySymbolOwning(state: SharedRootState, name: string): { library: string; kind: string } | null {
+  for (const library of state.libraries.system) {
+    const symbol = library.pous.find((pou) => nameMatches(pou.name, name))
+    if (symbol) return { library: library.name, kind: LIBRARY_SYMBOL_KIND[symbol.type] ?? 'symbol' }
+  }
+  return null
+}
+
+function checkElementNameCollision(
+  state: SharedRootState,
+  name: string,
+  kind: 'pou' | 'data-type',
+  action: 'create' | 'rename' | 'duplicate',
+  ignoring?: string,
+): string | null {
+  if (ignoring !== undefined && (kind === 'pou' ? name === ignoring : nameMatches(name, ignoring))) {
+    return null
+  }
+
+  const { pous, dataTypes } = state.project.data
+
+  if (kind === 'pou') {
+    if (pous.some((pou) => nameMatches(pou.name, name) && (!ignoring || !nameMatches(pou.name, ignoring)))) {
+      return action === 'create' ? 'POU already exists' : 'POU name already exists'
+    }
+    if (dataTypes.some((dt) => nameMatches(dt.name, name))) {
+      return `"${name}" is already the name of a data type`
+    }
+  } else if (kind === 'data-type') {
+    if (dataTypes.some((dt) => nameMatches(dt.name, name) && (!ignoring || !nameMatches(dt.name, ignoring)))) {
+      return action === 'create' ? 'Data type already exists' : 'Data type name already exists'
+    }
+    if (pous.some((pou) => nameMatches(pou.name, name))) {
+      return `"${name}" is already the name of a POU`
+    }
+  }
+
+  const librarySymbol = librarySymbolOwning(state, name)
+  if (librarySymbol) {
+    return `"${name}" is a ${librarySymbol.kind} in the ${librarySymbol.library} library`
+  }
+
+  return null
+}
+
 const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (setState, getState) => ({
   undoRedo: {},
 
   pouActions: {
     create: ({ type, name, language }) => {
       const state = getState()
-      const existing = state.project.data.pous.find((p) => p.name === name)
-      if (existing) return { ok: false, message: 'POU already exists' }
+      const collision = checkElementNameCollision(state, name, 'pou', 'create')
+      if (collision) return { ok: false, message: collision }
 
       const pouDto = createPouObject({ type, name, language })
       const result = state.projectActions.createPou(pouDto)
@@ -132,8 +184,8 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
 
     rename: (oldName, newName) => {
       const state = getState()
-      const existing = state.project.data.pous.find((p) => p.name === newName)
-      if (existing) return { ok: false, message: 'POU name already exists' }
+      const collision = checkElementNameCollision(state, newName, 'pou', 'rename', oldName)
+      if (collision) return { ok: false, message: collision }
 
       return renameElement(
         state,
@@ -151,8 +203,8 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
       const sourcePou = state.project.data.pous.find((p) => p.name === sourceName)
       if (!sourcePou) return { ok: false, message: 'Source POU not found' }
 
-      const existing = state.project.data.pous.find((p) => p.name === newName)
-      if (existing) return { ok: false, message: 'POU name already exists' }
+      const collision = checkElementNameCollision(state, newName, 'pou', 'duplicate')
+      if (collision) return { ok: false, message: collision }
 
       // Create a copy of the POU with the new name
       const language = sourcePou.body.language as 'il' | 'st' | 'ld' | 'sfc' | 'fbd' | 'python' | 'cpp'
@@ -199,8 +251,8 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
   datatypeActions: {
     create: ({ name, derivation }) => {
       const state = getState()
-      const existing = state.project.data.dataTypes.find((d) => d.name === name)
-      if (existing) return { ok: false, message: 'Data type already exists' }
+      const collision = checkElementNameCollision(state, name, 'data-type', 'create')
+      if (collision) return { ok: false, message: collision }
 
       const datatype = createDatatypeObject({ name, derivation })
       const result = state.projectActions.createDatatype({ data: datatype })
@@ -232,8 +284,8 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
 
     rename: (oldName, newName) => {
       const state = getState()
-      const existing = state.project.data.dataTypes.find((d) => d.name === newName)
-      if (existing) return { ok: false, message: 'Data type name already exists' }
+      const collision = checkElementNameCollision(state, newName, 'data-type', 'rename', oldName)
+      if (collision) return { ok: false, message: collision }
 
       const datatype = state.project.data.dataTypes.find((d) => d.name === oldName)
       if (!datatype) return { ok: false, message: 'Data type not found' }
@@ -250,8 +302,8 @@ const createSharedSlice: StateCreator<SharedRootState, [], [], SharedSlice> = (s
       const source = state.project.data.dataTypes.find((d) => d.name === sourceName)
       if (!source) return { ok: false, message: 'Data type not found' }
 
-      const existing = state.project.data.dataTypes.find((d) => d.name === newName)
-      if (existing) return { ok: false, message: 'Data type name already exists' }
+      const collision = checkElementNameCollision(state, newName, 'data-type', 'duplicate')
+      if (collision) return { ok: false, message: collision }
 
       const copy = { ...source, name: newName }
       const result = state.projectActions.createDatatype({ data: copy })
