@@ -329,11 +329,15 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
             [bounds.width, bounds.height + 20],
           ],
     )
-    ladderFlowActions.updateReactFlowViewport({
-      editorName: pouName,
-      rungId: rungLocal.id,
-      reactFlowViewport: [bounds.width, bounds.height + 20],
-    })
+    const newViewport: [number, number] = [bounds.width, bounds.height + 20]
+    const currentViewport = rung.reactFlowViewport as [number, number] | undefined
+    if (!currentViewport || currentViewport[0] !== newViewport[0] || currentViewport[1] !== newViewport[1]) {
+      ladderFlowActions.updateReactFlowViewport({
+        editorName: pouName,
+        rungId: rung.id,
+        reactFlowViewport: newViewport,
+      })
+    }
   }
 
   // --- Debug edge coloring and node lockdown ---

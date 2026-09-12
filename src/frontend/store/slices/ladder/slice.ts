@@ -515,6 +515,11 @@ export const createLadderFlowSlice: StateCreator<LadderFlowSlice, [], [], Ladder
           const rung = flow.rungs.find((rung) => rung.id === rungId)
           if (!rung) return
 
+          const current = rung.reactFlowViewport as [number, number] | undefined
+          if (current && current[0] === reactFlowViewport[0] && current[1] === reactFlowViewport[1]) {
+            return
+          }
+
           rung.reactFlowViewport = reactFlowViewport
         }),
       )

@@ -12,6 +12,7 @@ import {
 import { useOpenPLCStore } from '../../../../../store'
 import { cn } from '../../../../../utils/cn'
 import { getLiteralType, isLegalIdentifier } from '../../../../../utils/keywords'
+import { validateVariableType } from '../../../../../utils/PLC/validate-variable-type'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
 import { GraphicalEditorAutocomplete } from '../../autocomplete'

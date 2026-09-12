@@ -43,7 +43,7 @@ export const Rung = ({ className, index, id, rung, nodeDivergences, isDebuggerAc
 
   useEffect(() => {
     setIsOpen(getIsRungOpen({ rungId: rung.id }))
-  }, [rung])
+  }, [rung.id])
 
   const style = {
     transform: CSS.Translate.toString(transform),
