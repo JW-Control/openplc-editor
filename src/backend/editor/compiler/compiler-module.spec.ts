@@ -188,6 +188,29 @@ describe('CompilerModule', () => {
         'foo:bar:baz:a=aY:b=b1:c=cX',
       )
     })
+
+    it('resolves exact fqbn replacement without appending segments', () => {
+      const jwplcOptions = [
+        {
+          key: 'packageSource',
+          label: 'Package Source',
+          default: 'published',
+          values: [
+            { id: 'published', label: 'Published / Installed', fqbn: 'jwplc:esp32:jwplcbasic' },
+            { id: 'local', label: 'Local Development', fqbn: 'jwplc_local:esp32:jwplcbasic' },
+          ],
+        },
+      ]
+      expect(CompilerModule.applyPlatformOptions('jwplc:esp32:jwplcbasic', jwplcOptions, undefined)).toBe(
+        'jwplc:esp32:jwplcbasic',
+      )
+      expect(
+        CompilerModule.applyPlatformOptions('jwplc:esp32:jwplcbasic', jwplcOptions, { packageSource: 'published' }),
+      ).toBe('jwplc:esp32:jwplcbasic')
+      expect(
+        CompilerModule.applyPlatformOptions('jwplc:esp32:jwplcbasic', jwplcOptions, { packageSource: 'local' }),
+      ).toBe('jwplc_local:esp32:jwplcbasic')
+    })
   })
 
   describe('parseShowPropertiesOutput (pre-compile pipeline foundation)', () => {

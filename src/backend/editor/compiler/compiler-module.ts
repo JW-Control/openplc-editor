@@ -22,6 +22,7 @@ import { runWithConcurrencyLimit } from './run-with-concurrency'
 type StrucppCompileError = import('strucpp').CompileError
 
 import { buildArduinoCliCompileArgs } from '@root/backend/shared/firmware/build-arduino-cli-args'
+import { resolvePlatformOptions } from '@root/backend/shared/firmware/resolve-platform-options'
 import { runLibraryBuildPipeline } from '@root/backend/shared/library/library-build-orchestrator'
 import { buildKnownPous, emitCompileErrorEvents } from '@root/backend/shared/library/program-build-helpers'
 import { runProgramBuildPipeline } from '@root/backend/shared/library/program-build-pipeline'
@@ -292,13 +293,7 @@ class CompilerModule {
     platformOptions: PlatformOption[] | undefined,
     selected: Record<string, string> | undefined,
   ): string {
-    if (!platformOptions || platformOptions.length === 0) return platform
-    const segments: string[] = []
-    for (const opt of platformOptions) {
-      const chosen = selected?.[opt.key] ?? opt.default
-      segments.push(`${opt.key}=${chosen}`)
-    }
-    return `${platform}:${segments.join(':')}`
+    return resolvePlatformOptions(platform, platformOptions, selected)
   }
 
   // Pure parser for `arduino-cli compile --show-properties=expanded` stdout.

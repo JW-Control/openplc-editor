@@ -40,6 +40,8 @@ const Board = memo(function () {
   const communicationPort = boardSelectors.useCommunicationPort()
   const setDeviceBoard = boardSelectors.useSetDeviceBoard()
   const setCommunicationPort = boardSelectors.useSetCommunicationPort()
+  const selectedPlatformOptions = boardSelectors.useSelectedPlatformOptions()
+  const setSelectedPlatformOption = boardSelectors.useSetSelectedPlatformOption()
   const setAvailableOptions = boardSelectors.useSetAvailableOptions()
   const currentSelectedPinTableRow = pinSelectors.useCurrentSelectedPinTableRow()
   const setCurrentSelectedPinTableRow = pinSelectors.useSelectPinTableRow()
@@ -555,6 +557,52 @@ const Board = memo(function () {
               </SelectContent>
             </Select>
           </div>
+          {currentBoardInfo?.platformOptions?.map((option) => {
+            const selectedValue = selectedPlatformOptions[option.key] ?? option.default
+            return (
+              <div
+                key={option.key}
+                id={`platform-option-${option.key}`}
+                className='flex w-full items-center justify-start gap-1 pr-5'
+              >
+                <Label className='whitespace-pre text-xs text-neutral-950 dark:text-white'>{option.label}</Label>
+                <Select
+                  value={selectedValue}
+                  onValueChange={(value) => setSelectedPlatformOption(option.key, value)}
+                >
+                  <SelectTrigger
+                    aria-label={`${option.label} selection`}
+                    placeholder={option.label}
+                    withIndicator
+                    className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                  />
+                  <SelectContent
+                    className='h-fit max-h-[250px] w-[--radix-select-trigger-width] overflow-hidden rounded-lg border border-neutral-100 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'
+                    sideOffset={5}
+                    alignOffset={5}
+                    position='popper'
+                    align='center'
+                    side='bottom'
+                  >
+                    {option.values.map((value) => (
+                      <SelectItem
+                        key={value.id}
+                        value={value.id}
+                        className={cn(
+                          'data-[state=checked]:[&:not(:hover)]:bg-neutral-100 data-[state=checked]:dark:[&:not(:hover)]:bg-neutral-900',
+                          'flex w-full cursor-pointer items-center px-2 py-[9px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850',
+                        )}
+                      >
+                        <span className='flex items-center gap-2 font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                          {value.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
+          })}
           {isSimulatorTarget(currentBoardInfo) ? (
             <div id='simulator-info' className='flex w-full flex-col items-start justify-start gap-4'>
               <p className='text-xs text-neutral-600 dark:text-neutral-400'>

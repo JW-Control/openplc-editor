@@ -592,6 +592,10 @@ export interface PlatformOptionValue {
   id: string
   label: string
   help?: string
+  /** Optional exact FQBN replacement. When present, selecting this value
+   *  replaces the manifest's base platform instead of appending a boards.txt
+   *  menu segment. Ordinary values keep the existing :key=id behaviour. */
+  fqbn?: string
 }
 
 export interface PlatformOption {
