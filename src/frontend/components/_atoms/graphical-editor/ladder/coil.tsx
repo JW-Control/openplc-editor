@@ -8,6 +8,7 @@ import { forceDebugVariable, releaseDebugVariable } from '../../../../services/d
 import { isExpressionValidForType } from '../../../../services/graphical-scope'
 import { useOpenPLCStore } from '../../../../store'
 import { cn } from '../../../../utils/cn'
+import { findFunctionBlockVariables, findStructureVariables } from '../../../../utils/pou-helpers'
 import { validateVariableType } from '../../../../utils/PLC/validate-variable-type'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
@@ -23,12 +24,12 @@ export const Coil = (block: CoilProps) => {
   const { selected, data, id } = block
   const pouName = useBoundPou()
   const {
-    project: {
-      data: { pous },
-    },
+    project,
+    libraries,
     ladderFlows,
     ladderFlowActions: { updateNode },
   } = useOpenPLCStore()
+  const pous = project.data.pous
 
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()
@@ -52,7 +53,7 @@ export const Coil = (block: CoilProps) => {
       focus: () => void
       isFocused: boolean
       selectedVariable: { positionInArray: number; variableName: string }
-      triggerSubmit: () => void
+      triggerSubmit: () => boolean | void
     }
   >(null)
 
@@ -101,6 +102,11 @@ export const Coil = (block: CoilProps) => {
    */
   useEffect(() => {
     const name = data.variable?.name?.trim() ?? ''
+    if (!name) {
+      setWrongVariable(false)
+      return
+    }
+
     const localVariable = pous
       .find((pou) => pou.name === pouName)
       ?.interface?.variables?.find((variable) => variable.name.toLowerCase() === name.toLowerCase())
@@ -110,6 +116,29 @@ export const Coil = (block: CoilProps) => {
       return
     }
 
+    // Fast local resolution for member expressions like TON0.Q or struct.field
+    if (name.includes('.')) {
+      const dotIndex = name.lastIndexOf('.')
+      const instName = name.slice(0, dotIndex).trim().toLowerCase()
+      const memberName = name.slice(dotIndex + 1).trim().toLowerCase()
+      const allVars = [
+        ...(pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []),
+        ...(project.data.configurations.resource?.globalVariables ?? []),
+      ]
+      const inst = allVars.find((v) => v.name.toLowerCase() === instName)
+      if (inst?.type?.value) {
+        const members =
+          findFunctionBlockVariables(inst.type.value, pous, libraries?.system ?? []) ??
+          findStructureVariables(inst.type.value, project.data.dataTypes ?? []) ??
+          []
+        const m = members.find((member) => member.name.toLowerCase() === memberName)
+        if (m?.type?.value && validateVariableType(m.type.value, 'BOOL').isValid) {
+          setWrongVariable(false)
+          return
+        }
+      }
+    }
+
     let cancelled = false
     void isExpressionValidForType(pouName, name, 'BOOL').then((valid) => {
       if (!cancelled) setWrongVariable(!valid)
@@ -117,7 +146,14 @@ export const Coil = (block: CoilProps) => {
     return () => {
       cancelled = true
     }
-  }, [pous, pouName, data.variable.name])
+  }, [
+    pous,
+    pouName,
+    data.variable.name,
+    libraries?.system,
+    project.data.dataTypes,
+    project.data.configurations.resource?.globalVariables,
+  ])
 
   const debuggerFillColor = (() => {
     if (!isDebuggerVisible || !data.variable.name || wrongVariable) return undefined
@@ -172,6 +208,10 @@ export const Coil = (block: CoilProps) => {
     }
 
     const variableNameToSubmit = variableName || coilVariableValue
+    if (variableNameToSubmit.endsWith('.')) {
+      setCoilVariableValue(data.variable.name ?? '')
+      return
+    }
     const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: id,
       variableName: variableNameToSubmit,
@@ -239,6 +279,7 @@ export const Coil = (block: CoilProps) => {
             textAreaValue={coilVariableValue}
             setTextAreaValue={setCoilVariableValue}
             handleSubmit={handleSubmitCoilVariableOnTextareaBlur}
+            submitWith={{ enter: false }}
             inputHeight={{
               height: 24,
               scrollLimiter: 32,
@@ -287,8 +328,15 @@ export const Coil = (block: CoilProps) => {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') e.preventDefault()
               if (e.key === 'Enter' && openAutocomplete) {
                 e.preventDefault()
-                autocompleteRef.current?.triggerSubmit?.()
-                inputVariableRef.current?.blur({ submit: false })
+                const submitted = autocompleteRef.current?.triggerSubmit?.()
+                if (submitted !== false) {
+                  inputVariableRef.current?.blur({ submit: false })
+                }
+                return
+              }
+              if (e.key === 'Enter' && !openAutocomplete) {
+                e.preventDefault()
+                inputVariableRef.current?.blur({ submit: true })
                 return
               }
               setKeyPressedAtTextarea(e.key)
@@ -297,7 +345,7 @@ export const Coil = (block: CoilProps) => {
           />
           {openAutocomplete && (
             <div className='relative flex justify-center'>
-              <div className='absolute -bottom-4'>
+              <div className='absolute -bottom-4 left-1/2 -translate-x-1/2 flex justify-center'>
                 <VariablesBlockAutoComplete
                   ref={autocompleteRef}
                   block={block}
@@ -307,6 +355,9 @@ export const Coil = (block: CoilProps) => {
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
                   keepOpenForSelector="[data-ladder-variable-editor='true']"
+                  onDrillDown={(instanceName) => {
+                    setCoilVariableValue(`${instanceName}.`)
+                  }}
                   onBeforeSubmit={(variableName) => {
                     skipNextVariableBlurSubmitRef.current = true
                     setCoilVariableValue(variableName)

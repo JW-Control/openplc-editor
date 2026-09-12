@@ -11,6 +11,7 @@ import { useOpenPLCStore } from '../../../../store'
 import { RungLadderState } from '../../../../store/slices/ladder'
 import { cn } from '../../../../utils/cn'
 import { getLiteralType } from '../../../../utils/keywords'
+import { findFunctionBlockVariables, findStructureVariables } from '../../../../utils/pou-helpers'
 import {
   floatToBuffer,
   getVariableTypeInfo,
@@ -35,12 +36,12 @@ const VariableElement = (block: VariableProps) => {
   const { id, data } = block
   const pouName = useBoundPou()
   const {
-    project: {
-      data: { pous },
-    },
+    project,
+    libraries,
     ladderFlows,
     ladderFlowActions: { updateNode },
   } = useOpenPLCStore()
+  const pous = project.data.pous
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()
   const getCompositeKey = useDebugCompositeKey()
@@ -58,7 +59,7 @@ const VariableElement = (block: VariableProps) => {
       focus: () => void
       isFocused: boolean
       selectedVariable: { positionInArray: number; variableName: string }
-      triggerSubmit?: () => void
+      triggerSubmit?: () => boolean | void
     }
   >(null)
 
@@ -140,6 +141,31 @@ const VariableElement = (block: VariableProps) => {
       setInputError(false)
       return
     }
+
+    // Fast local resolution for member expressions like TON0.Q or struct.field
+    if (name.includes('.')) {
+      const dotIndex = name.lastIndexOf('.')
+      const instName = name.slice(0, dotIndex).trim().toLowerCase()
+      const memberName = name.slice(dotIndex + 1).trim().toLowerCase()
+      const allVars = [
+        ...(pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []),
+        ...(project.data.configurations.resource?.globalVariables ?? []),
+      ]
+      const inst = allVars.find((v) => v.name.toLowerCase() === instName)
+      if (inst?.type?.value) {
+        const members =
+          findFunctionBlockVariables(inst.type.value, pous, libraries?.system ?? []) ??
+          findStructureVariables(inst.type.value, project.data.dataTypes ?? []) ??
+          []
+        const m = members.find((member) => member.name.toLowerCase() === memberName)
+        if (m?.type?.value) {
+          setIsAVariable(true)
+          setInputError(!validateVariableType(m.type.value, data.block.variableType).isValid)
+          return
+        }
+      }
+    }
+
     let cancelled = false
     void resolveScopeExpressionType(pouName, name).then((res) => {
       if (cancelled) return
@@ -157,13 +183,25 @@ const VariableElement = (block: VariableProps) => {
     return () => {
       cancelled = true
     }
-  }, [pous, pouName, data.variable?.name, data.block.variableType.type.value])
+  }, [
+    pous,
+    pouName,
+    data.variable?.name,
+    data.block.variableType.type.value,
+    libraries?.system,
+    project.data.dataTypes,
+    project.data.configurations.resource?.globalVariables,
+  ])
 
   /**
    * Handle with the variable input onBlur event
    */
   const handleSubmitVariableValueOnTextareaBlur = (currentValue?: string) => {
     const variableNameToSubmit = currentValue ?? variableValue
+    if (variableNameToSubmit.endsWith('.')) {
+      setVariableValue(data.variable.name ?? '')
+      return
+    }
 
     const { pou, rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: id,
@@ -395,6 +433,7 @@ const VariableElement = (block: VariableProps) => {
           textAreaValue={variableValue}
           setTextAreaValue={setVariableValue}
           handleSubmit={handleSubmitVariableValueOnTextareaBlur}
+          submitWith={{ enter: false }}
           inputHeight={{
             height: DEFAULT_VARIABLE_HEIGHT,
             scrollLimiter: DEFAULT_VARIABLE_HEIGHT,
@@ -407,8 +446,15 @@ const VariableElement = (block: VariableProps) => {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') e.preventDefault()
             if (e.key === 'Enter' && openAutocomplete) {
               e.preventDefault()
-              autocompleteRef.current?.triggerSubmit?.()
-              inputVariableRef.current?.blur({ submit: false })
+              const submitted = autocompleteRef.current?.triggerSubmit?.()
+              if (submitted !== false) {
+                inputVariableRef.current?.blur({ submit: false })
+              }
+              return
+            }
+            if (e.key === 'Enter' && !openAutocomplete) {
+              e.preventDefault()
+              inputVariableRef.current?.blur({ submit: true })
               return
             }
             setKeyPressedAtTextarea(e.key)
@@ -417,7 +463,7 @@ const VariableElement = (block: VariableProps) => {
         />
         {openAutocomplete && (
           <div className='relative flex justify-center'>
-            <div className='absolute -bottom-1'>
+            <div className='absolute -bottom-1 left-1/2 -translate-x-1/2 flex justify-center'>
               <VariablesBlockAutoComplete
                 ref={autocompleteRef}
                 block={block}
@@ -426,6 +472,12 @@ const VariableElement = (block: VariableProps) => {
                 isOpen={openAutocomplete}
                 setIsOpen={(value) => setOpenAutocomplete(value)}
                 keyPressed={keyPressedAtTextarea}
+                onDrillDown={(instanceName) => {
+                  setVariableValue(`${instanceName}.`)
+                }}
+                onBeforeSubmit={(variableName) => {
+                  setVariableValue(variableName)
+                }}
               />
             </div>
           </div>

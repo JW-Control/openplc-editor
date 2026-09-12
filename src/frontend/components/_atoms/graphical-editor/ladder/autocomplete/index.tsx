@@ -15,7 +15,8 @@ import { getLiteralType, isLegalIdentifier } from '../../../../../utils/keywords
 import { validateVariableType } from '../../../../../utils/PLC/validate-variable-type'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
-import { GraphicalEditorAutocomplete } from '../../autocomplete'
+import { findFunctionBlockVariables, findStructureVariables, PouVariable } from '../../../../../utils/pou-helpers'
+import { AutocompleteVariableItem, GraphicalEditorAutocomplete } from '../../autocomplete'
 import { getLadderPouVariablesRungNodeAndEdges } from '../utils'
 import { BasicNodeData, BlockNodeData, BlockVariant, LadderBlockConnectedVariables, VariableNode } from '../utils/types'
 
@@ -29,6 +30,7 @@ type VariablesBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
   keepOpenForElementId?: string
   keepOpenForSelector?: string
   onBeforeSubmit?: (variableName: string) => void
+  onDrillDown?: (instanceName: string) => void
 }
 
 /**
@@ -64,14 +66,16 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
       keepOpenForElementId,
       keepOpenForSelector,
       onBeforeSubmit,
+      onDrillDown,
     }: VariablesBlockAutoCompleteProps,
     ref,
   ) => {
     const pouName = useBoundPou()
     const {
       project: {
-        data: { pous },
+        data: { pous, dataTypes, configurations },
       },
+      libraries,
       projectActions: { createVariable },
       ladderFlows,
       ladderFlowActions: { updateNode },
@@ -97,41 +101,132 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
       }
     }, [pouName, valueToSearch, expectedType, blockType, pous])
 
-    const localVariableCandidates = useMemo<ScopeCompletion[]>(() => {
+    const allVariables = useMemo<PLCVariable[]>(() => {
+      const pouVars = pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []
+      const globalVars = configurations?.resource?.globalVariables ?? []
+      return [...pouVars, ...globalVars]
+    }, [pous, pouName, configurations])
+
+    const getCompatibleMembers = (varType: string | undefined): PouVariable[] => {
+      if (!varType) return []
+      const fbVars = findFunctionBlockVariables(varType, pous, libraries?.system ?? [])
+      const members = fbVars ?? findStructureVariables(varType, dataTypes ?? []) ?? []
+      if (!expectedType) return members
+      return members.filter((m) => {
+        const memberType = m.type?.value
+        return memberType ? validateVariableType(memberType, expectedType).isValid : false
+      })
+    }
+
+    const autocompleteItems = useMemo<AutocompleteVariableItem[]>(() => {
       if (blockType === 'block') return []
 
-      const needle = valueToSearch.toLowerCase()
-      const variables = pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []
+      // If valueToSearch contains a dot '.', we are completing members of an instance/struct
+      if (valueToSearch.includes('.')) {
+        const dotIndex = valueToSearch.lastIndexOf('.')
+        const prefix = valueToSearch.slice(0, dotIndex).trim()
+        const memberSearch = valueToSearch.slice(dotIndex + 1).trim().toLowerCase()
 
-      return variables
-        .filter((variable) => variable.name.toLowerCase().includes(needle))
-        .filter((variable) => {
+        const instanceVar = allVariables.find((v) => v.name.toLowerCase() === prefix.toLowerCase())
+        let localMembers: AutocompleteVariableItem[] = []
+        if (instanceVar) {
+          const compMembers = getCompatibleMembers(instanceVar.type?.value)
+          localMembers = compMembers
+            .filter((m) => m.name.toLowerCase().includes(memberSearch))
+            .map((m) => ({
+              id: `${instanceVar.name}.${m.name}`,
+              name: `${instanceVar.name}.${m.name}`,
+              type: m.type?.value,
+              isInstance: false,
+            }))
+        }
+
+        // Merge with LSP candidates for the dotted expression
+        const byName = new Map<string, AutocompleteVariableItem>()
+        for (const item of localMembers) {
+          byName.set(item.name.toLowerCase(), item)
+        }
+        for (const c of candidates) {
+          const key = c.insertText.toLowerCase()
+          if (!byName.has(key)) {
+            byName.set(key, {
+              id: c.insertText,
+              name: c.insertText,
+              type: c.type,
+              isInstance: false,
+            })
+          }
+        }
+        return [...byName.values()]
+      }
+
+      // valueToSearch does NOT contain a dot:
+      // Show direct variables matching expectedType, a separator '------', and FB instances below.
+      const needle = valueToSearch.trim().toLowerCase()
+
+      const directVars: AutocompleteVariableItem[] = allVariables
+        .filter((v) => v.name.toLowerCase().includes(needle))
+        .filter((v) => {
           if (!expectedType) return true
-          const variableType = variable.type?.value
-          if (!variableType) return false
-          return validateVariableType(variableType, expectedType).isValid
+          const vt = v.type?.value
+          if (!vt) return false
+          return validateVariableType(vt, expectedType).isValid
         })
-        .map((variable) => ({
-          label: variable.name,
-          insertText: variable.name,
-          type: variable.type?.value,
+        .map((v) => ({
+          id: v.name,
+          name: v.name,
+          type: v.type?.value,
+          isInstance: false,
         }))
-    }, [blockType, expectedType, pous, pouName, valueToSearch])
 
-    const mergedCandidates = useMemo<ScopeCompletion[]>(() => {
-      const byInsertText = new Map<string, ScopeCompletion>()
+      // Instances (variables that have compatible members)
+      const instanceVars: AutocompleteVariableItem[] = allVariables
+        .filter((v) => v.name.toLowerCase().includes(needle))
+        .filter((v) => {
+          const members = getCompatibleMembers(v.type?.value)
+          return members.length > 0
+        })
+        .map((v) => ({
+          id: v.name,
+          name: v.name,
+          type: v.type?.value,
+          isInstance: true,
+        }))
 
-      for (const candidate of candidates) {
-        byInsertText.set(candidate.insertText.toLowerCase(), candidate)
+      // Merge direct vars with LSP candidates (non-dotted)
+      const directMap = new Map<string, AutocompleteVariableItem>()
+      for (const dv of directVars) {
+        directMap.set(dv.name.toLowerCase(), dv)
+      }
+      for (const c of candidates) {
+        if (!c.insertText.includes('.')) {
+          const key = c.insertText.toLowerCase()
+          if (!directMap.has(key)) {
+            directMap.set(key, {
+              id: c.insertText,
+              name: c.insertText,
+              type: c.type,
+              isInstance: false,
+            })
+          }
+        }
       }
 
-      for (const candidate of localVariableCandidates) {
-        const key = candidate.insertText.toLowerCase()
-        if (!byInsertText.has(key)) byInsertText.set(key, candidate)
+      const result: AutocompleteVariableItem[] = [...directMap.values()]
+
+      if (instanceVars.length > 0) {
+        if (result.length > 0) {
+          result.push({
+            id: '__separator__',
+            name: '------',
+            isSeparator: true,
+          })
+        }
+        result.push(...instanceVars)
       }
 
-      return [...byInsertText.values()]
-    }, [candidates, localVariableCandidates])
+      return result
+    }, [blockType, valueToSearch, allVariables, pous, libraries, dataTypes, expectedType, candidates])
 
     const submitVariableToBlock = (variable: PLCVariable) => {
       const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
@@ -300,12 +395,26 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         return
       }
 
-      // The dropdown items are LSP candidates keyed by their full insert text
-      // (e.g. `TON0.Q`); bind the node to the chosen one, carrying its type.
-      const candidate = mergedCandidates.find((c) => c.insertText.toLowerCase() === variable.name.toLowerCase())
-      if (!candidate) return
+      // Check if it matches an autocomplete item
+      const item = autocompleteItems.find((c) => c.name.toLowerCase() === variable.name.toLowerCase())
+      if (item && !item.isSeparator && !item.isInstance) {
+        submitVariableToBlock(
+          scopeCompletionToVariable({
+            label: item.name,
+            insertText: item.name,
+            type: item.type,
+          }),
+        )
+        return
+      }
 
-      submitVariableToBlock(scopeCompletionToVariable(candidate))
+      const candidate = candidates.find((c) => c.insertText.toLowerCase() === variable.name.toLowerCase())
+      if (candidate) {
+        submitVariableToBlock(scopeCompletionToVariable(candidate))
+        return
+      }
+
+      submitVariableToBlock({ name: variable.name } as PLCVariable)
     }
 
     return (
@@ -316,7 +425,10 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         setIsOpen={setIsOpen}
         keyPressed={keyPressed}
         searchValue={valueToSearch}
-        variables={mergedCandidates.map((c) => ({ id: c.insertText, name: c.insertText }))}
+        variables={autocompleteItems}
+        onSelectInstance={(instanceName) => {
+          onDrillDown?.(instanceName)
+        }}
         submit={submit}
         keepOpenForElementId={keepOpenForElementId}
         keepOpenForSelector={keepOpenForSelector}

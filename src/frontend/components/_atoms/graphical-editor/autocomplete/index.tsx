@@ -5,13 +5,22 @@ import type { PLCVariable } from '../../../../../middleware/shared/ports/types'
 import { PlusIcon } from '../../../../assets/icons/interface/Plus'
 import { cn } from '../../../../utils/cn'
 
+export type AutocompleteVariableItem = {
+  id?: string
+  name: string
+  isSeparator?: boolean
+  isInstance?: boolean
+  type?: string
+}
+
 export type GraphicalEditorAutocompleteProps = ComponentPropsWithRef<'div'> & {
   isOpen?: boolean
   setIsOpen?: (isOpen: boolean) => void
   keyPressed?: string
   searchValue: string
   submit: ({ variable }: { variable: { id: string; name: string } }) => void
-  variables: PLCVariable[] | { id: string; name: string }[] | undefined
+  onSelectInstance?: (instanceName: string) => void
+  variables: AutocompleteVariableItem[] | PLCVariable[] | { id: string; name: string }[] | undefined
   canCreateNewVariable?: boolean
   newBlock?: {
     canCreate: boolean
@@ -36,6 +45,7 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       keyPressed,
       searchValue,
       submit,
+      onSelectInstance,
       variables,
       canCreateNewVariable = true,
       newBlock = { canCreate: false },
@@ -62,39 +72,59 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
     })
 
     const selectableValues = useMemo(() => {
-      return [
-        ...(variables?.map((variable) => ({
-          type: 'variable',
+      const items = (variables || []).map((v) => {
+        const item = v as AutocompleteVariableItem
+        return {
+          type: item.isSeparator ? 'separator' : item.isInstance ? 'instance' : 'variable',
+          isSeparator: !!item.isSeparator,
+          isInstance: !!item.isInstance,
           variable: {
-            id: variable.id ?? '',
-            name: variable.name,
+            id: item.id ?? '',
+            name: item.name,
           },
-        })) || []),
-        canCreateNewVariable
-          ? {
-              type: 'add',
-              variable: {
-                id: 'add',
-                name: searchValue,
-              },
-            }
-          : undefined,
-        newBlock.canCreate
-          ? {
-              type: 'newBlock',
-              variable: {
-                id: 'newBlock',
-                name: newBlock.options?.block.name ?? 'generic',
-              },
-            }
-          : undefined,
-      ].filter((variable) => variable !== undefined)
-    }, [variables, searchValue])
+        }
+      })
+
+      if (canCreateNewVariable) {
+        items.push({
+          type: 'add',
+          isSeparator: false,
+          isInstance: false,
+          variable: {
+            id: 'add',
+            name: searchValue,
+          },
+        })
+      }
+
+      if (newBlock.canCreate) {
+        items.push({
+          type: 'newBlock',
+          isSeparator: false,
+          isInstance: false,
+          variable: {
+            id: 'newBlock',
+            name: newBlock.options?.block.name ?? 'generic',
+          },
+        })
+      }
+
+      return items
+    }, [variables, searchValue, canCreateNewVariable, newBlock])
+
+    useEffect(() => {
+      setSelectedVariable({ positionInArray: -1, variable: { id: '', name: '' } })
+    }, [searchValue, variables])
 
     const closeModal = () => {
       setAutocompleteFocus(false)
       setSelectedVariable({ positionInArray: -1, variable: { id: '', name: '' } })
       if (setIsOpen) setIsOpen(false)
+    }
+
+    const handleSelectInstance = (instanceName: string) => {
+      setSelectedVariable({ positionInArray: -1, variable: { id: '', name: '' } })
+      onSelectInstance?.(instanceName)
     }
 
     const shouldKeepOpenForOutsideTarget = (target: EventTarget | null) => {
@@ -121,29 +151,31 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
 
     /**
      * Resolve what to submit when the user presses Enter/Tab without
-     * arrowing down to a row.  Previously this always sent the "Add
-     * variable" option, so typing the exact name of an existing
-     * variable and hitting Return would create a brand-new variable
-     * with a name-collision-resolved suffix (forum bug, v4.2.0).
-     *
-     * Exact case-insensitive match against the visible `variables`
-     * list takes precedence — the dropdown was already showing that
-     * variable, so the user clearly meant to bind to it.  Only when
-     * no match exists do we fall through to "Add variable".
+     * arrowing down to a row.
      */
     const resolveImplicitSubmitOption = () => {
       const trimmed = searchValue.trim().toLowerCase()
       if (trimmed) {
-        const exactMatch = variables?.find((v) => v.name.toLowerCase() === trimmed)
+        const exactMatch = selectableValues.find(
+          (item) => item.type !== 'separator' && item.variable.name.toLowerCase() === trimmed,
+        )
         if (exactMatch) {
-          return {
-            id: exactMatch.id ?? '',
-            name: exactMatch.name,
-          }
+          return exactMatch
         }
       }
       const addVariableOption = selectableValues.find((item) => item.type === 'add')
-      return addVariableOption ? addVariableOption.variable : null
+      return addVariableOption ?? null
+    }
+
+    const getNextSelectableIndex = (current: number, direction: 1 | -1): number => {
+      let next = current + direction
+      while (next >= 0 && next < selectableValues.length) {
+        if (selectableValues[next].type !== 'separator') {
+          return next
+        }
+        next += direction
+      }
+      return current
     }
 
     // @ts-expect-error - not all properties are used
@@ -156,19 +188,37 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
         selectedVariable: selectedVariable,
         /**
          * Synchronously triggers the submit action.
-         * Used by parent components to bypass the async keyPressed → keyDown useEffect chain
-         * which can cause race conditions when the autocomplete unmounts on blur.
+         * Returns false if an instance was drilled down instead of submitting a variable.
          */
-        triggerSubmit: () => {
+        triggerSubmit: (): boolean => {
           if (selectedVariable.positionInArray === -1) {
             const implicit = resolveImplicitSubmitOption()
             if (implicit) {
-              submitAutocompletion({ variable: implicit })
+              if (implicit.type === 'instance') {
+                handleSelectInstance(implicit.variable.name)
+                return false
+              }
+              submitAutocompletion({ variable: implicit.variable })
+              return true
             } else {
               closeModal()
+              return true
             }
           } else {
-            submitAutocompletion({ variable: selectedVariable.variable })
+            const chosen = selectableValues[selectedVariable.positionInArray]
+            if (chosen) {
+              if (chosen.type === 'instance') {
+                handleSelectInstance(chosen.variable.name)
+                return false
+              }
+              if (chosen.type === 'separator') {
+                return false
+              }
+              submitAutocompletion({ variable: chosen.variable })
+              return true
+            }
+            closeModal()
+            return true
           }
         },
       }
@@ -187,8 +237,11 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       switch (keyDown) {
         case 'ArrowDown':
           setSelectedVariable((prev) => {
-            const newPosition = prev.positionInArray + 1
-            if (newPosition >= selectableValues.length) {
+            const newPosition = getNextSelectableIndex(prev.positionInArray, 1)
+            if (newPosition === prev.positionInArray && prev.positionInArray !== -1) {
+              return prev
+            }
+            if (newPosition < 0 || newPosition >= selectableValues.length) {
               return prev
             }
             return {
@@ -199,8 +252,8 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
           break
         case 'ArrowUp':
           setSelectedVariable((prev) => {
-            const newPosition = prev.positionInArray - 1
-            if (newPosition < 0) {
+            const newPosition = getNextSelectableIndex(prev.positionInArray, -1)
+            if (newPosition < 0 || (newPosition === prev.positionInArray && prev.positionInArray !== -1)) {
               return prev
             }
             return {
@@ -214,23 +267,34 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
           if (selectedVariable.positionInArray === -1) {
             const implicit = resolveImplicitSubmitOption()
             if (implicit) {
-              submitAutocompletion({ variable: implicit })
+              if (implicit.type === 'instance') {
+                handleSelectInstance(implicit.variable.name)
+                break
+              }
+              submitAutocompletion({ variable: implicit.variable })
             } else {
               // Nothing matched and no 'add' option available; close
               // the autocomplete to give the user clear feedback.
               closeModal()
             }
           } else {
-            submitAutocompletion({
-              variable: selectedVariable.variable,
-            })
+            const chosen = selectableValues[selectedVariable.positionInArray]
+            if (chosen?.type === 'instance') {
+              handleSelectInstance(chosen.variable.name)
+              break
+            }
+            if (chosen && chosen.type !== 'separator') {
+              submitAutocompletion({
+                variable: chosen.variable,
+              })
+            }
           }
           break
         default:
           break
       }
       setKeyDown('')
-    }, [keyDown])
+    }, [keyDown, selectableValues])
 
     useEffect(() => {
       setKeyDown((prev) => keyPressed || prev)
@@ -249,13 +313,16 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
 
     return (
       <Popover.Root open={isOpen ? isOpen : false}>
-        <Popover.Trigger />
+        <Popover.Trigger asChild>
+          <span className='inline-block h-0 w-0' />
+        </Popover.Trigger>
         <Popover.Portal>
           {selectableValues.length > 0 && (
             <Popover.Content
-              className='box flex w-36 flex-col items-center rounded-lg bg-white text-xs text-neutral-950 outline-none dark:bg-neutral-950 dark:text-white'
+              align='center'
               side='bottom'
               sideOffset={5}
+              className='box flex min-w-36 max-w-56 w-fit flex-col items-center rounded-lg bg-white text-xs text-neutral-950 outline-none dark:bg-neutral-950 dark:text-white'
               ref={popoverRef}
               onOpenAutoFocus={(e) => e.preventDefault()}
               onCloseAutoFocus={closeModal}
@@ -274,29 +341,64 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
                 <>
                   <div className='h-fit w-full p-1'>
                     <div className='flex max-h-32 w-full flex-col overflow-y-auto' ref={variablesDivRef}>
-                      {variables.map((variable) => (
-                        <div
-                          key={variable.name}
-                          className={cn(
-                            'flex h-fit w-full cursor-pointer select-none items-center justify-center p-1 hover:bg-neutral-600 dark:hover:bg-neutral-900',
-                            {
-                              'bg-neutral-400 dark:bg-neutral-800': selectedVariable.variable.name === variable.name,
-                            },
-                          )}
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            submitAutocompletion({
-                              variable: {
-                                id: variable.id ?? '',
-                                name: variable.name,
+                      {(variables as AutocompleteVariableItem[]).map((variable, index) => {
+                        if (variable.isSeparator) {
+                          return (
+                            <div
+                              key={`separator-${index}`}
+                              className='my-2 h-[2px] w-full shrink-0 rounded-sm bg-neutral-400 dark:bg-neutral-500'
+                            />
+                          )
+                        }
+
+                        if (variable.isInstance) {
+                          return (
+                            <div
+                              key={variable.name}
+                              className={cn(
+                                'relative flex h-fit w-full cursor-pointer select-none items-center justify-center p-1 text-xs hover:bg-neutral-600 dark:hover:bg-neutral-900',
+                                {
+                                  'bg-neutral-400 dark:bg-neutral-800':
+                                    selectedVariable.variable.name === variable.name,
+                                },
+                              )}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleSelectInstance(variable.name)
+                              }}
+                            >
+                              <span className='font-medium'>{variable.name}</span>
+                              <span className='absolute right-2 text-[10px] text-neutral-400 dark:text-neutral-500'>›</span>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div
+                            key={variable.name}
+                            className={cn(
+                              'flex h-fit w-full cursor-pointer select-none items-center justify-center p-1 hover:bg-neutral-600 dark:hover:bg-neutral-900',
+                              {
+                                'bg-neutral-400 dark:bg-neutral-800':
+                                  selectedVariable.variable.name === variable.name,
                               },
-                            })
-                          }}
-                        >
-                          {variable.name}
-                        </div>
-                      ))}
+                            )}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              submitAutocompletion({
+                                variable: {
+                                  id: variable.id ?? '',
+                                  name: variable.name,
+                                },
+                              })
+                            }}
+                          >
+                            {variable.name}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                   {(canCreateNewVariable || newBlock.canCreate) && (
