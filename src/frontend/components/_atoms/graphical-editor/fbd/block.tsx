@@ -11,7 +11,6 @@ import { toast } from '../../../_features/[app]/toast/use-toast'
 import { useBoundEditorModel, useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { InputWithRef } from '../../input'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../tooltip'
 import { BlockOutputDebugBadges } from '../block-output-debug-badges'
 import { BlockVariant } from '../types/block'
 import { getBlockDocumentation, getVariableRestrictionType } from '../utils'
@@ -800,39 +799,25 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
         <div
           className='pointer absolute right-[-12px] top-[-12px] z-10 flex h-6 w-6 items-center justify-center rounded-full bg-slate-600 shadow-sm'
           onClick={handleUpdateDivergence}
+          title='Update node'
         >
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <RefreshIcon />
-              </TooltipTrigger>
-              <TooltipContent side='top' className='text-xs'>
-                Update node
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <RefreshIcon />
         </div>
       )}
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>
-            <BlockNodeElement
-              nodeId={id}
-              data={data}
-              height={height ?? DEFAULT_BLOCK_HEIGHT}
-              width={width ?? DEFAULT_BLOCK_WIDTH}
-              selected={selected ?? false}
-              wrongVariable={wrongVariable}
-            />
-          </TooltipTrigger>
-          {!dragging && blockType !== 'generic' && documentation && (
-            <TooltipContent side='right' className='text-xs'>
-              <span className='whitespace-pre-line'>{documentation}</span>
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+      <BlockNodeElement
+        nodeId={id}
+        data={data}
+        height={height ?? DEFAULT_BLOCK_HEIGHT}
+        width={width ?? DEFAULT_BLOCK_WIDTH}
+        selected={selected ?? false}
+        wrongVariable={wrongVariable}
+      />
+      {hoveringBlock && !dragging && blockType !== 'generic' && documentation && (
+        <div className='pointer-events-none absolute left-[calc(100%+8px)] top-0 z-[999] h-fit max-h-56 w-fit max-w-96 overflow-y-auto rounded-md border border-neutral-850 bg-white p-4 text-xs shadow-md dark:bg-neutral-900 dark:text-white'>
+          <span className='whitespace-pre-line'>{documentation}</span>
+        </div>
+      )}
       <div
         className='absolute -top-[10px]'
         style={{

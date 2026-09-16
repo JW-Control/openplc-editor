@@ -6,7 +6,6 @@ import { useIsNinetiesTheme } from '../../../../hooks/use-nineties-theme'
 import { cn } from '../../../../utils/cn'
 import { ActivityBarButton } from '../../../_atoms/buttons/activity-bar'
 import { RetroBuild } from '../../../_atoms/retro-icons'
-import { SidebarTooltipContent, Tooltip, TooltipProvider, TooltipTrigger } from '../../../_atoms/tooltip'
 
 export type BuildOption = 'build-only' | 'build-upload' | 'clean-upload'
 
@@ -39,11 +38,12 @@ type OptionRowProps = {
 }
 
 const OptionRow = ({ label, description, disabled, disabledReason, onClick }: OptionRowProps): ReactNode => {
-  const row = (
+  return (
     <button
       type='button'
       disabled={disabled}
       onClick={disabled ? undefined : onClick}
+      title={disabled ? disabledReason : undefined}
       className={cn(
         'flex w-full select-none flex-col items-start rounded-md px-2 py-2 text-left outline-none',
         disabled
@@ -62,21 +62,6 @@ const OptionRow = ({ label, description, disabled, disabledReason, onClick }: Op
         {description}
       </span>
     </button>
-  )
-
-  if (!disabled) return row
-
-  return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className='block w-full'>{row}</span>
-        </TooltipTrigger>
-        <SidebarTooltipContent side='right' sideOffset={8} arrow={false}>
-          <span className='font-caption text-xs'>{disabledReason}</span>
-        </SidebarTooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   )
 }
 
@@ -99,26 +84,18 @@ export const BuildOptionsPopover = ({
 
   return (
     <Popover.Root open={open && !disabled} onOpenChange={setOpen}>
-      <TooltipProvider delayDuration={250}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className='flex w-full justify-center'>
-              <Popover.Trigger asChild>
-                <ActivityBarButton
-                  aria-label='Build options'
-                  disabled={disabled}
-                  className={cn(disabled && 'cursor-not-allowed opacity-50 [&>*:first-child]:hover:bg-transparent')}
-                >
-                  {isNineties ? <RetroBuild /> : <DownloadIcon />}
-                </ActivityBarButton>
-              </Popover.Trigger>
-            </div>
-          </TooltipTrigger>
-          <SidebarTooltipContent side='right' sideOffset={5} arrow={false}>
-            <div className='w-full text-center font-caption text-xs'>{triggerTooltip}</div>
-          </SidebarTooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <div className='flex w-full justify-center'>
+        <Popover.Trigger asChild>
+          <ActivityBarButton
+            aria-label='Build options'
+            title={open ? undefined : triggerTooltip}
+            disabled={disabled}
+            className={cn(disabled && 'cursor-not-allowed opacity-50 [&>*:first-child]:hover:bg-transparent')}
+          >
+            {isNineties ? <RetroBuild /> : <DownloadIcon />}
+          </ActivityBarButton>
+        </Popover.Trigger>
+      </div>
       <Popover.Portal>
         <Popover.Content
           side='right'

@@ -116,15 +116,16 @@ const VariableElement = (block: VariableProps) => {
    * useEffect to sync variableValue with data.variable.name when it changes externally
    * (e.g., from variable rename propagation or autocomplete selection).
    * Only sync when autocomplete is closed to avoid overwriting user input while typing.
-   * Note: openAutocomplete is intentionally NOT in the dependency array to prevent a race
-   * condition where closing the autocomplete (before blur) would restore the old node value,
-   * overwriting the user's cleared input.
+   * openAutocomplete and variableValue are intentionally NOT in the dependency array: including
+   * them re-runs this effect the moment the autocomplete closes (e.g. on outside click), which
+   * fires before the textarea's blur/submit and clobbers the just-typed value back to the old
+   * node value — a real render loop when blur and the outside-click listener race each other.
    */
   useEffect(() => {
     const name = data.variable?.name ?? ''
-    if (!openAutocomplete && name !== '') {
-      setVariableValue(name)
-    }
+    if (openAutocomplete) return
+    setVariableValue((prev) => (prev === name ? prev : name))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.variable?.name])
 
   /**
@@ -164,6 +165,16 @@ const VariableElement = (block: VariableProps) => {
           return
         }
       }
+    }
+
+    // Fast local resolution for literals like '10', '20', 'T#500ms', etc.
+    const literalTypes = getLiteralType(name)
+    if (literalTypes) {
+      setIsAVariable(false)
+      const expectedType = data.block.variableType?.type?.value ?? 'ANY'
+      const isMatch = literalTypes.some((lt) => validateVariableType(lt, expectedType).isValid)
+      setInputError(!isMatch)
+      return
     }
 
     let cancelled = false
@@ -243,8 +254,9 @@ const VariableElement = (block: VariableProps) => {
       setInputError(false)
     } else if (literalTypes) {
       setIsAVariable(false)
-      const mismatchType = !literalTypes.includes(data.block.variableType.type.value)
-      setInputError(mismatchType)
+      const expectedType = data.block.variableType?.type?.value ?? 'ANY'
+      const isMatch = literalTypes.some((lt) => validateVariableType(lt, expectedType).isValid)
+      setInputError(!isMatch)
       variable = { name: variableNameToSubmit }
     } else {
       setIsAVariable(true)

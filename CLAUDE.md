@@ -357,3 +357,72 @@ new alias.
 - **Dev server port:** 1313
 - **Supported platforms:** macOS, Windows, Linux (x64 & ARM64)
 - **Binaries:** Auto-downloaded via `scripts/download-binaries.ts` during `npm install`
+
+## Recent Work & Developer Handover (September 2026)
+
+### 1. Feature: Function Block Logical Variables in Ladder Autocomplete
+
+#### Objective
+Enable users to reference and drill down into Function Block (FB) instances (e.g., `TON0`, `TOF0`, `CTU0`) from the Ladder diagram variable selector (contacts, coils, block pins), and access their boolean attributes (`.IN`, `.Q`, `.CU`, etc.).
+
+#### Changes
+- **Autocomplete UI (`src/frontend/components/_atoms/graphical-editor/ladder/autocomplete/index.tsx` & `autocomplete/index.tsx`):**
+  - Added separation between basic boolean variables and FB instance variables.
+  - Rendered a visible dividing line (horizontal gray bar) between variable categories.
+  - Centered text alignment for dropdown items.
+  - Drill-down navigation: selecting an instance (e.g. `TON0`) expands/reveals its child boolean ports (`.IN`, `.Q`, etc.).
+- **Ladder elements (`ladder/coil.tsx`, `ladder/contact.tsx`, `ladder/variable.tsx`):**
+  - Integrated the updated autocomplete dropdown with FB instance support and drill-down handling.
+
+---
+
+### 2. Bugfix & Performance: `Maximum update depth exceeded` & UI Freezing
+
+#### Root Cause Analysis
+1. **Radix UI compose-refs infinite loop:**
+   - `@radix-ui/react-tooltip` and `@radix-ui/react-popover` components used `<TooltipTrigger asChild>` or `<Popover.Trigger asChild>` with dynamic DOM nodes.
+   - Every time Zustand store state changed (from background polling such as `useRuntimePolling` every 2s, or debug polling), components re-rendered.
+   - Radix's `SlotClone` (`@radix-ui/react-slot`) and `useComposedRefs` create new callback refs on each render.
+   - Internal hooks like `PopperAnchor`'s `useEffect` (which runs without a dependency array) called `context.onAnchorChange(ref.current)` (`setAnchor`), triggering `dispatchSetState` → `scheduleUpdateOnFiber` → `checkForNestedUpdates` → React 50-limit depth error.
+2. **Synchronous literal validation vs. LSP worker lag:**
+   - Typing numeric literals (`10`, `20`, etc.) or duration literals (`T#2s`) into inputs like CTU `PV` or timer `PT` was querying the async LSP worker (`resolveScopeExpressionType`) on every blur/keystroke, creating UI freezes and delays.
+3. **Spurious blur on mount:**
+   - `highlighted-textarea` had an effect invoking `.blur()` upon mounting, generating unnecessary blur/re-render cycles.
+
+#### Files Modified & Changes Made
+
+| File | Changes Made | Rationale |
+|------|-------------|-----------|
+| `src/frontend/components/_atoms/graphical-editor/autocomplete/index.tsx` | Replaced `@radix-ui/react-popover` (`Popover.Root`, `Popover.Trigger asChild`, `Popover.Content`) with a custom `createPortal`-based dropdown positioned via `getBoundingClientRect()`. | Eliminated `setAnchor` loop triggered on every canvas and store re-render. Preserved arrow navigation, Enter/Tab selection, drill-down into FB members, and click-outside dismissal. |
+| `src/frontend/components/_molecules/workspace-activity-bar/tooltip-button.tsx` | Replaced Radix `Tooltip` (`TooltipProvider`, `Tooltip`, `TooltipTrigger asChild`) with a lightweight `createPortal` CSS tooltip with 200ms hover delay. | Prevented activity bar buttons from re-rendering in a loop when connected to store updates. |
+| `src/frontend/components/_atoms/location-warning-glyph/index.tsx` | Removed Radix `TooltipProvider`/`Tooltip`/`TooltipTrigger asChild` and replaced with standard HTML `title` attribute. | Avoided ref loops in variable table cells which re-render with every variable edit. |
+| `src/frontend/components/_features/[workspace]/build-options/index.tsx` | Removed nested Radix `TooltipTrigger` wrapped inside `Popover.Trigger` on `BuildOptionsPopover`; replaced tooltip with standard HTML `title` attribute. | Eliminated nested Popper × Tooltip ref collision. |
+| `src/frontend/components/_atoms/graphical-editor/ladder/block.tsx` | Removed Radix `Tooltip` wrapper around block nodes. | Eliminated compose-refs loop when block nodes re-render on canvas interaction. |
+| `src/frontend/components/_atoms/graphical-editor/fbd/block.tsx` | Removed Radix `Tooltip` wrapper around FBD block nodes. | Consistent with Ladder block fix. |
+| `src/frontend/components/_atoms/graphical-editor/fbd/variable.tsx` | Removed Radix `Tooltip` wrappers; used HTML `title` attributes for validation errors. | Prevented ref collisions in FBD variable nodes. |
+| `src/frontend/components/_atoms/highlighted-textarea/index.tsx` | Removed spurious `useEffect` calling `ref.current.blur()` on mount. | Prevented false blur events during node mounting. |
+| `src/frontend/components/_atoms/graphical-editor/ladder/variable.tsx` | Added synchronous `getLiteralType(value)` fast-path and `validateVariableType(literalType, expectedType).isValid` check before calling async LSP worker. Removed unused `Popover` import. | Prevented UI lag/freeze when editing numeric or timer literals (`10`, `20`, `T#2s`). |
+
+---
+
+### 3. Handover Notes for Next Developer (Pending Issues)
+
+> [!WARNING]
+> **Issue Persisting:** The user reports that `Maximum update depth exceeded` can still occur when editing block values (CTU `PV`, `TON`/`TOF` time) and clicking outside after the editor has been open or idle for several minutes (around 3+ minutes).
+
+#### Next Steps to Investigate
+1. **Identify the exact active component in the loop:**
+   - Look at the latest bundle line numbers in `renderer.dev.js` stack trace.
+   - Inspect lines in `renderer.dev.js` around the offending `setRef` (check whether it's `@radix-ui/react-select`, `@radix-ui/react-dropdown-menu`, `@radix-ui/react-popover`, or `@xyflow/react` node refs).
+2. **Examine Textarea / Input Blur & Store Commit Handlers:**
+   - In `src/frontend/components/_atoms/graphical-editor/ladder/variable.tsx`, check `handleSubmitVariableValueOnTextareaBlur`:
+     - Does `updateNodeData` or `updateVariable` trigger a state change that re-focuses or re-blurs the textarea?
+     - Check if `selectedNodes` or `activeSelection` in Zustand triggers an infinite cycle between the node selection and textarea focus.
+3. **Check Context Menu Popovers:**
+   - `ladder/contact.tsx`, `ladder/coil.tsx`, and `fbd/variable.tsx` still import `@radix-ui/react-popover` for context menus (`Popover.Root open={isContextMenuOpen}`).
+   - `build-options/index.tsx` still uses `@radix-ui/react-popover` for the build menu.
+   - If needed, migrate these to portal-based context menus similar to `src/frontend/components/_molecules/variables-panel/index.tsx` (`ContextMenu`).
+4. **Inspect Background Polling Subscriptions:**
+   - `src/frontend/hooks/use-runtime-polling.ts` (polls every 2000ms).
+   - `src/frontend/hooks/useDebugPolling.ts` (multiple `setInterval` calls).
+   - Verify that components subscribing to the store use granular selectors (or `useShallow`) so periodic status polls don't re-render entire canvas subtrees.

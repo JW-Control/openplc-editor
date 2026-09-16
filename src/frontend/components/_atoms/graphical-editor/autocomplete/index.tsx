@@ -1,5 +1,5 @@
-import * as Popover from '@radix-ui/react-popover'
 import { ComponentPropsWithRef, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import type { PLCVariable } from '../../../../../middleware/shared/ports/types'
 import { PlusIcon } from '../../../../assets/icons/interface/Plus'
@@ -55,6 +55,9 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
     }: GraphicalEditorAutocompleteProps,
     ref,
   ) => {
+    // anchorRef: the invisible span used as the positioning anchor for the dropdown.
+    // popoverRef: the dropdown content div rendered into the portal.
+    const anchorRef = useRef<HTMLSpanElement>(null)
     const popoverRef = useRef<HTMLDivElement>(null)
     const variablesDivRef = useRef<HTMLDivElement>(null)
 
@@ -134,13 +137,17 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       return false
     }
 
-    const handleOutsideInteraction = (event: { target: EventTarget | null; preventDefault: () => void }) => {
-      if (shouldKeepOpenForOutsideTarget(event.target)) {
+    const handleOutsidePointerDown = (e: MouseEvent) => {
+      const anchor = anchorRef.current
+      const content = popoverRef.current
+      const target = e.target as Node | null
+      if (shouldKeepOpenForOutsideTarget(e.target)) {
         if (setIsOpen) setIsOpen(true)
         return
       }
-
-      closeModal()
+      if (!anchor?.contains(target) && !content?.contains(target)) {
+        closeModal()
+      }
     }
 
     const submitAutocompletion = ({ variable }: { variable: { id: string; name: string } }) => {
@@ -300,10 +307,6 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       setKeyDown((prev) => keyPressed || prev)
     }, [keyPressed])
 
-    useEffect(() => {
-      scrollWhenSelectedIsChanged()
-    }, [selectedVariable])
-
     const scrollWhenSelectedIsChanged = () => {
       if (variablesDivRef.current) {
         const selectedElement = variablesDivRef.current.children[selectedVariable.positionInArray]
@@ -311,31 +314,51 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
       }
     }
 
+    useEffect(() => {
+      scrollWhenSelectedIsChanged()
+    }, [selectedVariable])
+
+    // Dismiss the dropdown when user clicks outside
+    useEffect(() => {
+      if (!isOpen) return
+      document.addEventListener('pointerdown', handleOutsidePointerDown, true)
+      return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true)
+    }, [isOpen, keepOpenForElementId, keepOpenForSelector])
+
+    // Calculate position of the dropdown portal relative to the anchor span
+    const getPortalStyle = (): React.CSSProperties => {
+      if (!anchorRef.current) return { position: 'fixed', top: 0, left: 0 }
+      const rect = anchorRef.current.getBoundingClientRect()
+      return {
+        position: 'fixed',
+        top: rect.bottom + 5,
+        left: rect.left + rect.width / 2,
+        transform: 'translateX(-50%)',
+        zIndex: 9999,
+      }
+    }
+
+    const shouldShowDropdown = !!(isOpen && selectableValues.length > 0)
+
     return (
-      <Popover.Root open={isOpen ? isOpen : false}>
-        <Popover.Trigger asChild>
-          <span className='inline-block h-0 w-0' />
-        </Popover.Trigger>
-        <Popover.Portal>
-          {selectableValues.length > 0 && (
-            <Popover.Content
-              align='center'
-              side='bottom'
-              sideOffset={5}
-              className='box flex min-w-36 max-w-56 w-fit flex-col items-center rounded-lg bg-white text-xs text-neutral-950 outline-none dark:bg-neutral-950 dark:text-white'
+      <>
+        {/* Invisible zero-size anchor used only for dropdown positioning */}
+        <span ref={anchorRef} className='inline-block h-0 w-0' />
+        {shouldShowDropdown &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <div
               ref={popoverRef}
-              onOpenAutoFocus={(e) => e.preventDefault()}
-              onCloseAutoFocus={closeModal}
-              onEscapeKeyDown={closeModal}
-              onPointerDownOutside={handleOutsideInteraction}
-              onFocusOutside={handleOutsideInteraction}
-              onInteractOutside={handleOutsideInteraction}
+              style={getPortalStyle()}
+              className='box flex min-w-36 max-w-56 w-fit flex-col items-center rounded-lg bg-white text-xs text-neutral-950 outline-none dark:bg-neutral-950 dark:text-white'
               onFocus={(e) => {
                 if (focusEvent) focusEvent(e)
                 setAutocompleteFocus(true)
               }}
               onBlur={() => setAutocompleteFocus(false)}
               onKeyDown={(e) => setKeyDown(e.key)}
+              // Prevent clicks inside dropdown from triggering the outside-click handler
+              onPointerDown={(e) => e.stopPropagation()}
             >
               {variables && variables.length > 0 && (
                 <>
@@ -458,10 +481,10 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
                   <div className='ml-2'>{newBlock.options?.label}</div>
                 </div>
               )}
-            </Popover.Content>
+            </div>,
+            document.body,
           )}
-        </Popover.Portal>
-      </Popover.Root>
+      </>
     )
   },
 )

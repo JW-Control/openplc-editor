@@ -23,7 +23,6 @@ import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/act
 import { Modal, ModalContent, ModalTitle } from '../../../_molecules/modal'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { Label } from '../../label'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../tooltip'
 import { DebugValueBadge } from '../debug-value-badge'
 import { BlockVariant } from '../types/block'
 import { validateVariableType } from '../utils'
@@ -473,11 +472,9 @@ const VariableElement = (block: VariableProps) => {
 
   return (
     <>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              style={{
+      <div
+        title={inputError && errorDescription ? errorDescription : undefined}
+        style={{
                 width: VARIABLE_ELEMENT_SIZE,
                 height: VARIABLE_ELEMENT_HEIGHT,
                 ...(debuggerColor
@@ -637,18 +634,6 @@ const VariableElement = (block: VariableProps) => {
                 </Popover.Root>
               )}
             </div>
-          </TooltipTrigger>
-          {inputError && (
-            <TooltipContent>
-              {errorDescription && (
-                <div className='flex items-center justify-center text-xs'>
-                  <span className='text-red-500'>{errorDescription}</span>
-                </div>
-              )}
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
 
       <Modal open={forceValueModalOpen} onOpenChange={handleForceValueModalChange}>
         <ModalContent className='flex h-fit min-h-0 w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>

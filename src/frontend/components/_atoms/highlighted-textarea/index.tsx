@@ -65,14 +65,11 @@ const HighlightedTextArea = forwardRef<HTMLTextAreaElement, HighlightedTextAreaP
             setCanSubmit(submit)
           }
           setInputFocus(false)
+          inputRef.current?.blur()
         },
         scrollHeight: textAreaValue.length === 0 ? 0 : inputRef.current?.scrollHeight,
       }
     }, [textAreaValue, inputRef, inputFocus])
-
-    useEffect(() => {
-      if (!inputFocus) inputRef.current?.blur()
-    }, [inputFocus])
 
     useEffect(() => {
       if (inputRef?.current && highlightDivRef.current) {
