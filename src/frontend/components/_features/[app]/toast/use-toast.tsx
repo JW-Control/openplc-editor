@@ -26,7 +26,15 @@ function useToast(): useToastReturnType {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+    // Register once per mount. `setState` is the stable dispatcher from
+    // `useState`, so it never needs to be re-registered — depending on
+    // `state` re-ran this effect (unregister + re-register) on every
+    // toast dispatch, for every `useToast()` consumer in the app. With
+    // `useToast()` called once per table row (editable/selectable cells),
+    // that turned a single toast dispatch into an O(rows) burst of
+    // effect teardown/setup across every mounted table, which is what
+    // tipped React's nested-update limit as project tables grew.
+  }, [])
 
   return {
     ...state,

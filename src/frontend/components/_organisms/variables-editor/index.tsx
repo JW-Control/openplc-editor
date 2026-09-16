@@ -31,7 +31,6 @@ import {
   type ReferenceImpactAnalysis,
 } from '../../../utils/variable-references'
 import { InputWithRef } from '../../_atoms/input'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
 import TableActions from '../../_atoms/table-actions'
 import { toast } from '../../_features/[app]/toast/use-toast'
 import { RenameImpactModal } from '../../_molecules/rename-impact-modal'
@@ -1066,32 +1065,18 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                   >
                     Return type :
                   </label>
-                  <Select value={returnType} onValueChange={handleReturnTypeChange}>
-                    <SelectTrigger
-                      id='class-filter'
-                      placeholder={returnType}
-                      withIndicator
-                      className='group flex h-full w-full items-center justify-between rounded-lg border border-neutral-500 px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:text-neutral-300'
-                    />
-                    <SelectContent
-                      position='popper'
-                      sideOffset={3}
-                      align='center'
-                      className='box h-fit min-w-44 overflow-hidden rounded-lg bg-white outline-none dark:bg-neutral-950'
-                    >
-                      {returnTypeOptions.map((filter) => (
-                        <SelectItem
-                          key={filter}
-                          value={filter}
-                          className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
-                        >
-                          <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
-                            {filter}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    id='return-type'
+                    value={returnType}
+                    onChange={(e) => handleReturnTypeChange(e.target.value)}
+                    className='h-full w-full rounded-lg border border-neutral-500 bg-white px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                  >
+                    {returnTypeOptions.map((filter) => (
+                      <option key={filter} value={filter}>
+                        {filter}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
@@ -1125,32 +1110,18 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                 >
                   Class Filter :
                 </label>
-                <Select value={editorVariables.classFilter} onValueChange={handleFilterChange}>
-                  <SelectTrigger
-                    id='class-filter'
-                    placeholder={editorVariables.classFilter}
-                    withIndicator
-                    className='group flex h-full w-full items-center justify-between rounded-lg border border-neutral-500 px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:text-neutral-300'
-                  />
-                  <SelectContent
-                    position='popper'
-                    sideOffset={3}
-                    align='center'
-                    className='box h-fit w-40 overflow-hidden rounded-lg bg-white outline-none dark:bg-neutral-950'
-                  >
-                    {FilterOptions.map((filter) => (
-                      <SelectItem
-                        key={filter}
-                        value={filter}
-                        className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
-                      >
-                        <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
-                          {filter}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  id='class-filter'
+                  value={editorVariables.classFilter}
+                  onChange={(e) => handleFilterChange(e.target.value as FilterOptionsType)}
+                  className='h-full w-full rounded-lg border border-neutral-500 bg-white px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                >
+                  {FilterOptions.map((filter) => (
+                    <option key={filter} value={filter}>
+                      {filter}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )}

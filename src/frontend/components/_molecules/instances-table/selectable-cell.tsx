@@ -1,11 +1,9 @@
 import { CellContext } from '@tanstack/react-table'
-import _ from 'lodash'
 import { useEffect, useState } from 'react'
 
 import type { PLCInstance } from '../../../../middleware/shared/ports/types'
 import { useOpenPLCStore } from '../../../store'
 import { cn } from '../../../utils/cn'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
 
 type ISelectableCellProps = CellContext<PLCInstance, unknown> & { editable?: boolean }
 const SelectableTaskCell = ({
@@ -38,39 +36,24 @@ const SelectableTaskCell = ({
   }, [initialValue])
 
   return (
-    <Select value={cellValue as string} onValueChange={(value) => onValueChange(value)}>
-      {!_.isEmpty(tasks) && (
-        <SelectTrigger
-          placeholder={cellValue as string}
-          className={cn(
-            'flex h-full w-full justify-center p-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
-            { 'pointer-events-none': !editable },
-          )}
-        />
+    <select
+      value={cellValue as string}
+      onChange={(e) => onValueChange(e.target.value)}
+      className={cn(
+        'h-full w-full cursor-pointer justify-center bg-transparent p-2 text-center font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
+        { 'pointer-events-none': !editable },
       )}
-      <SelectContent
-        position='popper'
-        side='bottom'
-        sideOffset={-20}
-        className='box h-fit max-h-[300px] w-[200px] overflow-auto rounded-lg bg-white outline-none dark:bg-neutral-950'
-      >
-        {tasks?.map(
-          (option) =>
-            option.name !== 'undefined' &&
-            option.name !== '' && (
-              <SelectItem
-                key={option.name}
-                value={option.name}
-                className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
-              >
-                <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
-                  {option.name}
-                </span>
-              </SelectItem>
-            ),
-        )}
-      </SelectContent>
-    </Select>
+    >
+      {tasks?.map(
+        (option) =>
+          option.name !== 'undefined' &&
+          option.name !== '' && (
+            <option key={option.name} value={option.name}>
+              {option.name}
+            </option>
+          ),
+      )}
+    </select>
   )
 }
 const SelectableProgramCell = ({
@@ -99,37 +82,22 @@ const SelectableProgramCell = ({
   }, [initialValue])
 
   return (
-    <Select value={cellValue} onValueChange={onValueChange}>
-      {!_.isEmpty(pous) && (
-        <SelectTrigger
-          placeholder={cellValue}
-          className={cn(
-            'flex h-full w-full justify-center p-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
-            { 'pointer-events-none': !editable },
-          )}
-        />
+    <select
+      value={cellValue}
+      onChange={(e) => onValueChange(e.target.value)}
+      className={cn(
+        'h-full w-full cursor-pointer justify-center bg-transparent p-2 text-center font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
+        { 'pointer-events-none': !editable },
       )}
-      <SelectContent
-        position='popper'
-        side='bottom'
-        sideOffset={-20}
-        className='box h-fit max-h-[300px] w-[200px] overflow-auto rounded-lg bg-white outline-none dark:bg-neutral-950'
-      >
-        {pous
-          .filter((option) => option.pouType === 'program')
-          .map((option) => (
-            <SelectItem
-              key={option.name}
-              value={option.name}
-              className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
-            >
-              <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
-                {option.name}
-              </span>
-            </SelectItem>
-          ))}
-      </SelectContent>
-    </Select>
+    >
+      {pous
+        .filter((option) => option.pouType === 'program')
+        .map((option) => (
+          <option key={option.name} value={option.name}>
+            {option.name}
+          </option>
+        ))}
+    </select>
   )
 }
 

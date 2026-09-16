@@ -13,7 +13,6 @@ import { cn } from '../../../utils/cn'
 import { syncNodesWithVariables, syncNodesWithVariablesFBD } from '../../../utils/graphical/sync-nodes-with-variables'
 import { hasStringName, safeUpper } from '../../../utils/safe-upper'
 import { InputWithRef } from '../../_atoms/input'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
 import { TypeChangeModal } from '../type-change-modal'
 import { ArrayModal } from './elements/array-modal'
 
@@ -482,36 +481,24 @@ const SelectableClassCell = ({
   }, [currentValue])
 
   return (
-    <Select value={cellValue as string} onValueChange={(value) => onValueChange(value)} disabled={isDebuggerVisible}>
-      <SelectTrigger
-        placeholder={cellValue as string}
-        className={cn(
-          'flex h-full w-full justify-center p-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
-          {
-            'pointer-events-none': !selected || isDebuggerVisible,
-            'cursor-not-allowed': isDebuggerVisible,
-          },
-        )}
-      />
-      <SelectContent
-        position='popper'
-        side='bottom'
-        sideOffset={-20}
-        className='box h-fit w-[200px] overflow-hidden rounded-lg bg-white outline-none dark:bg-neutral-950'
-      >
-        {variableClasses.map((type) => (
-          <SelectItem
-            key={type}
-            value={type}
-            className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
-          >
-            <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
-              {_.startCase(type)}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <select
+      value={cellValue as string}
+      onChange={(e) => onValueChange(e.target.value)}
+      disabled={isDebuggerVisible}
+      className={cn(
+        'h-full w-full cursor-pointer justify-center bg-transparent p-2 text-center font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
+        {
+          'pointer-events-none': !selected || isDebuggerVisible,
+          'cursor-not-allowed': isDebuggerVisible,
+        },
+      )}
+    >
+      {variableClasses.map((type) => (
+        <option key={type} value={type}>
+          {_.startCase(type)}
+        </option>
+      ))}
+    </select>
   )
 }
 

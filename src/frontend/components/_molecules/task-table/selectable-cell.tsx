@@ -3,7 +3,6 @@ import _ from 'lodash'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { PLCTask } from '../../../../middleware/shared/ports/types'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
 import ArrowButtonGroup from '../../_features/[workspace]/editor/graphical/elements/arrow-button-group'
 import { Modal, ModalContent, ModalTitle, ModalTrigger } from '../modal'
 
@@ -26,30 +25,17 @@ const SelectableTriggerCell = ({ getValue, row: { index }, column: { id }, table
   }, [initialValue])
 
   return (
-    <Select value={cellValue as string} onValueChange={(value) => onValueChange(value)}>
-      <SelectTrigger
-        placeholder={cellValue as string}
-        className='flex h-full w-full justify-center p-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300'
-      />
-      <SelectContent
-        position='popper'
-        side='bottom'
-        sideOffset={-20}
-        className='box h-fit w-[200px] overflow-hidden rounded-lg bg-white outline-none dark:bg-neutral-950'
-      >
-        {triggerOptions.map((option) => (
-          <SelectItem
-            key={option}
-            value={option}
-            className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
-          >
-            <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
-              {_.startCase(option)}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <select
+      value={cellValue as string}
+      onChange={(e) => onValueChange(e.target.value)}
+      className='h-full w-full cursor-pointer justify-center bg-transparent p-2 text-center font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300'
+    >
+      {triggerOptions.map((option) => (
+        <option key={option} value={option}>
+          {_.startCase(option)}
+        </option>
+      ))}
+    </select>
   )
 }
 
