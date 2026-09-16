@@ -1,4 +1,5 @@
 import { ColumnFiltersState, createColumnHelper, OnChangeFn } from '@tanstack/react-table'
+import { useShallow } from 'zustand/react/shallow'
 
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
 import { usePouSnapshot } from '../../../hooks/use-pou-snapshot'
@@ -130,23 +131,19 @@ const VariablesTable = ({
   selectedRow,
   handleRowClick,
 }: PLCVariablesTableProps) => {
-  const {
-    editor: {
-      meta: { name },
-    },
-    project: {
-      data: { pous },
-    },
-    projectActions: { updateVariable },
-    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
-  } = useOpenPLCStore()
+  const { name, pouType, updateVariable, handleFileAndWorkspaceSavedState } = useOpenPLCStore(
+    useShallow((s) => ({
+      name: s.editor.meta.name,
+      pouType: s.project.data.pous.find((p) => p.name === s.editor.meta.name)?.pouType,
+      updateVariable: s.projectActions.updateVariable,
+      handleFileAndWorkspaceSavedState: s.sharedWorkspaceActions.handleFileAndWorkspaceSavedState,
+    })),
+  )
   const { captureAndPush } = usePouSnapshot()
-
-  const pou = pous.find((p) => p.name === name)
 
   return (
     <GenericTable<PLCVariable>
-      columns={pou?.pouType !== 'program' ? columns : columnsPrograms}
+      columns={pouType !== 'program' ? columns : columnsPrograms}
       tableData={tableData}
       selectedRow={selectedRow}
       handleRowClick={handleRowClick}

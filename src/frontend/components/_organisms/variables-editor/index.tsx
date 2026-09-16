@@ -1,5 +1,6 @@
 import { ColumnFiltersState } from '@tanstack/react-table'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { PLCVariable } from '../../../../middleware/shared/ports/types'
 import { CodeIcon } from '../../../assets/icons/interface/CodeIcon'
@@ -69,53 +70,81 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
   // preference + hidden-snapshot fallback can't drift between the
   // textual and graphical multi-mount paths.
   const editor = useOpenPLCStore((s) => selectEditorForPou(s, propName))
+  // `ladderFlows`/`fbdFlows` are intentionally NOT subscribed here: they
+  // change on every keystroke in any open ladder/FBD canvas, and this
+  // component is only ever used from event-handler-style helpers below
+  // (never read during render), so subscribing to them forced this whole
+  // editor — and, transitively, every per-row cell in the variables
+  // table below — to re-render on every unrelated canvas edit. With many
+  // variable rows (each rendering a Radix Select/Popover/DropdownMenu),
+  // that turned ordinary typing elsewhere into a render storm that could
+  // tip Radix's ref-tracking effects into React's nested-update limit.
+  // Read them fresh via `useOpenPLCStore.getState()` at each call site
+  // instead.
   const {
-    ladderFlows,
-    ladderFlowActions: { updateNode, updateNodes },
-    fbdFlows,
-    fbdFlowActions: { updateNode: updateFBDNode, updateNodes: updateFBDNodes },
-    workspace: {
-      systemConfigs: { shouldUseDarkMode },
-      isDebuggerVisible,
-    },
-    workspaceActions: { removeDebugVariable },
-    project: {
-      data: { pous, dataTypes },
-    },
+    updateNode,
+    updateNodes,
+    updateFBDNode,
+    updateFBDNodes,
+    shouldUseDarkMode,
+    isDebuggerVisible,
+    removeDebugVariable,
+    pous,
+    dataTypes,
     libraries,
-    editorActions: { updateModelVariables, updateModelVariablesForName },
-    projectActions: {
-      createVariable,
-      deleteVariable,
-      rearrangeVariables,
-      updatePouDocumentation,
-      updatePouReturnType,
-      clearPouVariablesText,
-      setPouVariables,
-      updatePou,
-      updateVariable,
-    },
-    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
-  } = useOpenPLCStore()
-
-  const {
-    project: {
-      data: { pous: snapshotPous, configurations },
-    },
-    snapshotActions: { pushToHistory: rawPushToHistory },
-  } = useOpenPLCStore()
+    updateModelVariables,
+    updateModelVariablesForName,
+    createVariable,
+    deleteVariable,
+    rearrangeVariables,
+    updatePouDocumentation,
+    updatePouReturnType,
+    clearPouVariablesText,
+    setPouVariables,
+    updatePou,
+    updateVariable,
+    handleFileAndWorkspaceSavedState,
+    rawPushToHistory,
+  } = useOpenPLCStore(
+    useShallow((s) => ({
+      updateNode: s.ladderFlowActions.updateNode,
+      updateNodes: s.ladderFlowActions.updateNodes,
+      updateFBDNode: s.fbdFlowActions.updateNode,
+      updateFBDNodes: s.fbdFlowActions.updateNodes,
+      shouldUseDarkMode: s.workspace.systemConfigs.shouldUseDarkMode,
+      isDebuggerVisible: s.workspace.isDebuggerVisible,
+      removeDebugVariable: s.workspaceActions.removeDebugVariable,
+      pous: s.project.data.pous,
+      dataTypes: s.project.data.dataTypes,
+      libraries: s.libraries,
+      updateModelVariables: s.editorActions.updateModelVariables,
+      updateModelVariablesForName: s.editorActions.updateModelVariablesForName,
+      createVariable: s.projectActions.createVariable,
+      deleteVariable: s.projectActions.deleteVariable,
+      rearrangeVariables: s.projectActions.rearrangeVariables,
+      updatePouDocumentation: s.projectActions.updatePouDocumentation,
+      updatePouReturnType: s.projectActions.updatePouReturnType,
+      clearPouVariablesText: s.projectActions.clearPouVariablesText,
+      setPouVariables: s.projectActions.setPouVariables,
+      updatePou: s.projectActions.updatePou,
+      updateVariable: s.projectActions.updateVariable,
+      handleFileAndWorkspaceSavedState: s.sharedWorkspaceActions.handleFileAndWorkspaceSavedState,
+      rawPushToHistory: s.snapshotActions.pushToHistory,
+    })),
+  )
 
   const pushToHistory = useCallback(
     (pouName: string) => {
-      const pou = snapshotPous.find((p) => p.name === pouName)
+      const { project } = useOpenPLCStore.getState()
+      const pou = project.data.pous.find((p) => p.name === pouName)
       if (!pou) return
       rawPushToHistory(pouName, {
         variables: pou.interface?.variables ?? [],
         body: pou.body.value,
-        globalVariables: configurations.resource.globalVariables,
+        globalVariables: project.data.configurations.resource.globalVariables,
       })
     },
-    [snapshotPous, configurations.resource.globalVariables, rawPushToHistory],
+    [rawPushToHistory],
   )
 
   /**
@@ -763,6 +792,8 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
   const commitCode = async (): Promise<boolean> => {
     try {
       pushToHistory(editor.meta.name)
+
+      const { ladderFlows, fbdFlows } = useOpenPLCStore.getState()
 
       let language: string | undefined
       if (editor.type === 'plc-graphical') {
