@@ -58,6 +58,8 @@ const pinSelectors = {
       (state) =>
         state.deviceDefinitions.pinMapping.pinsByBoard[state.deviceDefinitions.configuration.deviceBoard] ?? EMPTY_PINS,
     ),
+  useLoadDefaultPinMapping: () => useOpenPLCStore((state) => state.deviceActions.loadDefaultPinMapping),
+  useClearPinMapping: () => useOpenPLCStore((state) => state.deviceActions.clearPinMapping),
   useCreateNewPin: () => useOpenPLCStore((state) => state.deviceActions.createNewPin),
   useRemovePin: () => useOpenPLCStore((state) => state.deviceActions.removePin),
   useUpdatePin: () => useOpenPLCStore((state) => state.deviceActions.updatePin),

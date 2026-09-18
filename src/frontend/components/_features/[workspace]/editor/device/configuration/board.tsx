@@ -47,6 +47,8 @@ const Board = memo(function () {
   const setCurrentSelectedPinTableRow = pinSelectors.useSelectPinTableRow()
 
   const pins = pinSelectors.usePins()
+  const loadDefaultPinMapping = pinSelectors.useLoadDefaultPinMapping()
+  const clearPinMapping = pinSelectors.useClearPinMapping()
   const createNewPin = pinSelectors.useCreateNewPin()
   const removePin = pinSelectors.useRemovePin()
 
@@ -768,24 +770,45 @@ const Board = memo(function () {
             <h2 id='slot-title' className='select-none text-lg font-medium text-neutral-950 dark:text-white'>
               Pin Mapping
             </h2>
-            <TableActions
-              className='w-fit *:rounded-md *:p-1'
-              actions={[
-                {
-                  ariaLabel: 'Add table row button',
-                  onClick: createNewPin,
-                  icon: <PlusIcon className='!stroke-brand' />,
-                  id: 'add-pin-button',
-                },
-                {
-                  ariaLabel: 'Remove table row button',
-                  onClick: removePin,
-                  disabled: currentSelectedPinTableRow === -1,
-                  icon: <MinusIcon className='!stroke-brand' />,
-                  id: 'remove-pin-button',
-                },
-              ]}
-            />
+            <div className='flex items-center gap-2'>
+              {currentBoardInfo?.vpp && (
+                <button
+                  type='button'
+                  onClick={loadDefaultPinMapping}
+                  className='rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand hover:bg-brand/10'
+                  title='Replace this board pin mapping with the defaults declared by its package'
+                >
+                  Load defaults
+                </button>
+              )}
+              <button
+                type='button'
+                onClick={clearPinMapping}
+                disabled={pins.length === 0}
+                className='rounded-md border border-neutral-300 px-2 py-1 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                title='Clear this board pin mapping and free its IEC addresses'
+              >
+                Clear
+              </button>
+              <TableActions
+                className='w-fit *:rounded-md *:p-1'
+                actions={[
+                  {
+                    ariaLabel: 'Add table row button',
+                    onClick: createNewPin,
+                    icon: <PlusIcon className='!stroke-brand' />,
+                    id: 'add-pin-button',
+                  },
+                  {
+                    ariaLabel: 'Remove table row button',
+                    onClick: removePin,
+                    disabled: currentSelectedPinTableRow === -1,
+                    icon: <MinusIcon className='!stroke-brand' />,
+                    id: 'remove-pin-button',
+                  },
+                ]}
+              />
+            </div>
           </div>
           <PinMappingTable pins={pins} handleRowClick={handleRowClick} selectedRowId={currentSelectedPinTableRow} />
         </div>

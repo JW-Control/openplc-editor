@@ -680,7 +680,14 @@ async function runCompilePipelineInner(
   // returns false.
   emit({ stage: 'lib-install', message: 'Installing Arduino libraries...', level: 'info' })
   const libInstall = await port.installArduinoLib(
-    { libId: '', extraLibraries: boardEntry.extra_libraries ?? [] },
+    {
+      libId: '',
+      extraLibraries: boardEntry.extra_libraries ?? [],
+      // Alpha7: VPP manifests are the dependency source of truth. Do not make
+      // a JWPLC/Opta/etc. VPP pay the one-time install cost for unrelated
+      // legacy boards (P1AM, Portenta, CONTROLLINO, STM32, ...).
+      includeLegacyGlobalLibraries: !Boolean(boardEntry.vpp),
+    },
     makePlatformLog(emit, 'lib-install'),
   )
   if (!libInstall.ok) {

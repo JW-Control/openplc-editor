@@ -1119,8 +1119,23 @@ class CompilerModule {
    * library is genuinely unresolvable, compile fails with a precise
    * "header not found" error pointing at the file that needed it.
    */
-  async handleLibraryInstallation(extraLibraries: string[], handleOutputData: HandleOutputDataCallback) {
-    const requiredLibraries = Array.from(new Set([...CompilerModule.GLOBAL_LIBRARIES, ...extraLibraries]))
+  async handleLibraryInstallation(
+    extraLibraries: string[],
+    handleOutputData: HandleOutputDataCallback,
+    includeLegacyGlobalLibraries = true,
+  ) {
+    // Alpha7 VPP library scope: VPP targets use manifest libraries only.
+    // Static/built-in boards keep the historical compatibility list so this
+    // change cannot regress their first-build provisioning behavior.
+    const legacyLibraries = includeLegacyGlobalLibraries ? CompilerModule.GLOBAL_LIBRARIES : []
+    const requiredLibraries = Array.from(new Set([...legacyLibraries, ...extraLibraries]))
+
+    if (!includeLegacyGlobalLibraries) {
+      handleOutputData(
+        'VPP library scope: skipping unrelated legacy global Arduino libraries; using manifest dependencies only.',
+        'info',
+      )
+    }
 
     if (extraLibraries.length > 0) {
       handleOutputData(`Per-board libraries: ${extraLibraries.join(', ')}`, 'info')
@@ -2458,9 +2473,46 @@ class CompilerModule {
       _mainProcessPort.close()
       return
     }
-    const { boardEntry, boardRuntime, isSimulator, isRuntimeV3, isRuntimeV4 } = selection
+    const { boardEntry: resolvedBoardEntry, boardRuntime, isSimulator, isRuntimeV3, isRuntimeV4 } = selection
 
     const normalizedProjectPath = projectPath.replace('project.json', '')
+
+    // Resolve persisted platform choices before the shared pipeline starts.
+    // This is earlier than the legacy compile/upload FQBN composition on
+    // purpose: core-install derives its core id from boardEntry.platform, so
+    // an exact FQBN override must already be visible here. Otherwise a local
+    // development target could accidentally preflight/install the published
+    // core even though the final compile uses a different namespace.
+    const resolvedBoardInfo = resolver.resolve(boardTarget)
+    const selectedPlatformOptions = await this.#readSelectedPlatformOptions(normalizedProjectPath)
+    const effectivePlatform =
+      typeof resolvedBoardEntry.platform === 'string'
+        ? CompilerModule.applyPlatformOptions(
+            resolvedBoardEntry.platform,
+            resolvedBoardInfo.platformOptions,
+            selectedPlatformOptions,
+          )
+        : undefined
+    const boardEntry =
+      effectivePlatform !== undefined && effectivePlatform !== resolvedBoardEntry.platform
+        ? { ...resolvedBoardEntry, platform: effectivePlatform }
+        : resolvedBoardEntry
+
+    for (const option of resolvedBoardInfo.platformOptions ?? []) {
+      const requestedId = selectedPlatformOptions[option.key] ?? option.default
+      const selectedValue =
+        option.values.find((value) => value.id === requestedId) ??
+        option.values.find((value) => value.id === option.default)
+      if (selectedValue) {
+        _mainProcessPort.postMessage({
+          logLevel: 'info',
+          message: `Platform option ${option.key}=${selectedValue.id} (${selectedValue.label})`,
+        })
+      }
+    }
+    if (effectivePlatform) {
+      _mainProcessPort.postMessage({ logLevel: 'info', message: `Arduino FQBN: ${effectivePlatform}` })
+    }
     const compilationPath = join(normalizedProjectPath, 'build', boardTarget)
     const sourceTargetFolderPath = join(compilationPath, 'src')
 

@@ -2,13 +2,15 @@ import { BrowserWindow, dialog } from 'electron'
 import { promises } from 'fs'
 import { join } from 'path'
 
-import { isEmptyDir } from './is-empty-dir'
 
 type GetProjectPathProps = InstanceType<typeof BrowserWindow>
 
 const getProjectPath = async (serviceManager: GetProjectPathProps) => {
+  // Alpha7 project-parent picker policy: selected directory may contain other projects.
+  // ProjectService resolves the final root as parent/projectName and protects
+  // that final target from non-empty collisions before writing any files.
   const { canceled, filePaths } = await dialog.showOpenDialog(serviceManager, {
-    title: 'Choose an empty directory for new project',
+    title: 'Choose a parent directory for new project',
     properties: ['openDirectory', 'createDirectory'],
   })
   if (canceled) {
@@ -23,15 +25,6 @@ const getProjectPath = async (serviceManager: GetProjectPathProps) => {
 
   const [filePath] = filePaths
 
-  if (!(await isEmptyDir(filePath))) {
-    return {
-      success: false,
-      error: {
-        title: 'Directory is not empty',
-        description: 'The selected directory is not empty. Please choose an empty directory for a new project.',
-      },
-    }
-  }
 
   return {
     success: true,

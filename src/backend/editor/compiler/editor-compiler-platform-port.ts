@@ -263,10 +263,14 @@ export function createEditorCompilerPlatformPort(
      */
     async installArduinoLib(args: InstallArduinoLibArgs, log: PlatformLog): Promise<UploadResult> {
       try {
-        await handlers.handleLibraryInstallation(args.extraLibraries ?? [], (chunk, level) => {
-          const message = typeof chunk === 'string' ? chunk : chunk.toString()
-          log(message, level ?? 'info')
-        })
+        await handlers.handleLibraryInstallation(
+          args.extraLibraries ?? [],
+          (chunk, level) => {
+            const message = typeof chunk === 'string' ? chunk : chunk.toString()
+            log(message, level ?? 'info')
+          },
+          args.includeLegacyGlobalLibraries ?? true,
+        )
         return { ok: true }
       } catch (error) {
         // Reached only when the install machinery itself can't run

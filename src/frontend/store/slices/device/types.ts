@@ -130,6 +130,10 @@ export type DeviceActions = {
   clearDeviceDefinitions: () => void
   resetDeviceUpdated: () => void
   selectPinTableRow: (row: number) => void
+  /** Replace the active VPP board's pin table with its declarative defaults. */
+  loadDefaultPinMapping: () => void
+  /** Keep an explicit empty bucket for the active board and free its IEC claims. */
+  clearPinMapping: () => void
   createNewPin: () => void
   removePin: () => void
   updatePin: (updatedData: Partial<DevicePin>) => PinUpdateResponse
