@@ -160,6 +160,7 @@ const VariablesCodeEditor = ({
           // Matches Monaco's macOS default; explicit so Linux/Windows
           // don't fall back to 14 and mismatch the body surface.
           fontSize: 12,
+          mouseWheelZoom: true,
           // Re-parent hover / suggest / signature-help / parameter-hint
           // widgets to `document.body` with `position: fixed`.  The
           // variables-code-editor is a short panel — without this flag,

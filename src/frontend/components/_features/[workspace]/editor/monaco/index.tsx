@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { PLCPou } from '../../../../../../middleware/shared/ports/types'
 import { useAI, useCapabilities, useProject } from '../../../../../../middleware/shared/providers'
+import { useCanvasZoom } from '../../../../../hooks/use-canvas-zoom'
 import { useDebugBoolValuesMap, useDebugNonBoolValuesMap } from '../../../../../hooks/use-debug-value'
 import { executeSaveActiveFile, executeSaveProject } from '../../../../../services/save-actions'
 import { pouUri } from '../../../../../services/st-lsp'
@@ -14,6 +15,7 @@ import { openPLCStoreBase, useOpenPLCStore } from '../../../../../store'
 import { applyAcceptedHunks, computeHunks } from '../../../../../utils/ai-diff-review'
 import { getExtensionFromLanguage, getFolderFromPouType } from '../../../../../utils/PLC/pou-file-extensions'
 import { parseHybridPouFromString, parseTextualPouFromString } from '../../../../../utils/PLC/pou-text-parser'
+import { ZoomControls } from '../../../../_atoms/graphical-editor/zoom-controls'
 import { Modal, ModalContent, ModalTitle } from '../../../../_molecules/modal'
 import { toast } from '../../../[app]/toast/use-toast'
 import { renderDiffReview } from './ai-diff-review'
@@ -119,6 +121,10 @@ function stripLineComments(line: string, state: BlockCommentState): { stripped: 
 
 let didApplyInitialTheme = false
 
+// Pinned for cross-platform consistency (see the `fontSize` option below) —
+// this is the 100% zoom baseline; `useCanvasZoom`'s zoomLevel scales it.
+const BASE_FONT_SIZE = 12
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -136,6 +142,8 @@ const MonacoEditor = (props: monacoEditorProps): ReturnType<typeof PrimitiveEdit
   const capabilities = useCapabilities()
   const aiPort = useAI()
   const projectPort = useProject()
+
+  const { zoomLevel, zoomIn, zoomOut, zoomReset, hoverHandlers } = useCanvasZoom('openplc:monaco-editor-zoom')
 
   const {
     editor,
@@ -1274,8 +1282,13 @@ void loop()
     // Pinned for cross-platform consistency with the variables-code-editor.
     // Monaco's default is platform-dependent (12 on macOS, 14 elsewhere) —
     // without this both surfaces would mismatch on Linux/Windows even
-    // if Mac happens to look right by accident.
-    fontSize: 12,
+    // if Mac happens to look right by accident. Scaled by `zoomLevel`
+    // (`useCanvasZoom`) instead of Monaco's own `mouseWheelZoom` so the
+    // 25%–125% / 5%-step range and the floating control match the rest of
+    // the app's zoomable editors (Monaco's built-in zoom is an unbounded,
+    // page-global singleton shared by every editor instance, with no
+    // min/max/step control).
+    fontSize: BASE_FONT_SIZE * zoomLevel,
     // Monaco's standalone themes default `semanticHighlighting=false`,
     // so without this flag the STruC++ LSP's semantic-tokens response
     // is silently dropped — `isSemanticColoringEnabled()` short-circuits
@@ -1507,7 +1520,12 @@ void loop()
        *  @xyflow/react `node_modules/.vite/deps/@xyflow_react.js`
        *  around the `downHandler` definition (currently ~line 6080)
        *  and `isInputDOMNode` (~line 3759). */}
-      <div id='editor drop handler' className='oplc-monaco-wrapper nokey relative h-full w-full' onDrop={handleDrop}>
+      <div
+        id='editor drop handler'
+        className='oplc-monaco-wrapper nokey relative h-full w-full'
+        onDrop={handleDrop}
+        {...hoverHandlers}
+      >
         <PrimitiveEditor
           key={capabilities.hasLocalFilesystem ? undefined : editorModelPath}
           options={monacoEditorUserOptions}
@@ -1524,6 +1542,7 @@ void loop()
           saveViewState={false}
           keepCurrentModel={true}
         />
+        <ZoomControls zoomLevel={zoomLevel} onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={zoomReset} />
       </div>
       <Modal open={isOpen} onOpenChange={setIsOpen}>
         <ModalContent className='flex h-56 w-96 select-none flex-col justify-between gap-2 rounded-lg p-8'>

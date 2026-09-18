@@ -82,6 +82,7 @@ export function FileDiffView({ filePath, original, current, isDark }: FileDiffVi
         readOnly: true,
         minimap: { enabled: false },
         fontSize: 12,
+        mouseWheelZoom: true,
         scrollBeyondLastLine: false,
         domReadOnly: true,
         renderSideBySide: true,

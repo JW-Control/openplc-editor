@@ -74,6 +74,19 @@ type RungBodyProps = {
   className?: string
   nodeDivergences?: string[]
   isDebuggerActive?: boolean
+  /**
+   * Shared zoom level for the whole Ladder editor (see `useCanvasZoom` in
+   * `LadderEditor`). Applied via `reactFlowInstance.setViewport` — i.e.
+   * @xyflow/react's own zoom — rather than an ancestor CSS transform.
+   * Dragging a node calls into React Flow's internal
+   * pointer-to-flow-coordinate math, which only accounts for the
+   * instance's OWN `viewport.zoom`; a CSS-level scale on an ancestor it
+   * doesn't know about throws that math off by the scale factor and
+   * permanently corrupts the dragged node's stored position. Driving
+   * zoom through the instance itself keeps drag, edges and handles
+   * correct at every level.
+   */
+  zoomLevel?: number
 }
 
 const EDGE_COLOR_TRUE = '#00FF00'
@@ -264,7 +277,13 @@ const rungDebugStatesEqual = (previous: RungDebugStates | null, next: RungDebugS
   mapsEqual(previous.edgeStates, next.edgeStates) &&
   mapsEqual(previous.nodeInputStates, next.nodeInputStates)
 
-export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActive = false }: RungBodyProps) => {
+export const RungBody = ({
+  rung,
+  className,
+  nodeDivergences = [],
+  isDebuggerActive = false,
+  zoomLevel = 1,
+}: RungBodyProps) => {
   const pouName = useBoundPou()
   const editor = useBoundEditorModel()
   const ladderFlowActions = useOpenPLCStore((state) => state.ladderFlowActions)
@@ -290,6 +309,14 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
 
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const reactFlowViewportRef = useRef<HTMLDivElement>(null)
+
+  // Drive zoom through the instance's own viewport (see the `zoomLevel` doc
+  // comment on `RungBodyProps` for why this can't be a CSS transform).
+  // `duration: 0` applies it immediately — no animation needed for a
+  // shared editor-wide zoom level driven externally.
+  useEffect(() => {
+    void reactFlowInstance?.setViewport({ x: 0, y: 0, zoom: zoomLevel }, { duration: 0 })
+  }, [zoomLevel, reactFlowInstance])
 
   /**
    * -- Which means, by default, the flow panel extent is:
@@ -951,8 +978,11 @@ export const RungBody = ({ rung, className, nodeDivergences = [], isDebuggerActi
       <div aria-label='Rung body' className='h-full w-full overflow-x-auto' ref={reactFlowViewportRef}>
         <div
           style={{
-            height: reactFlowPanelExtent[1][1] + 8,
-            width: reactFlowPanelExtent[1][0],
+            // Scaled by zoomLevel so this wrapper's own footprint (and thus
+            // the space it reserves in the rung list) grows/shrinks along
+            // with the React Flow viewport zoom set above.
+            height: reactFlowPanelExtent[1][1] * zoomLevel + 8,
+            width: reactFlowPanelExtent[1][0] * zoomLevel,
           }}
         >
           <ReactFlowPanel

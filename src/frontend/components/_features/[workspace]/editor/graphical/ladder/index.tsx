@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { v4 as uuidv4 } from 'uuid'
 
+import { useCanvasZoom } from '../../../../../../hooks/use-canvas-zoom'
 import { usePouSnapshot } from '../../../../../../hooks/use-pou-snapshot'
 import { ladderSelectors } from '../../../../../../hooks/use-store-selectors'
 import { useOpenPLCStore } from '../../../../../../store'
@@ -29,6 +30,7 @@ import { BlockNode, BlockNodeData } from '../../../../../_atoms/graphical-editor
 import { CoilNode } from '../../../../../_atoms/graphical-editor/ladder/coil'
 import { ContactNode } from '../../../../../_atoms/graphical-editor/ladder/contact'
 import { BlockVariant } from '../../../../../_atoms/graphical-editor/types/block'
+import { ZoomControls } from '../../../../../_atoms/graphical-editor/zoom-controls'
 import { CreateRung } from '../../../../../_molecules/graphical-editor/ladder/rung/create-rung'
 import { Rung } from '../../../../../_organisms/graphical-editor/ladder/rung'
 import { useBoundPou } from '../active-context'
@@ -57,6 +59,8 @@ export default function LadderEditor() {
   const { captureAndPush } = usePouSnapshot()
 
   const updateModelLadder = ladderSelectors.useUpdateModelLadder()
+
+  const { zoomLevel, zoomIn, zoomOut, zoomReset, hoverHandlers } = useCanvasZoom('openplc:ladder-editor-zoom')
 
   const rungs = flow?.rungs || []
   const flowUpdated = flow?.updated || false
@@ -236,40 +240,43 @@ export default function LadderEditor() {
   }
 
   return (
-    <div className='h-full w-full overflow-y-auto' ref={scrollableRef} style={{ scrollbarGutter: 'stable' }}>
-      <div className='flex flex-1 flex-col gap-4 px-2'>
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
-          <div
-            className={cn({
-              'h-fit rounded-lg border dark:border-neutral-800': rungs.length > 0,
-            })}
-          >
-            <SortableContext items={rungs} strategy={verticalListSortingStrategy}>
-              {rungs.map((rung, index) => (
-                <Rung
-                  key={rung.id}
-                  id={rung.id}
-                  index={index}
-                  rung={rung}
-                  className={cn({
-                    'opacity-35': activeId === rung.id,
-                  })}
-                  nodeDivergences={nodeDivergences}
-                  isDebuggerActive={isDebuggerVisible}
-                />
-              ))}
-            </SortableContext>
-            {createPortal(
-              <DragOverlay dropAnimation={defaultDropAnimation} modifiers={[restrictToParentElement]}>
-                {activeId && activeItem ? (
-                  <Rung key={activeItem.id} id={activeItem.id} rung={activeItem} index={-1} />
-                ) : null}
-              </DragOverlay>,
-              document.body,
-            )}
-          </div>
-        </DndContext>
-        <CreateRung onClick={handleAddNewRung} />
+    <div className='relative h-full w-full' {...hoverHandlers}>
+      <div className='h-full w-full overflow-y-auto' ref={scrollableRef} style={{ scrollbarGutter: 'stable' }}>
+        <div className='flex flex-1 flex-col gap-4 px-2'>
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
+            <div
+              className={cn({
+                'h-fit rounded-lg border dark:border-neutral-800': rungs.length > 0,
+              })}
+            >
+              <SortableContext items={rungs} strategy={verticalListSortingStrategy}>
+                {rungs.map((rung, index) => (
+                  <Rung
+                    key={rung.id}
+                    id={rung.id}
+                    index={index}
+                    rung={rung}
+                    className={cn({
+                      'opacity-35': activeId === rung.id,
+                    })}
+                    nodeDivergences={nodeDivergences}
+                    isDebuggerActive={isDebuggerVisible}
+                    zoomLevel={zoomLevel}
+                  />
+                ))}
+              </SortableContext>
+              {createPortal(
+                <DragOverlay dropAnimation={defaultDropAnimation} modifiers={[restrictToParentElement]}>
+                  {activeId && activeItem ? (
+                    <Rung key={activeItem.id} id={activeItem.id} rung={activeItem} index={-1} zoomLevel={zoomLevel} />
+                  ) : null}
+                </DragOverlay>,
+                document.body,
+              )}
+            </div>
+          </DndContext>
+          <CreateRung onClick={handleAddNewRung} />
+        </div>
         <Portal.Root>
           {blockElementModal?.open && (
             <BlockElement
@@ -294,6 +301,7 @@ export default function LadderEditor() {
           )}
         </Portal.Root>
       </div>
+      <ZoomControls zoomLevel={zoomLevel} onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={zoomReset} />
     </div>
   )
 }

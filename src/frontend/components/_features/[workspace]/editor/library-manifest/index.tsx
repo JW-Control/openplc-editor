@@ -152,6 +152,7 @@ const LibraryManifestEditor = () => {
         options={{
           minimap: { enabled: false },
           fontSize: 13,
+          mouseWheelZoom: true,
           tabSize: 2,
           formatOnPaste: true,
           formatOnType: true,
