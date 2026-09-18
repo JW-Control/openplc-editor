@@ -1,5 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { PLCVariable } from '../../../../../middleware/shared/ports/types'
 import { useDebugger } from '../../../../../middleware/shared/providers'
@@ -40,14 +41,14 @@ import { getFBDPouVariablesRungNodeAndEdges } from './utils/utils'
 const VariableElement = (block: VariableProps) => {
   const { id, data, selected } = block
   const pouName = useBoundPou()
-  const {
-    editorActions: { updateModelFBD },
-    fbdFlows,
-    fbdFlowActions: { updateNode },
-    project: {
-      data: { pous },
-    },
-  } = useOpenPLCStore()
+  const { updateModelFBD, fbdFlows, updateNode, pous } = useOpenPLCStore(
+    useShallow((s) => ({
+      updateModelFBD: s.editorActions.updateModelFBD,
+      fbdFlows: s.fbdFlows,
+      updateNode: s.fbdFlowActions.updateNode,
+      pous: s.project.data.pous,
+    })),
+  )
 
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()

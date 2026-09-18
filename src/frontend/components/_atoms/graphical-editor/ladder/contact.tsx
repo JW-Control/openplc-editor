@@ -1,5 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { useDebugger } from '../../../../../middleware/shared/providers'
 import { useDebugCompositeKey } from '../../../../hooks/use-debug-composite-key'
@@ -8,8 +9,8 @@ import { forceDebugVariable, releaseDebugVariable } from '../../../../services/d
 import { isExpressionValidForType } from '../../../../services/graphical-scope'
 import { useOpenPLCStore } from '../../../../store'
 import { cn } from '../../../../utils/cn'
-import { findFunctionBlockVariables, findStructureVariables } from '../../../../utils/pou-helpers'
 import { validateVariableType } from '../../../../utils/PLC/validate-variable-type'
+import { findFunctionBlockVariables, findStructureVariables } from '../../../../utils/pou-helpers'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { VariablesBlockAutoComplete } from './autocomplete'
@@ -23,13 +24,15 @@ export type { ContactNode } from './utils/types'
 export const Contact = (block: ContactProps) => {
   const { selected, data, id } = block
   const pouName = useBoundPou()
-  const {
-    project,
-    libraries,
-    ladderFlows,
-    ladderFlowActions: { updateNode },
-  } = useOpenPLCStore()
-  const pous = project.data.pous
+  const { pous, dataTypes, globalVariables, librariesSystem, updateNode } = useOpenPLCStore(
+    useShallow((s) => ({
+      pous: s.project.data.pous,
+      dataTypes: s.project.data.dataTypes,
+      globalVariables: s.project.data.configurations.resource?.globalVariables,
+      librariesSystem: s.libraries.system,
+      updateNode: s.ladderFlowActions.updateNode,
+    })),
+  )
 
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()
@@ -123,13 +126,13 @@ export const Contact = (block: ContactProps) => {
       const memberName = name.slice(dotIndex + 1).trim().toLowerCase()
       const allVars = [
         ...(pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []),
-        ...(project.data.configurations.resource?.globalVariables ?? []),
+        ...(globalVariables ?? []),
       ]
       const inst = allVars.find((v) => v.name.toLowerCase() === instName)
       if (inst?.type?.value) {
         const members =
-          findFunctionBlockVariables(inst.type.value, pous, libraries?.system ?? []) ??
-          findStructureVariables(inst.type.value, project.data.dataTypes ?? []) ??
+          findFunctionBlockVariables(inst.type.value, pous, librariesSystem ?? []) ??
+          findStructureVariables(inst.type.value, dataTypes ?? []) ??
           []
         const m = members.find((member) => member.name.toLowerCase() === memberName)
         if (m?.type?.value && validateVariableType(m.type.value, 'BOOL').isValid) {
@@ -146,14 +149,7 @@ export const Contact = (block: ContactProps) => {
     return () => {
       cancelled = true
     }
-  }, [
-    pous,
-    pouName,
-    data.variable.name,
-    libraries?.system,
-    project.data.dataTypes,
-    project.data.configurations.resource?.globalVariables,
-  ])
+  }, [pous, pouName, data.variable.name, librariesSystem, dataTypes, globalVariables])
 
   const debuggerStrokeColor = (() => {
     if (!isDebuggerVisible || !data.variable.name || wrongVariable) return undefined
@@ -212,7 +208,8 @@ export const Contact = (block: ContactProps) => {
       setContactVariableValue(data.variable.name ?? '')
       return
     }
-    const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+    const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
+    const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
       nodeId: id,
       variableName: variableNameToSubmit,
     })
@@ -292,7 +289,8 @@ export const Contact = (block: ContactProps) => {
             onFocus={(e) => {
               e.target.select()
               openVariableAutocomplete()
-              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+              const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
+              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
                 nodeId: id ?? '',
               })
               if (!node || !rung) return
@@ -308,7 +306,8 @@ export const Contact = (block: ContactProps) => {
               return
             }}
             onBlur={() => {
-              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+              const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
+              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
                 nodeId: id ?? '',
               })
               if (!node || !rung) return

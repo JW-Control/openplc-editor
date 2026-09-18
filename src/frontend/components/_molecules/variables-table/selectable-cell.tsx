@@ -2,6 +2,7 @@ import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { memo, useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { baseTypeEnum } from '../../../../middleware/shared/ports/plc-schemas'
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
@@ -65,14 +66,21 @@ const SelectableTypeCellImpl = ({
 }: ISelectableCellProps) => {
   const {
     editor,
-    project: {
-      data: { dataTypes },
-    },
-    ladderFlowActions: { updateNodes },
-    fbdFlowActions: { updateNodes: updateFBDNodes },
+    dataTypes,
+    updateNodes,
+    updateFBDNodes,
     libraries: sliceLibraries,
-    workspace: { isDebuggerVisible },
-  } = useOpenPLCStore()
+    isDebuggerVisible,
+  } = useOpenPLCStore(
+    useShallow((s) => ({
+      editor: s.editor,
+      dataTypes: s.project.data.dataTypes,
+      updateNodes: s.ladderFlowActions.updateNodes,
+      updateFBDNodes: s.fbdFlowActions.updateNodes,
+      libraries: s.libraries,
+      isDebuggerVisible: s.workspace.isDebuggerVisible,
+    })),
+  )
 
   const language = 'language' in editor.meta ? editor.meta.language : null
 
@@ -457,10 +465,12 @@ const SelectableClassCellImpl = ({
   table,
   selected = true,
 }: ISelectableCellProps) => {
-  const {
-    editor,
-    workspace: { isDebuggerVisible },
-  } = useOpenPLCStore()
+  const { editor, isDebuggerVisible } = useOpenPLCStore(
+    useShallow((s) => ({
+      editor: s.editor,
+      isDebuggerVisible: s.workspace.isDebuggerVisible,
+    })),
+  )
 
   const language = 'language' in editor.meta ? editor.meta.language : null
   const getVariableClasses = () => {

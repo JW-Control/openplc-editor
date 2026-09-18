@@ -169,3 +169,95 @@ diagnosticado y corregido de raíz.
   `useOpenPLCStore(useShallow((s) => ({...})))` sobre `useOpenPLCStore()`
   sin selector, y evitar suscribirse a `ladderFlows`/`fbdFlows` a menos que
   el valor se use directamente en el render.
+
+---
+
+## Actualización — ronda 2: mismo patrón en el canvas Ladder/FBD
+
+**Fecha:** 2026-09-18
+**Rama:** `integration/jwplc-alpha7-alpha12-upstream` (creada al juntar
+`feature/alpha12-upstream-backports` con `develop/alpha7-openplc-remote-io-rtu`
+— esta última ya era ancestro directo de la primera, así que el merge fue un
+no-op; el crash de esta sección ya existía en `feature/alpha12-upstream-backports`
+antes de la integración, solo que no se había reproducido todavía)
+**Commits:** pendiente de commitear en el momento de escribir esto
+
+### Resumen
+
+El cierre de la ronda 1 (arriba) cubrió las tablas de variables, pero el
+mismo crash volvió a aparecer editando el `PV` de un contador `CTU` **en el
+canvas Ladder**, con el ícono del depurador activado (sin necesitar que el
+simulador estuviera corriendo — basta con que `isDebuggerVisible` sea
+`true`) y tras varios minutos con múltiples contactos/bobinas/bloques
+acumulados en el diagrama.
+
+### Causa raíz
+
+La misma familia de la ronda 1, pero en los componentes que se montan **una
+vez por cada elemento del canvas** (no por fila de tabla):
+
+- `useOpenPLCStore()` sin selector, incluyendo `project` completo y
+  `ladderFlows`/`fbdFlows` (cambian en cada tecla escrita en cualquier
+  canvas abierto).
+- Un `Popover.Root` de Radix para el menú "Force value/true/false" del
+  depurador (`ladder/variable.tsx`, `ladder/coil.tsx`, `ladder/contact.tsx`,
+  `fbd/variable.tsx`), que queda montado en cuanto se hizo click una vez
+  sobre ese elemento con `isDebuggerVisible === true` — no hace falta estar
+  simulando activamente.
+
+Con varios elementos acumulados en el diagrama, cualquier edición (el `PV`
+del contador) re-renderiza todos ellos a la vez por la suscripción sin
+selector; los que tenían el `Popover` montado por una interacción previa del
+depurador disparan el mismo loop de refs de Radix que en la ronda 1.
+
+De paso se encontraron y corrigieron dos celdas "Type" (dropdown de Radix
+por fila, idéntico patrón al de la ronda 1) que habían quedado sin el fix
+en `global-variables-table` y en la tabla de miembros de `data-types` de
+tipo estructura — la ronda 1 solo tocó `variables-table`.
+
+### Archivos modificados (ronda 2)
+
+```
+src/frontend/components/_atoms/graphical-editor/ladder/variable.tsx
+src/frontend/components/_atoms/graphical-editor/ladder/coil.tsx
+src/frontend/components/_atoms/graphical-editor/ladder/contact.tsx
+src/frontend/components/_atoms/graphical-editor/fbd/variable.tsx
+src/frontend/components/_molecules/variables-table/selectable-cell.tsx
+src/frontend/components/_molecules/global-variables-table/selectable-cell.tsx
+src/frontend/components/_molecules/data-types/structure/table/selectable-cell.tsx
+```
+
+En cada uno: `useOpenPLCStore()` sin selector → `useOpenPLCStore(useShallow((s) => ({...})))`
+con solo los campos usados en render/efectos; `ladderFlows`/`fbdFlows`
+sacados de la suscripción reactiva cuando solo se usaban dentro de
+handlers (`onBlur`, `onFocus`, submit) y leídos con
+`useOpenPLCStore.getState()` en el momento de uso.
+
+### Verificación
+
+- `npx tsc --noEmit`: sin errores.
+- `npx eslint` sobre los 7 archivos: sin errores (2 warnings preexistentes
+  de `exhaustive-deps` no relacionados, sin cambios).
+- Verificación manual del usuario en `npm run dev`: sesión de ~20 minutos
+  (11:17 / 11:25 / 11:35) editando bloques con el depurador seleccionado,
+  sin reproducir el crash.
+
+### Pendiente / a vigilar
+
+La suscripción `useOpenPLCStore()` **sin selector** dentro de un componente
+que se monta **por fila o por nodo de canvas** es el patrón de riesgo. Hay
+más de 100 archivos en el proyecto que llaman `useOpenPLCStore()` sin
+selector; solo se auditaron y corrigieron los que además combinan un
+componente Radix que compone refs (`Popover`, `DropdownMenu`, `Select`,
+`Tooltip`) — la combinación exacta que produce este crash. No se auditaron:
+- `instances-table/selectable-cell.tsx`, `task-table/selectable-cell.tsx`
+  (usan `<select>` nativo, no Radix — menor riesgo pero no nulo).
+- Componentes específicos de JWPLC (backplane, VPP, remote IO) que puedan
+  usar `GenericComboboxCell`/`GenericTextareaCell` (Radix `DropdownMenu`
+  por dentro) montados por fila en sus propias tablas — no se revisaron en
+  esta ronda porque no formaban parte de la reproducción reportada.
+
+Si vuelve a aparecer `Maximum update depth exceeded` con la firma `setRef`
++ `Array.map` anidado, buscar un componente Radix montado por elemento
+(fila de tabla o nodo de canvas) con una suscripción al store sin selector
+cerca — es la tercera vez que es exactamente esto.

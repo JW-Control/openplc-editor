@@ -2,6 +2,7 @@ import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { baseTypeEnum } from '../../../../../../middleware/shared/ports/plc-schemas'
 import type { PLCStructureVariable } from '../../../../../../middleware/shared/ports/types'
@@ -21,13 +22,13 @@ const SelectableTypeCell = ({
   table,
   editable = true,
 }: ISelectableCellProps) => {
-  const {
-    editor,
-    project: {
-      data: { dataTypes },
-    },
-    libraries: sliceLibraries,
-  } = useOpenPLCStore()
+  const { editor, dataTypes, libraries: sliceLibraries } = useOpenPLCStore(
+    useShallow((s) => ({
+      editor: s.editor,
+      dataTypes: s.project.data.dataTypes,
+      libraries: s.libraries,
+    })),
+  )
 
   const VariableTypes = [
     { definition: 'base-type', values: baseTypeEnum.options },

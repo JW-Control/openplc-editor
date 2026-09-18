@@ -2,6 +2,7 @@ import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { baseTypeEnum } from '../../../../middleware/shared/ports'
 import type { PLCGlobalVariable, PLCVariable } from '../../../../middleware/shared/ports/types'
@@ -46,15 +47,12 @@ const SelectableTypeCell = ({
   table,
   editable = true,
 }: ISelectableCellProps) => {
-  const {
-    project: {
-      data: { dataTypes, pous },
-    },
-    ladderFlows,
-    fbdFlows,
-    projectActions: { updateVariable },
-    libraries: sliceLibraries,
-  } = useOpenPLCStore()
+  const { dataTypes, libraries: sliceLibraries } = useOpenPLCStore(
+    useShallow((s) => ({
+      dataTypes: s.project.data.dataTypes,
+      libraries: s.libraries,
+    })),
+  )
 
   const VariableTypes = [
     {
@@ -134,9 +132,16 @@ const SelectableTypeCell = ({
     setCellValue(value)
     table.options.meta?.updateData(index, id, { definition, value })
 
+    const {
+      project: {
+        data: { pous: freshPous },
+      },
+      projectActions: { updateVariable },
+    } = useOpenPLCStore.getState()
+
     const newType = createVariableType(definition, value)
     if (newType) {
-      propagateVariableTypeChange(variableName, newType, pous, { updateVariable })
+      propagateVariableTypeChange(variableName, newType, freshPous, { updateVariable })
     }
   }
 
@@ -154,7 +159,23 @@ const SelectableTypeCell = ({
       return
     }
 
-    const validation = validateTypeChange(variableName, oldType, newType, ladderFlows, fbdFlows, 'global', pous)
+    const {
+      ladderFlows: freshLadderFlows,
+      fbdFlows: freshFBDFlows,
+      project: {
+        data: { pous: freshPous },
+      },
+    } = useOpenPLCStore.getState()
+
+    const validation = validateTypeChange(
+      variableName,
+      oldType,
+      newType,
+      freshLadderFlows,
+      freshFBDFlows,
+      'global',
+      freshPous,
+    )
 
     if (validation.affectedNodes.length > 0 || validation.warnings.length > 0) {
       setPendingTypeChange({ definition, value })
