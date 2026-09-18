@@ -1,7 +1,7 @@
 import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 
 import { baseTypeEnum } from '../../../../middleware/shared/ports/plc-schemas'
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
@@ -17,6 +17,23 @@ import { TypeChangeModal } from '../type-change-modal'
 import { ArrayModal } from './elements/array-modal'
 
 type ISelectableCellProps = CellContext<PLCVariable, unknown> & { selected?: boolean }
+
+/**
+ * Cell renderers below mount a Radix Popover/DropdownMenu (or, for the
+ * plain cells, still re-run their own effects) once PER ROW. TanStack
+ * Table hands every cell a fresh `row`/`table` wrapper whenever ANY row's
+ * data changes, so without this check editing one variable re-rendered
+ * every other row's cell too — with enough rows, that re-render burst is
+ * what tipped Radix's ref-tracking effects into React's nested-update
+ * limit. Immer gives each row's own data object a stable reference when
+ * that row wasn't the one touched, so comparing it (not just the cell's
+ * own `getValue()`) is what actually scopes the re-render to the edited
+ * row.
+ */
+const arePLCVariableCellPropsEqual = (prev: ISelectableCellProps, next: ISelectableCellProps): boolean =>
+  prev.row.index === next.row.index &&
+  prev.selected === next.selected &&
+  prev.table.options.data[prev.row.index] === next.table.options.data[next.row.index]
 
 const createVariableType = (
   definition: PLCVariable['type']['definition'],
@@ -39,7 +56,7 @@ const createVariableType = (
   }
 }
 
-const SelectableTypeCell = ({
+const SelectableTypeCellImpl = ({
   getValue,
   row: { index },
   column: { id },
@@ -433,7 +450,7 @@ const SelectableTypeCell = ({
   )
 }
 
-const SelectableClassCell = ({
+const SelectableClassCellImpl = ({
   getValue,
   row: { index },
   column: { id },
@@ -502,7 +519,7 @@ const SelectableClassCell = ({
   )
 }
 
-const SelectableDebugCell = ({ getValue, row: { index }, column: { id }, table }: ISelectableCellProps) => {
+const SelectableDebugCellImpl = ({ getValue, row: { index }, column: { id }, table }: ISelectableCellProps) => {
   const initialValue = getValue<boolean | undefined>() ?? false
   // We need to keep and update the state of the cell normally
   const [cellValue, setCellValue] = useState(initialValue)
@@ -525,5 +542,9 @@ const SelectableDebugCell = ({ getValue, row: { index }, column: { id }, table }
     </button>
   )
 }
+
+const SelectableTypeCell = memo(SelectableTypeCellImpl, arePLCVariableCellPropsEqual)
+const SelectableClassCell = memo(SelectableClassCellImpl, arePLCVariableCellPropsEqual)
+const SelectableDebugCell = memo(SelectableDebugCellImpl, arePLCVariableCellPropsEqual)
 
 export { SelectableClassCell, SelectableDebugCell, SelectableTypeCell }

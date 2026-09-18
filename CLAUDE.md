@@ -405,24 +405,30 @@ Enable users to reference and drill down into Function Block (FB) instances (e.g
 
 ---
 
-### 3. Handover Notes for Next Developer (Pending Issues)
+### 3. Resolved: `Maximum update depth exceeded` on block editing
 
-> [!WARNING]
-> **Issue Persisting:** The user reports that `Maximum update depth exceeded` can still occur when editing block values (CTU `PV`, `TON`/`TOF` time) and clicking outside after the editor has been open or idle for several minutes (around 3+ minutes).
+> [!NOTE]
+> **Fixed.** The issue below (editing CTU `PV` / `TON`/`TOF` time and
+> clicking outside) was root-caused and fixed. Full write-up in
+> [`UPDATE.md`](./UPDATE.md) at the repo root.
 
-#### Next Steps to Investigate
-1. **Identify the exact active component in the loop:**
-   - Look at the latest bundle line numbers in `renderer.dev.js` stack trace.
-   - Inspect lines in `renderer.dev.js` around the offending `setRef` (check whether it's `@radix-ui/react-select`, `@radix-ui/react-dropdown-menu`, `@radix-ui/react-popover`, or `@xyflow/react` node refs).
-2. **Examine Textarea / Input Blur & Store Commit Handlers:**
-   - In `src/frontend/components/_atoms/graphical-editor/ladder/variable.tsx`, check `handleSubmitVariableValueOnTextareaBlur`:
-     - Does `updateNodeData` or `updateVariable` trigger a state change that re-focuses or re-blurs the textarea?
-     - Check if `selectedNodes` or `activeSelection` in Zustand triggers an infinite cycle between the node selection and textarea focus.
-3. **Check Context Menu Popovers:**
-   - `ladder/contact.tsx`, `ladder/coil.tsx`, and `fbd/variable.tsx` still import `@radix-ui/react-popover` for context menus (`Popover.Root open={isContextMenuOpen}`).
-   - `build-options/index.tsx` still uses `@radix-ui/react-popover` for the build menu.
-   - If needed, migrate these to portal-based context menus similar to `src/frontend/components/_molecules/variables-panel/index.tsx` (`ContextMenu`).
-4. **Inspect Background Polling Subscriptions:**
-   - `src/frontend/hooks/use-runtime-polling.ts` (polls every 2000ms).
-   - `src/frontend/hooks/useDebugPolling.ts` (multiple `setInterval` calls).
-   - Verify that components subscribing to the store use granular selectors (or `useShallow`) so periodic status polls don't re-render entire canvas subtrees.
+Root cause: several per-row table cell components (`variables-table`,
+`global-variables-table`, `task-table`, `instances-table`) called
+`useOpenPLCStore()` with **no selector** — including `ladderFlows`/`fbdFlows`,
+which change on every canvas keystroke — while also mounting a Radix
+`Select`/`Popover`/`DropdownMenu`/`Toast` per row. Radix's `PopperAnchor`
+effect runs on every render with no dependency array; with enough
+accumulated rows (and the multi-mount architecture keeping every open POU's
+variables editor alive), an unrelated edit anywhere re-rendered every row in
+every open table at once, tipping React's nested-update limit. The crash
+appeared to "move" between components (`Select`, `Toaster`, table cells)
+because whichever one React was mid-commit on when the limit hit got blamed
+in the stack trace.
+
+Fix: scoped store subscriptions to `useShallow`/granular selectors, moved
+`ladderFlows`/`fbdFlows` reads out of render into `useOpenPLCStore.getState()`
+inside the event handlers that actually need them, replaced a few
+simple Radix `Select` usages with native `<select>`, fixed a stale-listener
+bug in `use-toast.tsx`, and added row-scoped `React.memo` to every per-row
+cell so editing one row no longer re-renders the rest. See `UPDATE.md` for
+the full file list and reasoning.

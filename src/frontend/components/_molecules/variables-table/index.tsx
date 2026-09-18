@@ -1,4 +1,5 @@
 import { ColumnFiltersState, createColumnHelper, OnChangeFn } from '@tanstack/react-table'
+import { memo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
@@ -123,14 +124,20 @@ type PLCVariablesTableProps = {
   handleRowClick: (row: HTMLTableRowElement) => void
 }
 
-const VariablesTable = ({
+// Memoized: this component (and every per-row Radix Select/Popover/
+// DropdownMenu cell beneath it) would otherwise re-render whenever its
+// parent `VariablesEditor` re-renders for ANY reason — including other
+// POUs' edits, since the multi-mount architecture keeps every open
+// POU's VariablesEditor mounted. `React.memo` skips that re-render
+// whenever this table's own props haven't actually changed.
+const VariablesTable = memo(function VariablesTable({
   tableData,
   filterValue,
   columnFilters,
   setColumnFilters,
   selectedRow,
   handleRowClick,
-}: PLCVariablesTableProps) => {
+}: PLCVariablesTableProps) {
   const { name, pouType, updateVariable, handleFileAndWorkspaceSavedState } = useOpenPLCStore(
     useShallow((s) => ({
       name: s.editor.meta.name,
@@ -176,6 +183,6 @@ const VariablesTable = ({
       filterValue={filterValue}
     />
   )
-}
+})
 
 export { VariablesTable }

@@ -536,12 +536,15 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
     })
   }
 
-  const handleRowClick = (row: HTMLTableRowElement) => {
-    updateModelVariables({
-      display: 'table',
-      selectedRow: parseInt(row.id),
-    })
-  }
+  const handleRowClick = useCallback(
+    (row: HTMLTableRowElement) => {
+      updateModelVariables({
+        display: 'table',
+        selectedRow: parseInt(row.id),
+      })
+    },
+    [updateModelVariables],
+  )
 
   const handleReturnTypeChange = (value: string) => {
     updatePouReturnType(editor.meta.name, value)

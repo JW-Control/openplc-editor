@@ -4,7 +4,8 @@ import { useProjectAliasBindings } from '@root/frontend/hooks/use-project-alias-
 import { useTargetCapabilities } from '@root/frontend/hooks/use-target-capabilities'
 import { isLiteralLocation } from '@root/middleware/shared/utils/iec-address/registry'
 import type { CellContext, RowData } from '@tanstack/react-table'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
 import { pinSelectors, remoteDeviceSelectors, vendorIoSelectors } from '../../../hooks/use-store-selectors'
@@ -34,7 +35,23 @@ declare module '@tanstack/react-table' {
 }
 
 type IEditableCellProps = CellContext<PLCVariable, unknown> & { selected?: boolean; scope?: 'local' | 'global' }
-const EditableNameCell = ({
+
+/**
+ * Each cell below mounts once PER ROW (some render a Radix Popover).
+ * TanStack Table hands every cell a fresh `row`/`table` wrapper whenever
+ * ANY row's data changes, so without this check, editing one variable
+ * re-rendered every other row's cell too — enough re-renders at once to
+ * tip Radix's ref-tracking effects into React's nested-update limit.
+ * Immer keeps a row's own data object reference stable when that row
+ * wasn't the one touched, so comparing it (not just `getValue()`) scopes
+ * the re-render to the row that actually changed.
+ */
+const arePLCVariableCellPropsEqual = (prev: IEditableCellProps, next: IEditableCellProps): boolean =>
+  prev.row.index === next.row.index &&
+  prev.selected === next.selected &&
+  prev.table.options.data[prev.row.index] === next.table.options.data[next.row.index]
+
+const EditableNameCellImpl = ({
   getValue,
   row: { index },
   column: { id },
@@ -45,19 +62,27 @@ const EditableNameCell = ({
   const initialValue = getValue<string>()
   const { toast } = useToast()
 
-  const {
-    editor,
-    ladderFlows,
-    ladderFlowActions: { updateNode },
-    fbdFlows,
-    fbdFlowActions: { updateNode: updateFBDNode },
-    searchQuery,
-    projectActions: { getVariable, updatePou, updateVariable },
-    project: {
-      data: { pous, configurations },
-    },
-    workspace: { isDebuggerVisible },
-  } = useOpenPLCStore()
+  // `ladderFlows`/`fbdFlows` are deliberately NOT subscribed here: they
+  // change on every keystroke in any open ladder/FBD canvas, and this
+  // component mounts once PER ROW of the variables table, so subscribing
+  // to them turned every canvas edit into an N-row re-render burst —
+  // enough to tip Radix's ref-tracking effects (used by sibling cells)
+  // into React's nested-update limit. Both are only read inside `onBlur`
+  // below (a rename commit), never during render, so they're fetched
+  // fresh via `useOpenPLCStore.getState()` there instead.
+  const { editor, searchQuery, getVariable, updatePou, updateVariable, pous, configurations, isDebuggerVisible } =
+    useOpenPLCStore(
+      useShallow((s) => ({
+        editor: s.editor,
+        searchQuery: s.searchQuery,
+        getVariable: s.projectActions.getVariable,
+        updatePou: s.projectActions.updatePou,
+        updateVariable: s.projectActions.updateVariable,
+        pous: s.project.data.pous,
+        configurations: s.project.data.configurations,
+        isDebuggerVisible: s.workspace.isDebuggerVisible,
+      })),
+    )
   // We need to keep and update the state of the cell normally
   const [cellValue, setCellValue] = useState(initialValue)
   const [isEditing, setIsEditing] = useState(false)
@@ -146,6 +171,13 @@ const EditableNameCell = ({
 
   const onBlur = async () => {
     if (cellValue === initialValue) return setIsEditing(false)
+
+    const {
+      ladderFlows,
+      ladderFlowActions: { updateNode },
+      fbdFlows,
+      fbdFlowActions: { updateNode: updateFBDNode },
+    } = useOpenPLCStore.getState()
 
     const oldName = initialValue
     const newName = cellValue
@@ -318,7 +350,7 @@ const EditableNameCell = ({
   )
 }
 
-const EditableInitialValueCell = ({
+const EditableInitialValueCellImpl = ({
   getValue,
   row: { index },
   column: { id },
@@ -328,12 +360,14 @@ const EditableInitialValueCell = ({
 }: IEditableCellProps) => {
   const initialValue = getValue<string>()
 
-  const {
-    editor,
-    searchQuery,
-    projectActions: { getVariable },
-    workspace: { isDebuggerVisible },
-  } = useOpenPLCStore()
+  const { editor, searchQuery, getVariable, isDebuggerVisible } = useOpenPLCStore(
+    useShallow((s) => ({
+      editor: s.editor,
+      searchQuery: s.searchQuery,
+      getVariable: s.projectActions.getVariable,
+      isDebuggerVisible: s.workspace.isDebuggerVisible,
+    })),
+  )
   // We need to keep and update the state of the cell normally
   const [cellValue, setCellValue] = useState(initialValue)
   const [isEditing, setIsEditing] = useState(false)
@@ -425,7 +459,7 @@ const EditableInitialValueCell = ({
   )
 }
 
-const EditableLocationCell = ({
+const EditableLocationCellImpl = ({
   getValue,
   row: { index },
   column: { id },
@@ -436,12 +470,14 @@ const EditableLocationCell = ({
   const initialValue = getValue<string>()
   const { toast } = useToast()
 
-  const {
-    editor,
-    searchQuery,
-    projectActions: { getVariable },
-    workspace: { isDebuggerVisible },
-  } = useOpenPLCStore()
+  const { editor, searchQuery, getVariable, isDebuggerVisible } = useOpenPLCStore(
+    useShallow((s) => ({
+      editor: s.editor,
+      searchQuery: s.searchQuery,
+      getVariable: s.projectActions.getVariable,
+      isDebuggerVisible: s.workspace.isDebuggerVisible,
+    })),
+  )
   const existingPins = pinSelectors.usePins()
   const remoteIOPoints = remoteDeviceSelectors.useRemoteDeviceIOPoints()
   const vendorIoEntries = vendorIoSelectors.useVendorIoEntries()
@@ -608,7 +644,7 @@ const EditableLocationCell = ({
   )
 }
 
-const EditableDocumentationCell = ({
+const EditableDocumentationCellImpl = ({
   getValue,
   row: { index },
   column: { id },
@@ -616,9 +652,7 @@ const EditableDocumentationCell = ({
   selected = true,
 }: IEditableCellProps) => {
   const initialValue = getValue<string | undefined>()
-  const {
-    workspace: { isDebuggerVisible },
-  } = useOpenPLCStore()
+  const isDebuggerVisible = useOpenPLCStore((s) => s.workspace.isDebuggerVisible)
   // We need to keep and update the state of the cell normally
   const [cellValue, setCellValue] = useState(initialValue ?? '')
 
@@ -663,5 +697,10 @@ const EditableDocumentationCell = ({
     </PrimitivePopover.Root>
   )
 }
+
+const EditableNameCell = memo(EditableNameCellImpl, arePLCVariableCellPropsEqual)
+const EditableInitialValueCell = memo(EditableInitialValueCellImpl, arePLCVariableCellPropsEqual)
+const EditableLocationCell = memo(EditableLocationCellImpl, arePLCVariableCellPropsEqual)
+const EditableDocumentationCell = memo(EditableDocumentationCellImpl, arePLCVariableCellPropsEqual)
 
 export { EditableDocumentationCell, EditableInitialValueCell, EditableLocationCell, EditableNameCell }
