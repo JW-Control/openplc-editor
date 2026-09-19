@@ -432,3 +432,61 @@ simple Radix `Select` usages with native `<select>`, fixed a stale-listener
 bug in `use-toast.tsx`, and added row-scoped `React.memo` to every per-row
 cell so editing one row no longer re-renders the rest. See `UPDATE.md` for
 the full file list and reasoning.
+
+---
+
+### 4. Feature: Zoom for Ladder and the Monaco (ST/IL/Python/C++) editor
+
+> [!NOTE]
+> Full write-up, including the two failed approaches and why they broke,
+> in [`UPDATE.md`](./UPDATE.md) at the repo root.
+
+Added a shared `useCanvasZoom` hook (`src/frontend/hooks/use-canvas-zoom.ts`,
+25%–125% range, 5% step, Ctrl+Scroll / Ctrl +/-/0, localStorage-persisted)
+plus a draggable floating `%`/`+`/`-` widget
+(`_atoms/graphical-editor/zoom-controls`). Two integration approaches were
+tried and rejected before landing on the current one — **do not reintroduce
+either**:
+
+1. **CSS `zoom` on an ancestor** — corrupts `@xyflow/react`'s
+   `ResizeObserver`-measured node/handle sizes (it changes descendants'
+   *layout* size), rendering skewed/disconnected wires in Ladder.
+2. **CSS `transform: scale()` on an ancestor** — avoids the above (paint-only,
+   doesn't change layout size), but Ladder's rungs have `nodesDraggable:
+   true`. React Flow converts pointer position to flow coordinates using
+   *only* its own `viewport.zoom`, with no notion of an ancestor's CSS scale.
+   Dragging a node while the ancestor scale differs from 1 throws that math
+   off by the scale factor and **permanently corrupts the dragged node's
+   stored position** — it does not self-correct on further zooming, because
+   the bad value becomes the node's actual position. This one is worse than
+   #1: it looks fine until the user drags something.
+
+**Working fix**: feed `zoomLevel` into each target's own zoom mechanism
+instead of an ancestor CSS property.
+
+- **Ladder** (`_molecules/graphical-editor/ladder/rung/body.tsx`): each
+  rung's own `ReactFlowInstance.setViewport({ x: 0, y: 0, zoom: zoomLevel },
+  { duration: 0 })` — the same internal mechanism FBD already used natively,
+  so pointer math, edges and handles all stay consistent with what's
+  rendered, at every zoom level.
+- **Monaco** (`_features/[workspace]/editor/monaco/index.tsx`): scales
+  `fontSize` (`BASE_FONT_SIZE * zoomLevel`) instead of Monaco's own
+  `mouseWheelZoom` — that built-in gesture drives a **page-global singleton**
+  zoom shared by every Monaco instance, with no min/max/step control, so it
+  can't match the app's shared 25%–125%/5% range. Monaco also clamps
+  `fontSize` to a hard 6px floor internally
+  (`EditorFloatOption.clamp(fontSize, 6, 100)` in its `editorOptions.js`), so
+  with a 12px baseline nothing visibly changes below 50% — the hook takes a
+  `{ min }` override for exactly this, and Monaco's call site passes `{ min:
+  0.5 }`.
+
+**Wheel-handling gotcha**: React's synthetic `onWheel`/`onWheelCapture` props
+are always attached as **passive** listeners, so calling `preventDefault()`
+inside one silently no-ops and logs "Unable to preventDefault inside passive
+event listener invocation." `useCanvasZoom` instead exposes a `containerRef`
+(attach via a ref callback — `MutableRefObject<HTMLElement>` isn't directly
+assignable to a `Ref<HTMLDivElement>` prop) and attaches the wheel listener
+itself via `addEventListener('wheel', handler, { passive: false, capture:
+true })`, so Ctrl+Scroll actually gets suppressed and reaches this hook
+before the widget underneath (e.g. Monaco's own scroll handling) ever sees
+it.

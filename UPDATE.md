@@ -261,3 +261,175 @@ Si vuelve a aparecer `Maximum update depth exceeded` con la firma `setRef`
 + `Array.map` anidado, buscar un componente Radix montado por elemento
 (fila de tabla o nodo de canvas) con una suscripción al store sin selector
 cerca — es la tercera vez que es exactamente esto.
+
+---
+
+## Actualización — Zoom en Ladder y en el editor Monaco (ST/IL/Python/C++)
+
+**Fecha:** 2026-09-18 a 2026-09-19
+**Rama:** `integration/jwplc-alpha7-alpha12-upstream`
+**Commits:** `3b5169032` (primera versión, con el fix de corrupción de
+posiciones ya incluido) + cambios sin commitear al cierre de esta ronda
+(rango 25%-125% en pasos de 5%, control movible, fix del warning de
+`preventDefault` en listener pasivo)
+
+### Resumen
+
+Pedido original: la pantalla del editor (Ladder y "cualquier otro lenguaje")
+se quedaba a tamaño fijo, sin forma de hacer zoom para ver mejor el código.
+Se agregó zoom a Ladder y al editor Monaco compartido (ST/IL/Python/C++),
+con persistencia, atajos de teclado, Ctrl+Scroll y un control flotante
+movible con `%`/`+`/`-`.
+
+El camino hasta la versión final pasó por **dos enfoques que se probaron y
+se descartaron por romper cosas reales** — quedan documentados acá para no
+repetirlos.
+
+### Intento 1: CSS `zoom` en un contenedor ancestro
+
+Envolver el editor completo en un `<div style={{ zoom: nivel }}>`. Funcionó
+bien a simple vista, pero en Ladder las conexiones (líneas entre contactos,
+bobinas y bloques) aparecían distorsionadas/desalineadas, sobre todo al
+saltar directo a un nivel con Ctrl+0.
+
+**Causa:** cada rung del Ladder es su propio `ReactFlow` (`@xyflow/react`),
+que mide el tamaño de sus nodos/handles con `ResizeObserver` para anclar las
+conexiones. La propiedad CSS `zoom` (a diferencia de `transform`) cambia el
+tamaño de **layout** real de los elementos, así que esas mediciones quedaban
+escaladas por el factor de zoom vigente en el momento de medir — las
+conexiones terminaban ancladas a posiciones equivocadas.
+
+### Intento 2: CSS `transform: scale()` en un contenedor ancestro
+
+`transform` no cambia el tamaño de layout (solo la pintura visual), así que
+resolvía el problema del intento 1 — y de hecho al principio se veía
+perfecto. Pero tras varias pasadas de scroll/zoom, las conexiones volvían a
+distorsionarse, y esta vez **de forma permanente** (ni bajando el zoom ni
+reseteando a 100% se arreglaba).
+
+**Causa, más seria que la del intento 1:** los contactos/bobinas/bloques de
+un rung se pueden arrastrar (`nodesDraggable: true`). React Flow calcula la
+posición de destino de un arrastre convirtiendo la posición del puntero a
+coordenadas de flujo usando **únicamente su propio `viewport.zoom`** — no
+tiene forma de enterarse de que un ancestro tiene un `transform: scale()`
+aplicado. Si el usuario arrastraba (o rozaba sin querer) un nodo mientras el
+zoom externo era distinto de 1, la posición calculada quedaba mal por el
+factor de escala, y esa posición **se guardaba tal cual en los datos del
+proyecto** — corrompiendo la posición real del nodo de forma permanente, no
+solo su renderizado. Por eso no se arreglaba solo: el dato ya estaba mal.
+
+**Conclusión:** ninguna propiedad CSS de escala en un ancestro es segura
+para envolver un canvas de `@xyflow/react` con nodos arrastrables. Hay que
+alimentar el nivel de zoom al mecanismo de zoom **propio** de la librería.
+
+### Solución final
+
+`src/frontend/hooks/use-canvas-zoom.ts` — hook compartido: nivel de zoom
+(rango configurable, por defecto 25%-125% en pasos de 5%), persistencia en
+`localStorage`, atajos Ctrl +/-/0 (activos solo con el mouse sobre el
+editor), y un listener de rueda nativo.
+
+- **Ladder** (`_molecules/graphical-editor/ladder/rung/body.tsx`): el
+  `zoomLevel` se aplica vía `reactFlowInstance.setViewport({ x: 0, y: 0,
+  zoom: zoomLevel }, { duration: 0 })` — el mecanismo de zoom nativo de
+  React Flow, el mismo que FBD ya usaba de fábrica. Así el cálculo de
+  arrastre, los handles y las conexiones siempre coinciden con lo que se ve
+  en pantalla, sin importar cuántas veces se cambie el zoom.
+- **Monaco** (`_features/[workspace]/editor/monaco/index.tsx`): en vez de
+  la opción nativa `mouseWheelZoom` de Monaco (que es un singleton **global
+  a toda la página**, compartido por todos los editores Monaco abiertos, sin
+  rango ni paso configurables), se escala `fontSize` directamente
+  (`BASE_FONT_SIZE * zoomLevel`).
+- `_atoms/graphical-editor/zoom-controls/index.tsx` — control flotante
+  `-`/`%`/`+`, **movible** arrastrándolo desde el ícono `⠿` (para poder
+  sacarlo de encima de otros controles, como el botón "Create new rung" del
+  Ladder, que quedaba tapado con la posición fija original).
+
+### Ajuste de rango: Monaco tiene un piso de fuente de 6px
+
+Monaco clampea `fontSize` a un mínimo de 6px **internamente**
+(`EditorFloatOption.clamp(fontSize, 6, 100)` en su propio
+`editorOptions.js`, no hay forma de configurarlo). Con una base de 12px,
+6px es exactamente el 50%. Esto significa que todo el rango 25%-45%
+(3px a 5.4px) se redondeaba igual al piso de 6px — visualmente "pegado",
+sin cambiar. No es un bug propio, es un límite de la librería. Se resolvió
+agregando un parámetro opcional `{ min, max, step }` a `useCanvasZoom`, y
+llamándolo para Monaco con `{ min: 0.5 }` (Ladder se queda en el 25% por
+defecto, porque ahí el límite lo controla nuestro propio código).
+
+### Warning de consola: `Unable to preventDefault inside passive event listener invocation`
+
+Aparecía al usar Ctrl+Scroll (pero no al usar los botones `+`/`-`).
+
+**Causa:** React registra los props sintéticos `onWheel`/`onWheelCapture`
+siempre como listeners **pasivos** (comportamiento de todo el framework, por
+rendimiento del scroll) — un listener pasivo no puede cancelar el
+comportamiento por defecto del navegador, así que `event.preventDefault()`
+dentro de uno es un no-op silencioso que además loguea ese warning.
+
+**Fix:** `useCanvasZoom` ya no expone un handler de rueda como prop de JSX;
+en su lugar devuelve un `containerRef` que el consumidor asigna al mismo
+elemento (`ref={(node) => { containerRef.current = node }}` — un
+`MutableRefObject<HTMLElement>` no es asignable directamente a un
+`Ref<HTMLDivElement>`, de ahí el callback), y el hook agrega el listener de
+rueda él mismo vía `addEventListener('wheel', handler, { passive: false,
+capture: true })`. La fase de captura además garantiza que el zoom se
+intercepta **antes** de que el widget interno (por ejemplo, el manejo de
+scroll propio de Monaco) llegue a ver el evento.
+
+### Archivos modificados
+
+```
+CLAUDE.md
+src/frontend/hooks/use-canvas-zoom.ts
+src/frontend/components/_atoms/graphical-editor/zoom-controls/index.tsx
+src/frontend/components/_molecules/graphical-editor/ladder/rung/body.tsx
+src/frontend/components/_organisms/graphical-editor/ladder/rung/index.tsx
+src/frontend/components/_features/[workspace]/editor/graphical/ladder/index.tsx
+src/frontend/components/_features/[workspace]/editor/monaco/index.tsx
+src/frontend/components/_organisms/variables-code-editor/index.tsx        (mouseWheelZoom nativo, sin cambios en esta ronda)
+src/frontend/components/_features/[workspace]/editor/library-manifest/index.tsx (idem)
+src/frontend/components/_features/[workspace]/editor/diff-viewer/file-diff-view.tsx (idem)
+```
+
+Los últimos tres solo tienen `mouseWheelZoom: true` (el zoom nativo simple
+de Monaco, sin el control flotante ni el rango 25%-125%) — no formaban
+parte del pedido específico de esta corrección, se dejaron con el
+comportamiento simple porque no tenían el mismo problema de distorsión.
+
+### Verificación
+
+- `npx tsc --noEmit` sobre todo el proyecto: sin errores, en cada ronda de
+  cambios.
+- `npx eslint` sobre cada archivo tocado: sin errores nuevos (solo
+  warnings preexistentes de `exhaustive-deps` sin relación).
+- `npx prettier --check`: sin issues tras `--write`.
+- `npm run build:renderer`: compila limpio en cada ronda.
+- Verificación manual del usuario en `npm run dev`: confirmó que las
+  conexiones del Ladder ya no se distorsionan tras varias pasadas de
+  zoom/scroll, que el control es movible, que el zoom de Monaco ahora
+  cambia visiblemente desde 50% (antes 25%-50% se veía igual), y que ya no
+  aparece el warning de `preventDefault` en consola al usar Ctrl+Scroll.
+
+### Estado
+
+Cerrado. El zoom queda disponible en Ladder (25%-125%, paso 5%, vía el
+viewport nativo de React Flow) y en el editor Monaco compartido (50%-125%,
+paso 5%, vía `fontSize`), con control flotante movible y persistencia por
+`localStorage`.
+
+### Notas para el futuro
+
+- Nunca envolver un canvas de `@xyflow/react` con nodos arrastrables en un
+  ancestro con `zoom` o `transform: scale()` — ver "Intento 1" y "Intento 2"
+  arriba. Alimentar el zoom al `viewport`/`setViewport` propio de la
+  instancia.
+- Si se necesita zoom con rango/paso propio en un widget de terceros,
+  revisar primero si ese widget tiene su propio límite interno (como el
+  piso de 6px de Monaco) antes de asumir que el rango pedido se puede
+  aplicar tal cual.
+- Para interceptar Ctrl+Scroll (o cualquier gesto que necesite
+  `preventDefault()`) sobre un widget que maneja su propio scroll (Monaco,
+  cualquier canvas), no usar `onWheel`/`onWheelCapture` de React — son
+  pasivos por defecto. Usar un `ref` + `addEventListener('wheel', ..., {
+  passive: false })` manual, como en `useCanvasZoom`.

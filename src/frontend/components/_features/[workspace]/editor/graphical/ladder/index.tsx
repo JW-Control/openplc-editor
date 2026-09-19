@@ -60,7 +60,8 @@ export default function LadderEditor() {
 
   const updateModelLadder = ladderSelectors.useUpdateModelLadder()
 
-  const { zoomLevel, zoomIn, zoomOut, zoomReset, hoverHandlers } = useCanvasZoom('openplc:ladder-editor-zoom')
+  const { zoomLevel, zoomIn, zoomOut, zoomReset, containerRef, hoverHandlers } =
+    useCanvasZoom('openplc:ladder-editor-zoom')
 
   const rungs = flow?.rungs || []
   const flowUpdated = flow?.updated || false
@@ -240,7 +241,13 @@ export default function LadderEditor() {
   }
 
   return (
-    <div className='relative h-full w-full' {...hoverHandlers}>
+    <div
+      className='relative h-full w-full'
+      ref={(node) => {
+        containerRef.current = node
+      }}
+      {...hoverHandlers}
+    >
       <div className='h-full w-full overflow-y-auto' ref={scrollableRef} style={{ scrollbarGutter: 'stable' }}>
         <div className='flex flex-1 flex-col gap-4 px-2'>
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>

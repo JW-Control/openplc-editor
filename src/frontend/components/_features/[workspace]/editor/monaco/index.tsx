@@ -143,7 +143,13 @@ const MonacoEditor = (props: monacoEditorProps): ReturnType<typeof PrimitiveEdit
   const aiPort = useAI()
   const projectPort = useProject()
 
-  const { zoomLevel, zoomIn, zoomOut, zoomReset, hoverHandlers } = useCanvasZoom('openplc:monaco-editor-zoom')
+  // `min: 0.5` — Monaco clamps `fontSize` to a 6px floor internally, so
+  // below 50% of the 12px baseline every step renders identically (stuck at
+  // 6px); see `useCanvasZoom`'s doc comment.
+  const { zoomLevel, zoomIn, zoomOut, zoomReset, containerRef, hoverHandlers } = useCanvasZoom(
+    'openplc:monaco-editor-zoom',
+    { min: 0.5 },
+  )
 
   const {
     editor,
@@ -1523,6 +1529,9 @@ void loop()
       <div
         id='editor drop handler'
         className='oplc-monaco-wrapper nokey relative h-full w-full'
+        ref={(node) => {
+          containerRef.current = node
+        }}
         onDrop={handleDrop}
         {...hoverHandlers}
       >
