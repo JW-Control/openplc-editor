@@ -433,3 +433,191 @@ paso 5%, vía `fontSize`), con control flotante movible y persistencia por
   cualquier canvas), no usar `onWheel`/`onWheelCapture` de React — son
   pasivos por defecto. Usar un `ref` + `addEventListener('wheel', ..., {
   passive: false })` manual, como en `useCanvasZoom`.
+
+---
+
+## Actualización — ronda 3: `ladder/block.tsx` sin auditar (mismo patrón, 4ta vez)
+
+**Fecha:** 2026-09-19
+**Rama:** `integration/jwplc-alpha7-alpha12-upstream`
+
+### Resumen
+
+Bug reportado: con un contador `CTU` en el diagrama y una señal marcada
+`debug: true`, el usuario activó el ícono del depurador, lo **desactivó**
+(`isDebuggerVisible = false`) y editó el `PV` del contador. Al hacer clic
+fuera del campo volvió a aparecer:
+
+```
+Uncaught Error: Maximum update depth exceeded...
+    at setRef ...
+    at Array.map ...
+```
+
+con el componente señalado en el stack trace siendo `<ol>` dentro de
+`ToastProvider`/`Toaster` — igual que en la ronda 1, el componente que
+aparece en la traza es el que React estaba comitiendo en ese instante, no
+necesariamente el culpable real (`Toaster` vive una sola vez en la raíz de
+la app; no es del patrón "montado por fila/nodo").
+
+### Causa raíz
+
+La auditoría de las rondas 1 y 2 cubrió `ladder/variable.tsx`,
+`ladder/coil.tsx`, `ladder/contact.tsx` y las celdas de tabla, pero **nunca
+llegó a `ladder/block.tsx`** — el componente que renderiza cada bloque de
+función (`CTU`, `TON`, `TOF`, etc.) en el canvas. Ese archivo exporta dos
+componentes, ambos montados **una vez por bloque en el diagrama**:
+
+- `BlockNodeElement` (el recuadro del bloque con su nombre)
+- `Block` (el wrapper que usa React Flow como tipo de nodo)
+
+Ambos llamaban `useOpenPLCStore()` **sin selector**, exactamente el patrón
+de riesgo documentado en las rondas 1 y 2 — con el agravante de que aquí no
+depende de `isDebuggerVisible`: el polling de valores de depuración
+(`debugBoolValues`/`debugNonBoolValues`/`debugTick`, etc.) sigue
+actualizando el store mientras una sesión de depuración/simulación esté
+activa, **sin importar si el panel del depurador está visible o no**. Con
+un `CTU` acumulando ediciones (`PV`, blur, `pushToHistory`, `updateNode`) al
+mismo tiempo que cada tick de polling re-renderiza los dos componentes sin
+selector, la ráfaga de actualizaciones dentro de un mismo commit de React
+podía superar el límite de 50 actualizaciones anidadas — el mismo mecanismo
+de las rondas 1 y 2, solo que en un archivo que quedó fuera del alcance de
+esas auditorías.
+
+### Cambios realizados
+
+`src/frontend/components/_atoms/graphical-editor/ladder/block.tsx`:
+
+- `BlockNodeElement`: `libraries`, `pous` y `ladderFlows` solo se usaban
+  dentro de `handleNameInputOnBlur` (nunca durante el render), así que se
+  sacaron de la suscripción reactiva y ahora se leen con
+  `useOpenPLCStore.getState()` al inicio de ese handler. Las acciones
+  (`updateModelVariables`, `setNodes`/`setEdges`/`setHandleBranches`,
+  `updateVariable`/`deleteVariable`, `pushToHistory`) pasaron a selectores
+  puntuales por namespace vía `useCallback` (referencias estables, no
+  disparan re-render por sí solas).
+- `Block`: `pous` y `ladderFlows` **sí** se leen durante el render (los usa
+  `getLadderPouVariablesRungNodeAndEdges` directamente en el cuerpo del
+  componente, no en un handler), así que se quedaron reactivos pero con
+  selector propio (`useCallback((s) => s.project.data.pous, [])` /
+  `useCallback((s) => s.ladderFlows, [])`) en vez de traer el store entero.
+  `userLibraries`, `createVariable`, `pushToHistory` y las acciones de
+  `ladderFlowActions` siguieron el mismo patrón de selector puntual.
+
+### Verificación
+
+- `npx tsc --noEmit`: sin errores.
+- `npx eslint` sobre el archivo: 4 warnings de `exhaustive-deps`, confirmados
+  como preexistentes (idénticos antes y después del cambio vía `git stash`).
+- `npx prettier --check`: sin issues.
+- `npm run build:renderer`: compila limpio.
+- Pendiente: verificación manual del usuario reproduciendo el flujo exacto
+  (depurador activado → desactivado → editar `PV` de un `CTU` con la señal
+  de entrada marcada `debug: true` → clic afuera) para confirmar que ya no
+  truena.
+
+### Pendiente / a vigilar
+
+Con esto ya se auditaron todos los componentes de canvas mencionados en las
+rondas 1 y 2 (`variable`, `coil`, `contact`, `block`). Lo que sigue sin
+auditar, tal como quedó anotado en la ronda 2:
+- Componentes específicos de JWPLC (backplane, VPP, remote IO) que puedan
+  montar `GenericComboboxCell`/`GenericTextareaCell` (Radix `DropdownMenu`
+  por fila) en sus propias tablas.
+- Cualquier otro componente montado por fila/nodo que llame
+  `useOpenPLCStore()` sin selector — hay más de 100 en el proyecto; solo se
+  auditan cuando además combinan un primitivo Radix que compone refs o un
+  patrón de polling activo (como el de depuración) que no depende de
+  visibilidad de UI.
+
+Si vuelve a aparecer este error, revisar primero si el componente señalado
+está montado por fila/nodo y si depende de un estado que cambia por
+**polling** (no solo por interacción del usuario) — el polling de depuración
+sigue corriendo con el panel oculto, así que "el depurador está cerrado" no
+descarta este patrón.
+
+### Seguimiento — el fix de `block.tsx` ayudó pero no fue la causa completa
+
+**Fecha:** 2026-09-19
+
+El usuario confirmó que, tras el fix de arriba, el flujo reportado tardó
+**mucho más tiempo** en volver a reproducirse (antes tronaba casi de
+inmediato; esta vez después de varios minutos de uso activo, varios ciclos
+de depurador ON/OFF/compilar, y finalmente editando el tiempo de otro
+contador). El stack trace del segundo crash es prácticamente idéntico al
+primero (`setRef` dentro de `Array.map` anidado dos veces, mismo componente
+`<ol>` de `ToastProvider`/`Toaster` en la traza de componentes).
+
+Esto indica que el fix de `block.tsx` fue una mejora real (redujo la
+frecuencia de re-renders innecesarios) pero **no la causa completa** — debe
+quedar al menos un componente más con el mismo patrón (montado por
+fila/nodo + suscripción sin selector + posiblemente un primitivo Radix) que
+no se identificó con certeza vía análisis estático del bundle minificado
+(el nombre de archivo/componente real no sobrevive en `renderer.dev.js`,
+solo nombres de función internos de Radix como `setRef`).
+
+Se investigaron y descartaron como culpables directos (ya usan selectores
+correctos o no tienen primitivos Radix con composición de refs):
+`ladder/handle.tsx`, `use-debug-value.ts`, `use-debug-composite-key.ts`,
+`use-runtime-polling.ts`, `_features/.../elements/ladder/coil|contact/index.tsx`
+(modales, pero montados una sola vez por editor, no por nodo),
+`_molecules/graphical-editor/ladder/rung/header.tsx`, `use-toast.tsx`,
+`utils/toast.ts`.
+
+Se aplicó preventivamente el mismo fix a `fbd/block.tsx` (`BlockNodeElement`
+y `Block`), que tenía el patrón idéntico (incluyendo una suscripción extra a
+`project` completo) — el equivalente FBD de `ladder/block.tsx`, nunca
+auditado tampoco.
+
+#### Red de seguridad: Error Boundary
+
+Dado que esta es la 4ta vez que aparece esta familia de bug pese a 3 rondas
+de fixes dirigidos, se agregó `src/frontend/components/_atoms/error-boundary/index.tsx`
+— un React error boundary de clase (React solo soporta esto vía
+`componentDidCatch`/`getDerivedStateFromError`, no hay equivalente con
+hooks) — montado en `app-layout.tsx` envolviendo únicamente `{children}`
+(el contenido de `StartScreen`/`WorkspaceScreen`). `Toaster`, el stack de
+modales y `AcceleratorHandler` quedan **fuera** del boundary a propósito,
+para que sigan funcionando aunque el workspace truene.
+
+Esto no corrige la causa raíz restante, pero convierte un crash total (app
+congelada, hay que matar el proceso) en una pantalla recuperable con botón
+de "Reload" — el estado del proyecto vive en Zustand fuera de React, así
+que no se pierde con el crash de un subárbol.
+
+#### Pendiente real
+
+La causa raíz completa sigue sin confirmarse con certeza. Si vuelve a
+aparecer:
+1. Abrir DevTools con "Pause on exceptions" activado antes de reproducir, o
+   usar el profiler de React DevTools grabando durante la reproducción —
+   esto da nombres de componente reales en vez de offsets del bundle.
+2. Con el Error Boundary ahora en su lugar, el mensaje de error completo
+   queda en la consola (`[ErrorBoundary] Caught render crash:`) con el
+   component stack — copiar ese log completo es más útil que la captura de
+   pantalla del overlay de React, que trunca la traza.
+
+### Cierre — verificación extendida del usuario, sin reproducir
+
+**Fecha:** 2026-09-19
+
+Sesión de verificación manual extensa: edición de bloques → compilar →
+depurador ON → depurador OFF → volver a editar → compilar → depurador ON de
+nuevo, repetido varias veces, incluyendo agregar elementos nuevos al
+diagrama entre ciclos. El crash **no volvió a reproducirse** en ningún
+punto de la sesión.
+
+Con el fix de `ladder/block.tsx` (causa principal, confirmada por el salto
+de "tronaba casi de inmediato" a "tardó varios minutos") más el fix
+preventivo de `fbd/block.tsx` (mismo patrón, nunca auditado), el caso
+reportado queda resuelto para el flujo probado. El Error Boundary
+(`_atoms/error-boundary`) queda en su lugar como red de seguridad
+permanente — no se retira aunque el bug puntual esté cerrado, porque cubre
+cualquier otra instancia futura de esta misma familia de crash (hay >100
+usos de `useOpenPLCStore()` sin selector en el proyecto sin auditar, según
+quedó anotado arriba).
+
+**Estado:** Cerrado para este flujo. Sigue en pie la nota de la ronda 2/3:
+si reaparece `Maximum update depth exceeded`, buscar primero un componente
+montado por fila/nodo con una suscripción al store sin selector cerca de un
+primitivo Radix o de un estado que cambia por polling.

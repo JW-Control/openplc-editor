@@ -1,4 +1,4 @@
-import { FocusEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { PLCVariable } from '../../../../../middleware/shared/ports/types'
@@ -49,18 +49,17 @@ export const BlockNodeElement = <T extends object>({
 }) => {
   const pouName = useBoundPou()
   const editor = useBoundEditorModel()
-  const {
-    editorActions: { updateModelVariables, updateModelFBD },
-    libraries,
-    fbdFlows,
-    fbdFlowActions: { setNodes, setEdges },
-    project,
-    project: {
-      data: { pous },
-    },
-    projectActions: { updateVariable, deleteVariable },
-    snapshotActions: { pushToHistory },
-  } = useOpenPLCStore()
+  // Mounted once per block node on the canvas — same risk pattern documented
+  // for ladder/block.tsx in UPDATE.md (ronda 3). `pous`/`fbdFlows` are read
+  // synchronously below during render, so they stay reactive via their own
+  // selector; `libraries` is only used inside handleNameInputOnBlur, so it's
+  // read via getState() there instead of subscribed to reactively.
+  const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+  const fbdFlows = useOpenPLCStore(useCallback((s) => s.fbdFlows, []))
+  const { updateModelVariables, updateModelFBD } = useOpenPLCStore(useCallback((s) => s.editorActions, []))
+  const { setNodes, setEdges } = useOpenPLCStore(useCallback((s) => s.fbdFlowActions, []))
+  const { updateVariable, deleteVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
+  const { pushToHistory } = useOpenPLCStore(useCallback((s) => s.snapshotActions, []))
 
   const {
     name: blockName,
@@ -119,6 +118,7 @@ export const BlockNodeElement = <T extends object>({
       return
     }
 
+    const { libraries } = useOpenPLCStore.getState()
     const libraryBlock = libraries.system.flatMap((block) => block.pous).find((pou) => pou.name === blockNameValue)
 
     if (!libraryBlock) {
@@ -150,7 +150,7 @@ export const BlockNodeElement = <T extends object>({
         title: '',
       }
 
-      const pouData = project.data.pous.find((p) => p.name === pouName)
+      const pouData = pous.find((p) => p.name === pouName)
       pushToHistory(pouName, {
         variables: pouData?.interface?.variables ?? [],
         body: pouData?.body.value,
@@ -240,7 +240,7 @@ export const BlockNodeElement = <T extends object>({
       newEdges = newEdges.map((e) => (e.id === edge.id ? newEdge : e))
     })
 
-    const pouData2 = project.data.pous.find((p) => p.name === pouName)
+    const pouData2 = pous.find((p) => p.name === pouName)
     pushToHistory(pouName, {
       variables: pouData2?.interface?.variables ?? [],
       body: pouData2?.body.value,
@@ -346,17 +346,13 @@ const EXECUTION_ORDER_BADGE_INSET = BLOCK_CORNER_RADIUS / 2
 export const Block = <T extends object>(block: BlockProps<T>) => {
   const { data, dragging, height, width, selected, id } = block
   const pouName = useBoundPou()
-  const {
-    project,
-    project: {
-      data: { pous },
-    },
-    projectActions: { createVariable },
-    snapshotActions: { pushToHistory },
-    libraries: { user: userLibraries },
-    fbdFlows,
-    fbdFlowActions: { updateNode, setNodes, setEdges },
-  } = useOpenPLCStore()
+  // Mounted once per block node — same risk as BlockNodeElement above.
+  const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+  const fbdFlows = useOpenPLCStore(useCallback((s) => s.fbdFlows, []))
+  const userLibraries = useOpenPLCStore(useCallback((s) => s.libraries.user, []))
+  const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
+  const { pushToHistory } = useOpenPLCStore(useCallback((s) => s.snapshotActions, []))
+  const { updateNode, setNodes, setEdges } = useOpenPLCStore(useCallback((s) => s.fbdFlowActions, []))
   const { type: blockType } = (data.variant as BlockVariant) ?? DEFAULT_BLOCK_TYPE
   const documentation = getBlockDocumentation(data.variant as BlockVariant)
 
@@ -530,7 +526,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
           updateNodeVariable({ name: variableNameToSubmit })
           return
         }
-        const pouData = project.data.pous.find((p) => p.name === pouName)
+        const pouData = pous.find((p) => p.name === pouName)
         pushToHistory(pouName, {
           variables: pouData?.interface?.variables ?? [],
           body: pouData?.body.value,

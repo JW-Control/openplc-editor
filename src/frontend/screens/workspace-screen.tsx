@@ -14,6 +14,7 @@ import {
 } from '../../middleware/shared/providers'
 import { ExitIcon } from '../assets/icons/interface/Exit'
 import { ClearConsoleButton } from '../components/_atoms/buttons/console/clear-console'
+import { ConsoleDockToggleButton } from '../components/_atoms/buttons/console/dock-toggle'
 import { BranchStatusBar } from '../components/_features/[workspace]/branches'
 import { DataTypeEditor } from '../components/_features/[workspace]/data-type'
 import { DeviceEditor } from '../components/_features/[workspace]/editor/device'
@@ -45,6 +46,7 @@ import { VariablesEditor } from '../components/_organisms/variables-editor'
 import { WorkspaceActivityBar } from '../components/_organisms/workspace-activity-bar'
 import { WorkspaceMainContent } from '../components/_templates/[workspace]/main-content'
 import { WorkspaceSideContent } from '../components/_templates/[workspace]/side-content'
+import { useConsoleDockPosition } from '../hooks/use-console-dock-position'
 import {
   useDebugBoolValuesMap,
   useDebugForcedVariablesMap,
@@ -317,6 +319,8 @@ const WorkspaceScreen = () => {
   const [activeTab, setActiveTab] = useState('console')
   const consoleFollowRequestId = useOpenPLCStore((state) => state.followRequestId)
   const hasSearchResults = searchResults.length > 0
+  const { dockPosition: consoleDockPosition, toggleDockPosition: toggleConsoleDockPosition } = useConsoleDockPosition()
+  const isConsoleDockedRight = consoleDockPosition === 'right'
 
   const togglePanel = () => {
     if (panelRef.current) {
@@ -442,6 +446,131 @@ const WorkspaceScreen = () => {
       cancelled = true
     }
   }, [packagesPort, projectPath, addLog])
+
+  // Console/Debugger/Search/PLC-Logs tab content, shared between the two
+  // dock positions (bottom, nested under the editor; right, a full-height
+  // sibling panel) so toggling the dock never duplicates this JSX.
+  const consolePanelTabs = (
+    <Tabs.Root
+      value={activeTab}
+      onValueChange={setActiveTab}
+      className='relative flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden'
+    >
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <Tabs.List className='flex h-7 w-auto shrink-0 select-none gap-4'>
+          <Tabs.Trigger
+            value='console'
+            className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
+          >
+            Console
+          </Tabs.Trigger>
+          {isDebuggerVisible && (
+            <Tabs.Trigger
+              value='debug'
+              className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
+            >
+              Debugger
+            </Tabs.Trigger>
+          )}
+          {hasSearchResults && (
+            <Tabs.Trigger
+              value='search'
+              className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
+            >
+              Search
+            </Tabs.Trigger>
+          )}
+          {isPlcLogsVisible && (
+            <Tabs.Trigger
+              value='plc-logs'
+              className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
+            >
+              PLC Logs
+            </Tabs.Trigger>
+          )}
+        </Tabs.List>
+        <div className='flex flex-wrap items-center justify-end gap-2'>
+          {activeTab === 'console' && (
+            <>
+              <ConsoleFilters />
+              <ClearConsoleButton />
+            </>
+          )}
+          {activeTab === 'plc-logs' && (
+            <>
+              <PlcLogsFilters />
+              <ClearConsoleButton
+                onClear={clearPlcLogs}
+                isEmpty={typeof plcLogs === 'string' ? plcLogs.length === 0 : plcLogs.length === 0}
+                label='Clear logs'
+              />
+            </>
+          )}
+          <ConsoleDockToggleButton dockPosition={consoleDockPosition} onToggle={toggleConsoleDockPosition} />
+        </div>
+      </div>
+      <Tabs.Content
+        aria-label='Console panel content'
+        value='console'
+        className='flex h-full min-h-0 w-full flex-col overflow-hidden p-2 data-[state=inactive]:hidden'
+      >
+        <ConsoleComponent />
+      </Tabs.Content>
+      {isDebuggerVisible && (
+        <Tabs.Content
+          value='debug'
+          className='debug-panel flex h-full w-full overflow-hidden data-[state=inactive]:hidden'
+        >
+          <ResizablePanelGroup
+            direction={isConsoleDockedRight ? 'vertical' : 'horizontal'}
+            className='flex h-full w-full'
+          >
+            <ResizablePanel minSize={15} defaultSize={20} className='h-full w-full'>
+              <VariablesPanel
+                variables={debugVariables}
+                variableTree={filteredDebugVariableTree}
+                graphList={graphList}
+                setGraphList={setGraphList}
+                debugBoolValues={debugBoolValues}
+                debugNonBoolValues={debugNonBoolValues}
+                debugVariableIndexes={debugVariableIndexes}
+                debugForcedVariables={debugForcedVariables}
+                debugExpandedNodes={debugExpandedNodes}
+                onToggleExpandedNode={toggleDebugExpandedNode}
+                isDebuggerVisible={isDebuggerVisible}
+                onForceVariable={handleForceVariable}
+              />
+            </ResizablePanel>
+            <ResizableHandle className={isConsoleDockedRight ? 'h-2 bg-transparent' : 'w-2 bg-transparent'} />
+            <ResizablePanel minSize={20} defaultSize={80} className='h-full w-full'>
+              <Debugger graphList={graphList} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </Tabs.Content>
+      )}
+      {hasSearchResults && (
+        <Tabs.Content
+          value='search'
+          className='debug-panel flex  h-full w-full overflow-hidden  data-[state=inactive]:hidden'
+        >
+          <ResizablePanelGroup direction='horizontal' className='flex h-full w-full'>
+            <ResizablePanel minSize={20} defaultSize={100} className='h-full w-full'>
+              <Search items={searchResults} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </Tabs.Content>
+      )}
+      {isPlcLogsVisible && (
+        <Tabs.Content
+          aria-label='PLC Logs panel content'
+          value='plc-logs'
+          className='flex h-full min-h-0 w-full flex-col overflow-hidden p-2 data-[state=inactive]:hidden'
+        >
+          <PlcLogs />
+        </Tabs.Content>
+      )}
+    </Tabs.Root>
+  )
 
   return (
     <div className='flex h-full w-full flex-col overflow-hidden bg-brand-dark dark:bg-neutral-950'>
@@ -704,138 +833,53 @@ const WorkspaceScreen = () => {
                         No tabs open
                       </p>
                     )}
-                    <ResizableHandle
-                      id='consoleResizeHandle'
-                      hitAreaMargins={{ coarse: 12, fine: 3 }}
-                      style={{ height: '2px', width: 'calc(100% - 16px)' }}
-                      className={`absolute bottom-0 left-0 mx-2 transition-colors duration-200 data-[resize-handle-active="pointer"]:bg-brand-light data-[resize-handle-state="hover"]:bg-brand-light data-[resize-handle-active="pointer"]:dark:bg-neutral-700 data-[resize-handle-state="hover"]:dark:bg-neutral-700`}
-                    />
+                    {!isConsoleDockedRight && (
+                      <ResizableHandle
+                        id='consoleResizeHandle'
+                        hitAreaMargins={{ coarse: 12, fine: 3 }}
+                        style={{ height: '2px', width: 'calc(100% - 16px)' }}
+                        className={`absolute bottom-0 left-0 mx-2 transition-colors duration-200 data-[resize-handle-active="pointer"]:bg-brand-light data-[resize-handle-state="hover"]:bg-brand-light data-[resize-handle-active="pointer"]:dark:bg-neutral-700 data-[resize-handle-state="hover"]:dark:bg-neutral-700`}
+                      />
+                    )}
                   </ResizablePanel>
 
-                  <ResizablePanel
-                    ref={consolePanelRef}
-                    id='consolePanel'
-                    order={2}
-                    collapsible
-                    defaultSize={31}
-                    minSize={22}
-                    className='min-h-0 flex-1 grow rounded-lg border-2 border-neutral-200 bg-white p-4 data-[panel-size="0.0"]:hidden dark:border-neutral-800 dark:bg-neutral-950'
-                  >
-                    <Tabs.Root
-                      value={activeTab}
-                      onValueChange={setActiveTab}
-                      className='relative flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden'
+                  {!isConsoleDockedRight && (
+                    <ResizablePanel
+                      ref={consolePanelRef}
+                      id='consolePanel'
+                      order={2}
+                      collapsible
+                      defaultSize={31}
+                      minSize={22}
+                      className='min-h-0 flex-1 grow rounded-lg border-2 border-neutral-200 bg-white p-4 data-[panel-size="0.0"]:hidden dark:border-neutral-800 dark:bg-neutral-950'
                     >
-                      <Tabs.List className='flex h-7 w-64 select-none gap-4'>
-                        <Tabs.Trigger
-                          value='console'
-                          className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
-                        >
-                          Console
-                        </Tabs.Trigger>
-                        {isDebuggerVisible && (
-                          <Tabs.Trigger
-                            value='debug'
-                            className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
-                          >
-                            Debugger
-                          </Tabs.Trigger>
-                        )}
-                        {hasSearchResults && (
-                          <Tabs.Trigger
-                            value='search'
-                            className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
-                          >
-                            Search
-                          </Tabs.Trigger>
-                        )}
-                        {isPlcLogsVisible && (
-                          <Tabs.Trigger
-                            value='plc-logs'
-                            className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
-                          >
-                            PLC Logs
-                          </Tabs.Trigger>
-                        )}
-                      </Tabs.List>
-                      <Tabs.Content
-                        aria-label='Console panel content'
-                        value='console'
-                        className='flex h-full min-h-0 w-full flex-col overflow-hidden p-2 data-[state=inactive]:hidden'
-                      >
-                        <ConsoleComponent />
-                      </Tabs.Content>
-                      {isDebuggerVisible && (
-                        <Tabs.Content
-                          value='debug'
-                          className='debug-panel flex h-full w-full overflow-hidden data-[state=inactive]:hidden'
-                        >
-                          <ResizablePanelGroup direction='horizontal' className='flex h-full w-full'>
-                            <ResizablePanel minSize={15} defaultSize={20} className='h-full w-full'>
-                              <VariablesPanel
-                                variables={debugVariables}
-                                variableTree={filteredDebugVariableTree}
-                                graphList={graphList}
-                                setGraphList={setGraphList}
-                                debugBoolValues={debugBoolValues}
-                                debugNonBoolValues={debugNonBoolValues}
-                                debugVariableIndexes={debugVariableIndexes}
-                                debugForcedVariables={debugForcedVariables}
-                                debugExpandedNodes={debugExpandedNodes}
-                                onToggleExpandedNode={toggleDebugExpandedNode}
-                                isDebuggerVisible={isDebuggerVisible}
-                                onForceVariable={handleForceVariable}
-                              />
-                            </ResizablePanel>
-                            <ResizableHandle className='w-2 bg-transparent' />
-                            <ResizablePanel minSize={20} defaultSize={80} className='h-full w-full'>
-                              <Debugger graphList={graphList} />
-                            </ResizablePanel>
-                          </ResizablePanelGroup>
-                        </Tabs.Content>
-                      )}
-                      {hasSearchResults && (
-                        <Tabs.Content
-                          value='search'
-                          className='debug-panel flex  h-full w-full overflow-hidden  data-[state=inactive]:hidden'
-                        >
-                          <ResizablePanelGroup direction='horizontal' className='flex h-full w-full'>
-                            <ResizablePanel minSize={20} defaultSize={100} className='h-full w-full'>
-                              <Search items={searchResults} />
-                            </ResizablePanel>
-                          </ResizablePanelGroup>
-                        </Tabs.Content>
-                      )}
-                      {isPlcLogsVisible && (
-                        <Tabs.Content
-                          aria-label='PLC Logs panel content'
-                          value='plc-logs'
-                          className='flex h-full min-h-0 w-full flex-col overflow-hidden p-2 data-[state=inactive]:hidden'
-                        >
-                          <PlcLogs />
-                        </Tabs.Content>
-                      )}
-                      {activeTab === 'console' && (
-                        <div className='absolute right-2 top-1 flex items-center gap-2'>
-                          <ConsoleFilters />
-                          <ClearConsoleButton />
-                        </div>
-                      )}
-                      {activeTab === 'plc-logs' && (
-                        <div className='absolute right-2 top-1 flex items-center gap-2'>
-                          <PlcLogsFilters />
-                          <ClearConsoleButton
-                            onClear={clearPlcLogs}
-                            isEmpty={typeof plcLogs === 'string' ? plcLogs.length === 0 : plcLogs.length === 0}
-                            label='Clear logs'
-                          />
-                        </div>
-                      )}
-                    </Tabs.Root>
-                  </ResizablePanel>
+                      {consolePanelTabs}
+                    </ResizablePanel>
+                  )}
                 </ResizablePanelGroup>
               </div>
             </ResizablePanel>
+            {isConsoleDockedRight && (
+              <>
+                <ResizableHandle
+                  id='consoleDockHandle'
+                  hitAreaMargins={{ coarse: 12, fine: 3 }}
+                  className='z-[99] my-[2px] w-[4px] py-2 transition-colors duration-200 data-[resize-handle-active="pointer"]:bg-brand-light data-[resize-handle-state="hover"]:bg-brand-light data-[resize-handle-active="pointer"]:dark:bg-neutral-700 data-[resize-handle-state="hover"]:dark:bg-neutral-700'
+                />
+                <ResizablePanel
+                  ref={consolePanelRef}
+                  id='consolePanel'
+                  order={3}
+                  collapsible
+                  defaultSize={30}
+                  minSize={22}
+                  maxSize={55}
+                  className='relative flex h-full min-h-0 w-full flex-1 grow flex-col rounded-lg border-2 border-neutral-200 bg-white p-4 data-[panel-size="0.0"]:hidden dark:border-neutral-800 dark:bg-neutral-950'
+                >
+                  {consolePanelTabs}
+                </ResizablePanel>
+              </>
+            )}
             {ChatPanel && capabilities.hasAIAssistant && isChatOpen && isAIEnabled && hasAIConsented && (
               <>
                 <ResizableHandle
@@ -845,7 +889,7 @@ const WorkspaceScreen = () => {
                 />
                 <ResizablePanel
                   id='chatPanel'
-                  order={3}
+                  order={4}
                   defaultSize={30}
                   minSize={20}
                   maxSize={50}

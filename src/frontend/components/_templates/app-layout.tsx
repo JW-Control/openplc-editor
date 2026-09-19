@@ -4,6 +4,7 @@ import { useCapabilities, useProject, useSystem, useTheme } from '../../../middl
 import { useOpenPLCStore } from '../../store'
 import type { RungLadderState } from '../../store/slices/ladder'
 import { cn } from '../../utils/cn'
+import { ErrorBoundary } from '../_atoms/error-boundary'
 import { ResolutionWarning } from '../_atoms/resolution-warning-message'
 import Toaster from '../_features/[app]/toast/toaster'
 import { ProjectModal } from '../_features/[start]/new-project/project-modal'
@@ -96,7 +97,7 @@ const AppLayout = ({ children, ...rest }: AppLayoutProps): ReactNode => {
           )}
           {...rest}
         >
-          {children}
+          <ErrorBoundary>{children}</ErrorBoundary>
           <Toaster />
           {modals?.['create-project']?.open === true && <ProjectModal isOpen={modals['create-project'].open} />}
           {modals?.['save-changes-project']?.open === true && (

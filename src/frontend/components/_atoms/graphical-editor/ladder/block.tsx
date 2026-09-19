@@ -1,4 +1,4 @@
-import { FocusEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { PLCVariable } from '../../../../../middleware/shared/ports'
@@ -59,17 +59,16 @@ export const BlockNodeElement = <T extends object>({
 }) => {
   const pouName = useBoundPou()
   const editor = useBoundEditorModel()
-  const {
-    editorActions: { updateModelVariables },
-    libraries,
-    ladderFlows,
-    ladderFlowActions: { setNodes, setEdges, setHandleBranches },
-    project: {
-      data: { pous },
-    },
-    projectActions: { updateVariable, deleteVariable },
-    snapshotActions: { pushToHistory },
-  } = useOpenPLCStore()
+  // Mounted once per block node on the canvas — an unselected useOpenPLCStore()
+  // here re-renders every block on every store change (e.g. every debug poll
+  // tick), which is the exact "Maximum update depth exceeded" pattern
+  // documented in UPDATE.md. `libraries`/`pous`/`ladderFlows` are only read
+  // inside handleNameInputOnBlur (never during render), so they're read via
+  // getState() there instead of subscribed to reactively.
+  const { updateModelVariables } = useOpenPLCStore(useCallback((s) => s.editorActions, []))
+  const { setNodes, setEdges, setHandleBranches } = useOpenPLCStore(useCallback((s) => s.ladderFlowActions, []))
+  const { updateVariable, deleteVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
+  const { pushToHistory } = useOpenPLCStore(useCallback((s) => s.snapshotActions, []))
 
   const {
     name: blockName,
@@ -165,6 +164,14 @@ export const BlockNodeElement = <T extends object>({
     if (blockNameValue === blockName) {
       return
     }
+
+    const {
+      libraries,
+      project: {
+        data: { pous },
+      },
+      ladderFlows,
+    } = useOpenPLCStore.getState()
 
     const libraryBlock = resolveLibraryBlock(blockNameValue, libraries, pous)
 
@@ -405,16 +412,22 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
   const { data, dragging, height, width, selected, id } = block
 
   const pouName = useBoundPou()
+  // Mounted once per block node — same risk as BlockNodeElement above.
+  // `pous`/`ladderFlows` ARE read synchronously during render (via
+  // getLadderPouVariablesRungNodeAndEdges below), so unlike the handler-only
+  // fields in BlockNodeElement, they stay reactive here — just scoped to
+  // their own selector instead of subscribing to the whole store.
+  const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+  const ladderFlows = useOpenPLCStore(useCallback((s) => s.ladderFlows, []))
+  const userLibraries = useOpenPLCStore(useCallback((s) => s.libraries.user, []))
+  const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
+  const { pushToHistory } = useOpenPLCStore(useCallback((s) => s.snapshotActions, []))
   const {
-    project: {
-      data: { pous },
-    },
-    projectActions: { createVariable },
-    snapshotActions: { pushToHistory },
-    libraries: { user: userLibraries },
-    ladderFlows,
-    ladderFlowActions: { updateNode, setNodes, setEdges, setHandleBranches: setHandleBranchesBlock },
-  } = useOpenPLCStore()
+    updateNode,
+    setNodes,
+    setEdges,
+    setHandleBranches: setHandleBranchesBlock,
+  } = useOpenPLCStore(useCallback((s) => s.ladderFlowActions, []))
   const { type: blockType } = (data.variant as BlockVariant) ?? DEFAULT_BLOCK_TYPE
   const documentation = getBlockDocumentation(data.variant as newBlockVariant)
 
