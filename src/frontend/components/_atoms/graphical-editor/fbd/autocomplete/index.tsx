@@ -1,5 +1,5 @@
 import { Node } from '@xyflow/react'
-import { ComponentPropsWithRef, forwardRef, useEffect, useMemo, useState } from 'react'
+import { ComponentPropsWithRef, forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { PLCVariable } from '../../../../../../middleware/shared/ports/types'
 import {
@@ -31,14 +31,14 @@ type FBDBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
 const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProps>(
   ({ block: unknownBlock, isOpen, setIsOpen, keyPressed, valueToSearch }: FBDBlockAutoCompleteProps, ref) => {
     const pouName = useBoundPou()
-    const {
-      project: {
-        data: { pous },
-      },
-      projectActions: { createVariable },
-      fbdFlows,
-      fbdFlowActions: { updateNode, addNode },
-    } = useOpenPLCStore()
+    // Mounted whenever an FBD box's name field is opened for editing — same
+    // risk pattern as the ladder autocomplete (see UPDATE.md). `pous`/
+    // `fbdFlows` are read during render just below, so they stay reactive
+    // via their own selector instead of an unselected whole-store subscription.
+    const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+    const fbdFlows = useOpenPLCStore(useCallback((s) => s.fbdFlows, []))
+    const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
+    const { updateNode, addNode } = useOpenPLCStore(useCallback((s) => s.fbdFlowActions, []))
 
     const block = unknownBlock as Node<BasicNodeData> & { positionAbsoluteX?: number; positionAbsoluteY?: number }
     const { edges, rung } = useMemo(() => {

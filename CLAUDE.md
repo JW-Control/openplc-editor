@@ -490,3 +490,72 @@ itself via `addEventListener('wheel', handler, { passive: false, capture:
 true })`, so Ctrl+Scroll actually gets suppressed and reaches this hook
 before the widget underneath (e.g. Monaco's own scroll handling) ever sees
 it.
+
+---
+
+### 5. Feature: Console/Debugger dockable to the right (not just the bottom)
+
+> [!NOTE]
+> Full write-up in [`UPDATE.md`](./UPDATE.md) at the repo root
+> ("Feature: Console/Debugger acoplable a la derecha").
+
+Added `useConsoleDockPosition` (`src/frontend/hooks/use-console-dock-position.ts`,
+localStorage-persisted, defaults to `'right'` until the user picks a side)
+and a toggle button (`_atoms/buttons/console/dock-toggle.tsx`) so the
+Console/Debugger/Search/PLC-Logs panel can sit either under the editor
+(original layout) or as a full-height panel beside it — lets the Ladder
+canvas stay visible while watching debug output. `workspace-screen.tsx`
+extracted the shared tab content into one JSX block rendered in either of
+two `ResizablePanel` locations depending on dock position.
+
+Two follow-on bugs from this feature (both fixed, see UPDATE.md for
+detail): the dock-toggle button was hidden behind the Filters/Clear-console
+buttons (both used `position: absolute` in the same corner), and in a
+narrow right-docked panel the whole button row could get clipped instead of
+wrapping (`Tabs.List` had a fixed `w-64` regardless of how many tabs were
+actually visible). A third, more serious layout bug from this feature is
+covered under item 6 below (panel sizes summing past 100%).
+
+---
+
+### 6. Debugger line-chart fixes: step curve, Y-axis alignment, an ApexCharts crash, and animation jitter
+
+> [!NOTE]
+> Full write-up, including two reverted intermediate fixes and how the real
+> root cause was found by reading ApexCharts' own source, in
+> [`UPDATE.md`](./UPDATE.md) at the repo root ("Ronda 5: gráficas del
+> depurador").
+
+`src/frontend/components/_molecules/charts/line-chart.tsx` (wraps
+`react-apexcharts`) had several issues surfaced together while debugging a
+`CTU` counter's `CV`:
+
+- **Curve type**: numeric series used `stroke.curve: 'smooth'`, implying
+  interpolated values that never existed for scan-cycle data (which updates
+  once per tick, not continuously). Fixed to `'stepline'` for every series,
+  BOOL or numeric.
+- **BOOL Y-axis misalignment**: `yaxis.min/max` had padding (`-0.2`/`1.2`)
+  baked in so the gridlines never actually landed on 0/1. Fixed to `min: 0,
+  max: 1` (unpadded); `tickAmount` stayed at the original `2` — dropping it
+  to `1` was tried and reverted as a suspected trigger for the crash below.
+- **A real crash** (`Cannot read properties of undefined (reading 'left')`
+  inside ApexCharts' `Dimensions`/`XAxis` dimension math, repeating on every
+  render) turned out to be caused by `grid.padding: undefined` explicitly
+  passed for numeric series — ApexCharts' options merge does **not** treat
+  an explicit `undefined` value the same as an absent key for object-shaped
+  config, so it overwrote the library's internal default padding object
+  with a literal `undefined`. **Never pass `undefined` as the value of an
+  object-shaped ApexCharts option** (primitives like `min`/`max` are fine —
+  the pre-existing code already did that safely). Found by grepping the
+  method name from the crash's stack trace inside
+  `node_modules/apexcharts/src/modules/dimensions/`, not by guessing from
+  the minified bundle.
+- **A contributing layout bug**: the dock-right feature (item 5) didn't
+  reduce `workspacePanel`'s `defaultSize` to make room for the new console
+  panel, so panel sizes summed to 114% of the available width, triggering
+  `react-resizable-panels`' own "Invalid layout total size" renormalization
+  right before the crash. Fixed alongside the ApexCharts root cause.
+- **Animation jitter**: `chart.animations` (500ms eased transitions) fought
+  visually with the chart's real-time sliding time window on every step
+  change. Fixed by disabling animations entirely — an oscilloscope-style
+  trace needs each sample to snap in immediately.

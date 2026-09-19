@@ -616,6 +616,13 @@ const WorkspaceScreen = () => {
         <WorkspaceMainContent>
           <ResizablePanelGroup
             id='mainContentPanelGroup'
+            // Remount the whole group on dock toggle: `defaultSize` on a
+            // react-resizable-panels Panel only applies at first mount, so
+            // without a fresh key the panels keep their old percentages and
+            // the newly-added/removed console-right panel pushes the total
+            // past 100% — the exact "Invalid layout total size" warning that
+            // preceded the ApexCharts container-dimension crash.
+            key={isConsoleDockedRight ? 'dock-right' : 'dock-bottom'}
             direction='horizontal'
             className='relative flex h-full w-full'
           >
@@ -636,7 +643,9 @@ const WorkspaceScreen = () => {
             <ResizablePanel
               id='workspacePanel'
               order={2}
-              defaultSize={68}
+              // Leave room for the console-right panel (30%) so Explorer +
+              // workspace + console-right sum to ~100% instead of 114%.
+              defaultSize={isConsoleDockedRight ? 54 : 68}
               minSize={50}
               className='flex h-full min-h-0 overflow-hidden'
             >

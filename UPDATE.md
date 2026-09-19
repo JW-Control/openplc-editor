@@ -621,3 +621,392 @@ quedó anotado arriba).
 si reaparece `Maximum update depth exceeded`, buscar primero un componente
 montado por fila/nodo con una suscripción al store sin selector cerca de un
 primitivo Radix o de un estado que cambia por polling.
+
+---
+
+## Actualización — ronda 4: causa real encontrada — `ladder/autocomplete/index.tsx`
+
+**Fecha:** 2026-09-19
+**Rama:** `integration/jwplc-alpha7-alpha12-upstream`
+
+### Resumen
+
+El "cierre" de arriba fue prematuro. El usuario reprodujo el crash de nuevo,
+esta vez con un repro **100% directo y no-flaky**, sin depurador de por
+medio: proyecto nuevo → colocar una bobina → hacer clic en el campo de
+nombre → **seleccionar una variable del autocompletado** → crash inmediato.
+
+Este repro, al ser instantáneo y determinístico (a diferencia de los de las
+rondas 1-3, que necesitaban minutos de uso acumulado), apuntó directo al
+componente correcto.
+
+### Causa raíz
+
+`VariablesBlockAutoComplete`
+(`src/frontend/components/_atoms/graphical-editor/ladder/autocomplete/index.tsx`)
+— el dropdown de autocompletado que se monta **cada vez que se abre el
+campo de nombre de una bobina, contacto, variable o bloque** — llamaba
+`useOpenPLCStore()` **sin selector**. Es el mismo patrón de siempre, pero
+esta vez en el componente que genera el propio evento que dispara el
+crash: al seleccionar un ítem, `submit()` → `submitVariableToBlock()` →
+`updateNode(...)` escribe en el store, y en el mismo instante el dropdown
+se cierra (`onBeforeSubmit` + `setIsOpen(false)` internos) — una ráfaga de
+varias actualizaciones de estado mientras el propio componente (con
+`pous`/`libraries`/`dataTypes` inestables en cada render) recalculaba
+`autocompleteItems` con arrays/objetos nuevos en cada pasada, alimentando
+referencias distintas al dropdown hijo (`GraphicalEditorAutocomplete`, que
+renderiza cada ítem con su propio ref para navegación con flechas) en cada
+uno de esos renders encadenados.
+
+A diferencia de las rondas 1-3 (que dependían de acumulación de elementos
+en el canvas + polling de depuración durante varios minutos), este
+componente se re-renderiza así **cada vez que se abre cualquier campo de
+nombre en el Ladder**, por lo que el repro es inmediato — es probablemente
+la causa dominante detrás de todas las reproducciones anteriores también,
+no solo un contribuyente más.
+
+### Cambios realizados
+
+`src/frontend/components/_atoms/graphical-editor/ladder/autocomplete/index.tsx`:
+- `pous`, `dataTypes`, `globalVariables` (antes `configurations.resource
+  ?.globalVariables`), `librariesSystem` (antes `libraries.system`): se
+  usan durante el render (en `autocompleteItems`/`allVariables`), así que
+  se quedaron reactivos pero con selector propio vía `useCallback`.
+- `createVariable`, `updateNode`: acciones, seleccionadas por namespace.
+- `ladderFlows`: solo se usaba dentro de los handlers de submit
+  (`submitVariableToBlock`, `submitAddVariable`), nunca en el render, así
+  que se saca de la suscripción reactiva y se lee con
+  `useOpenPLCStore.getState()` al inicio de cada handler.
+
+Se aplicó preventivamente el mismo fix a
+`src/frontend/components/_atoms/graphical-editor/fbd/autocomplete/index.tsx`
+(`FBDBlockAutoComplete`), el equivalente exacto para FBD, con el mismo
+patrón (`pous`/`fbdFlows` sin selector, usados en render).
+
+### Verificación
+
+- `npx tsc --noEmit`: sin errores.
+- `npx eslint` sobre ambos archivos: sin errores nuevos (1 warning
+  preexistente de `exhaustive-deps` en el archivo de ladder, confirmado
+  idéntico antes/después vía `git stash`).
+- `npx prettier --check`: sin issues tras `--write`.
+- `npm run build:renderer`: compila limpio.
+- Pendiente: verificación manual del usuario con el repro exacto (bobina
+  nueva → seleccionar variable del autocompletado) para confirmar cierre.
+
+### Nota para el futuro
+
+Cuando un crash de esta familia es **intermitente y depende de minutos de
+uso acumulado**, el culpable dominante puede seguir sin encontrarse aunque
+varios componentes contribuyentes ya se hayan arreglado — un fix que solo
+"alarga el tiempo para reproducir" es una señal de que se arregló *un*
+contribuyente, no *el* contribuyente. El repro más útil para este tipo de
+bug es el que un usuario puede disparar **de forma inmediata y
+determinística** desde un estado limpio (proyecto nuevo, sin pasos previos
+acumulados) — vale la pena pedir explícitamente ese tipo de repro antes de
+dar el caso por cerrado.
+
+### Pendiente sin resolver — repro de "eliminar + recrear bobina con mismo nombre"
+
+**Fecha:** 2026-09-19
+
+Después del fix de la ronda 4, el usuario reprodujo `Maximum update depth
+exceeded` **una vez más**, con un flujo distinto: depurador activado →
+desactivado → eliminar una bobina ("lampara") → colocar una bobina nueva en
+el mismo lugar → escribir el mismo nombre ("lampara") → crash. Vuelto a
+correr el mismo flujo después, **no se reprodujo** (intermitente).
+
+No se investigó a fondo — el usuario pidió posponerlo para atender primero
+el bug de las líneas de la gráfica del depurador (documentado abajo), y
+pidió que se reporte aquí para retomarlo si vuelve a aparecer. Pistas para
+la próxima vez:
+- El nombre reutilizado sugiere revisar el flujo de `submitAddVariable` en
+  `ladder/autocomplete/index.tsx` cuando el nombre tecleado **ya existe**
+  como declaración de variable (la bobina vieja se borra del canvas pero no
+  necesariamente borra la variable declarada) — en ese caso `submit()` debería
+  tomar la rama de "variable existente" (`submitVariableToBlock`) en vez de
+  `submitAddVariable`, pero vale la pena confirmar que efectivamente pasa así
+  y no hay una ventana donde ambas ramas compiten.
+- Pedir al usuario capturar el texto completo del overlay de webpack-dev-server
+  (fondo negro con franja roja "Error N of M") en vez de solo la consola —
+  ese overlay trae stack traces con *source maps* (nombres de archivo reales),
+  a diferencia de `renderer.dev.js:NNNNN` de la consola normal. Ya se probó
+  una vez en esta sesión (ver más abajo) y fue la única forma de encontrar la
+  causa raíz real de otro bug de esta misma sesión.
+
+---
+
+## Feature: Console/Debugger acoplable a la derecha (además de abajo)
+
+**Fecha:** 2026-09-19
+**Rama:** `integration/jwplc-alpha7-alpha12-upstream`
+
+### Resumen
+
+Pedido: poder mover el panel de Console/Debugger de su posición original
+(pegado abajo del editor, solo se agranda verticalmente) a un panel a la
+derecha del editor, de ancho completo, para aprovechar mejor la pantalla al
+depurar (mantener el Ladder visible a la vez que se ve el debugger). Debía
+poder alternarse manualmente con un ícono, y arrancar por defecto a la
+derecha (con la posición elegida persistiendo entre sesiones).
+
+### Archivos nuevos
+
+- `src/frontend/hooks/use-console-dock-position.ts` — hook con estado
+  `'bottom' | 'right'`, persistido en `localStorage` (mismo patrón que
+  `useCanvasZoom` para el nivel de zoom — es una preferencia de layout por
+  usuario, no estado de proyecto, así que no va en el store de Zustand).
+  Por defecto `'right'` si no hay preferencia guardada todavía; una vez que
+  el usuario la cambia manualmente, esa elección persiste y gana siempre.
+- `src/frontend/components/_atoms/buttons/console/dock-toggle.tsx` — botón
+  con ícono (`PanelRight`/`PanelBottom` de `lucide-react`) para alternar.
+
+### Cambios en `src/frontend/screens/workspace-screen.tsx`
+
+- El JSX de las pestañas Console/Debugger/Search/PLC-Logs (antes duplicado
+  si se hubiera necesitado en dos lugares) se extrajo a una constante
+  `consolePanelTabs` una sola vez, y se renderiza condicionalmente en dos
+  ubicaciones posibles: anidado dentro del `ResizablePanelGroup` vertical del
+  editor (dock abajo, layout original) o como panel hermano de ancho
+  completo dentro del `ResizablePanelGroup` horizontal principal (dock
+  derecha, junto al panel de chat de IA).
+- Dentro del tab de Debugger, el split Variables/Debugger cambia de
+  horizontal a vertical (apilado) cuando está acoplado a la derecha, porque
+  ese panel es más angosto que el ancho completo de abajo.
+- **Bug encontrado y arreglado en el camino:** el botón de toggle quedaba
+  tapado por los botones de "Filters"/"Clear console" en la pestaña Console,
+  porque ambos usaban `position: absolute` en la misma esquina. Se sacaron
+  del posicionamiento absoluto y se unificaron en una sola fila flex normal.
+- **Segundo bug encontrado:** con el panel acoplado a la derecha angosto, esa
+  misma fila desbordaba el contenedor y el botón de toggle quedaba
+  recortado/invisible sin agrandar la ventana. Causa: `Tabs.List` tenía un
+  ancho fijo `w-64` (256px) sin importar cuántas pestañas hubiera realmente
+  visibles. Se cambió a ancho automático (`w-auto`) y se agregó `flex-wrap`
+  como respaldo, para que el grupo de botones baje de línea en vez de
+  recortarse si aun así no cabe.
+- **Bug de layout (el más serio, ver sección de abajo):** al agregar el panel
+  derecho no se le restó espacio al panel del editor (`workspacePanel`),
+  causando que los tamaños de los paneles sumaran más de 100% del ancho —
+  ver "Ronda 5" más abajo, fue la causa real de un crash de ApexCharts.
+
+### Verificación
+
+- `npx tsc --noEmit`, `npx eslint`, `npx prettier --check`: limpios en cada
+  ronda de cambios.
+- `npm run build:renderer`: compila limpio.
+- Verificación manual del usuario en `npm run dev`: confirmó que el ícono de
+  dock funciona, que el panel derecho se ve completo (tras el fix de layout
+  de la ronda 5), y que la posición por defecto es a la derecha en un
+  perfil sin preferencia guardada.
+
+### Estado
+
+Cerrado. Ver la ronda 5 (abajo) para el bug de layout de paneles que este
+feature introdujo y que afectó al debugger.
+
+---
+
+## Ronda 5: gráficas del depurador — curva, ejes, crash de ApexCharts y layout
+
+**Fecha:** 2026-09-19
+**Rama:** `integration/jwplc-alpha7-alpha12-upstream`
+**Archivo principal:** `src/frontend/components/_molecules/charts/line-chart.tsx`
+(usa `react-apexcharts` / `apexcharts`)
+
+Esta ronda encadenó varios pedidos y bugs relacionados con las gráficas de
+`main:VARIABLE` del panel Debugger. Se documenta todo en orden porque las
+correcciones intermedias importan para no repetir los mismos callejones sin
+salida.
+
+### 1. Pedido inicial: el `CV` de un contador sube en curva, pero baja en escalón con el reset
+
+El valor de un contador (`CV`, entero, cambia una vez por ciclo de escaneo)
+se dibujaba con `stroke.curve: 'smooth'` (spline/bezier) para toda serie no
+booleana, mientras que las booleanas usaban `'stepline'`. Una curva suave
+implica valores intermedios interpolados que nunca existieron (p. ej. el
+`CV` "pasando" por 2.3, 2.7 entre ticks) — no representa lo que realmente
+pasa con una señal de PLC.
+
+**Fix:** `stroke.curve: 'stepline'` para **todas** las series, booleanas o
+numéricas — un valor de PLC es una función escalón por naturaleza (un
+salto por ciclo de escaneo), nunca una curva continua. Confirmado por el
+usuario como correcto y no se volvió a tocar en el resto de la ronda.
+
+### 2. Pedido: las líneas de cuadrícula (0/2/4 vs 0/2/4/6) deberían "ajustarse" mejor, y en BOOL no se alinean con TRUE/FALSE
+
+Para BOOL, el eje Y tenía `min: -0.2, max: 1.2, tickAmount: 2` — con ese
+rango con relleno, las líneas de cuadrícula caían en -0.2/0.5/1.2, **nunca**
+exactamente en 0 o 1, así que ninguna línea coincidía visualmente con los
+tramos planos TRUE/FALSE de la señal.
+
+**Fix real, el único que sobrevivió:** `min: 0, max: 1` (sin relleno) para
+BOOL — deja `tickAmount: 2` **sin tocar** (ver más abajo por qué). Las
+líneas ahora caen exactamente en 0 y 1.
+
+**Intentos que se probaron y se revirtieron** (documentados para no
+repetirlos):
+- `forceNiceScale: true` + `min: 0` para series numéricas, para que
+  ApexCharts elija un intervalo "bonito" según el máximo real de los datos.
+  **Revertido** — ver punto 3 abajo, esto causó un crash real.
+- `tickAmount: 1` para BOOL (en vez de 2), para tener solo 2 líneas exactas
+  en vez de 3 (con una línea extra sin etiqueta en 0.5). **Revertido** —
+  sospechoso de la misma familia de crash que el punto 3 (con un solo
+  intervalo, el cálculo interno de ancho de etiquetas de ApexCharts
+  probablemente asume ≥2 intervalos); no vale el riesgo por una línea
+  cosmética de más.
+
+### 3. Crash real #1: `forceNiceScale` + `min` en series numéricas rompía ApexCharts con datos vacíos
+
+Al hacer clic en "observar variable" en el depurador, el componente de la
+gráfica se monta **antes** de que llegue el primer dato del polling
+(`data: []`). Forzar `min: 0` + `forceNiceScale: true` en ese estado sin
+datos rompía el cálculo interno de dimensiones de ApexCharts:
+
+```
+Uncaught (in promise) TypeError: Cannot read properties of undefined (reading 'left')
+    at DimXAxis.getxAxisLabelsCoords
+    at Dimensions.setDimensionsForAxisCharts
+    at Dimensions.plotCoords
+    at ApexCharts.create / ApexCharts.update
+```
+
+**Intento 1 (insuficiente):** condicionar `min`/`forceNiceScale` a
+`data.length > 0` (`hasData`). Redujo el crash al momento en que **llegaba
+el primer dato real** (la opción cambiaba "en caliente" sobre una instancia
+de ApexCharts ya montada), no lo eliminó — el mismo tipo de error volvía a
+aparecer, solo que más tarde. **Revertido también.**
+
+**Conclusión:** cambiar `yaxis.min`/`max`/`forceNiceScale` dinámicamente
+entre renders de una gráfica ya montada es en sí mismo riesgoso para esta
+versión de ApexCharts, independientemente de si hay datos o no. Se volvió
+al comportamiento original de auto-escala de ApexCharts para series
+numéricas (`min`/`max`/`tickAmount` en `undefined`, tal como estaba antes
+de esta ronda) y no se tocó más.
+
+### 4. Crash real #2 (la causa raíz de verdad) — `grid.padding: undefined`
+
+El crash **seguía** apareciendo incluso después de revertir todo lo
+anterior. Se leyó el código fuente real de la librería
+(`node_modules/apexcharts/src/modules/dimensions/Dimensions.js`, no el
+bundle minificado) para encontrar la causa con certeza en vez de seguir
+probando a ciegas:
+
+```js
+// Dimensions.js
+this.gridPad = this.w.config.grid.padding
+// ...usado sin verificar más abajo (Dimensions.js y XAxis.js):
+this.gridPad.left / .right / .top / .bottom
+```
+
+Como parte del fix del punto 2, se había agregado
+`grid.padding: isBool ? { top: 8, bottom: 8 } : undefined` (para dar
+respiro visual a la línea plana de BOOL sin usar relleno de valores). Para
+**toda serie numérica**, eso mandaba literalmente `padding: undefined` en
+las opciones — y el merge de opciones de ApexCharts no lo reemplaza por su
+objeto por defecto, deja `w.config.grid.padding` en `undefined` de verdad.
+Cualquier lectura posterior de `.left` explota exactamente con el error
+reportado. **Esta era la causa raíz real desde el primer reporte del
+crash en esta ronda** — nunca fue el `yaxis`.
+
+**Fix:** se quitó `grid.padding` por completo (ni se setea ni se pasa
+`undefined` condicionalmente — la clave no existe en el objeto), dejando
+que ApexCharts use su propio valor por defecto interno, que nunca es
+`undefined`.
+
+**Cómo se encontró de verdad:** leyendo el archivo fuente
+`node_modules/apexcharts/src/modules/dimensions/{Dimensions,XAxis}.js` en
+vez de seguir infiriendo desde el stack trace minificado
+(`renderer.dev.js:NNNNN`) — grep por el nombre del método del stack trace
+(`getxAxisLabelsCoords`) en `node_modules/apexcharts/src` lleva directo a
+la línea real. **Para la próxima vez que un stack trace de una librería de
+terceros no dé suficiente información: buscar el método por nombre dentro
+de `node_modules/<paquete>/src` (si el paquete publica su fuente) en vez de
+seguir adivinando sobre el bundle minificado.**
+
+### 5. Crash contribuyente: suma de tamaños de panel > 100%
+
+Aparte del bug de ApexCharts, el feature de dock-derecha (sección anterior)
+no le restaba espacio al panel del editor al agregar el panel de consola
+derecho: Explorer (16%) + editor (68%) + consola-derecha (30%) = **114%**
+del ancho total — lo que disparaba el propio warning de
+`react-resizable-panels` ("Invalid layout total size... Layout
+normalization will be applied") visible en la consola justo antes del
+crash. Esa renormalización en caliente probablemente dejaba el contenedor
+de la gráfica con un ancho inestable justo cuando ApexCharts intentaba
+medirlo — un contribuyente real, aunque el punto 4 era la causa que de
+verdad lanzaba la excepción.
+
+**Fix:**
+- `workspacePanel` usa `defaultSize={isConsoleDockedRight ? 54 : 68}` (deja
+  espacio para el 30% del panel derecho).
+- Se agregó `key={isConsoleDockedRight ? 'dock-right' : 'dock-bottom'}` al
+  `ResizablePanelGroup` principal, para forzar un remount limpio (con los
+  `defaultSize` correctos) cada vez que se alterna la posición del dock en
+  caliente — `defaultSize` en `react-resizable-panels` solo se aplica en el
+  primer montaje de un panel, cambiarlo después no re-dispara el layout.
+
+Nota: el panel de chat de IA (`chatPanel`, `defaultSize={30}`) tiene el
+mismo problema potencial de presupuesto de porcentaje si se abre junto con
+el dock-derecha del debugger (16+54+30+30=130%) — no se corrigió en esta
+ronda por estar fuera del alcance del bug reportado; queda anotado para el
+futuro.
+
+### 6. Pedido final: el trazo "tiembla" justo en el salto de una transición
+
+Con `chart.animations: { enabled: true, easing: 'linear', dynamicAnimation:
+{ speed: 500 } }`, cada punto nuevo se animaba con easing durante 500ms
+mientras la ventana de tiempo del eje X también se desliza en tiempo real
+(llega un dato nuevo cada 100ms) — la animación y el desplazamiento de
+ventana se pisaban justo en el instante del salto, dando un efecto de
+"temblor"/desplazamiento visible en vez de un trazo tipo osciloscopio.
+
+**Fix:** `chart.animations: { enabled: false }`. Sin riesgo de dimensiones
+como los puntos 3-4 (es una propiedad de animación, no de layout).
+
+### Verificación
+
+- `npx tsc --noEmit`, `npx eslint`, `npx prettier --check`: limpios después
+  de cada cambio de esta ronda (varios, ver arriba).
+- `npm run build:renderer`: compila limpio después de cada cambio.
+- Verificación manual del usuario en `npm run dev`, en orden: curva en
+  escalón confirmada OK → crash de ApexCharts reproducido 3 veces con
+  distintos intentos de fix → crash resuelto tras el fix de `grid.padding`
+  + el fix de layout de paneles → temblor de animación confirmado y
+  resuelto.
+
+### Estado
+
+Cerrado — confirmado por el usuario tras el fix de `grid.padding` +
+layout de paneles + animaciones desactivadas. `line-chart.tsx` queda así:
+`stroke.curve: 'stepline'` siempre, `yaxis.min/max` en `0`/`1` solo para
+BOOL (`tickAmount: 2`, sin tocar), sin `grid.padding`, sin
+`forceNiceScale`, animaciones desactivadas.
+
+### Notas para el futuro
+
+- **No pasar `undefined` explícito como valor de una propiedad de
+  ApexCharts que sea un objeto** (`grid.padding`, y por extensión cualquier
+  otra sub-config de objeto). El merge de opciones de esta librería no
+  trata "clave presente con valor `undefined`" igual que "clave ausente" —
+  lo primero puede pisar el valor por defecto interno con `undefined` real
+  y romper código que lo usa sin verificar. Para propiedades *primitivas*
+  (`min`, `max`, `tickAmount`) sí es seguro (el código original ya lo hacía
+  así desde antes de esta ronda, sin problema) — el riesgo es específico de
+  props con forma de objeto.
+- **No cambiar `yaxis.min`/`max`/`forceNiceScale` dinámicamente** entre
+  renders de una instancia de ApexCharts ya montada (p. ej. condicionado a
+  si ya hay datos) — vimos que eso solo *retrasa* el mismo crash al momento
+  de la transición, no lo evita. Si un valor de eje necesita ser diferente
+  según el estado, que sea fijo desde el primer render (como quedó el `min`
+  de BOOL, que depende de `isBool`, un prop que no cambia después del
+  primer valor recibido en la práctica).
+- **Antes de asumir una causa desde un stack trace minificado
+  (`renderer.dev.js:NNNNN`), revisar si el paquete de terceros publica su
+  código fuente en `node_modules/<paquete>/src`** y buscar ahí el nombre
+  del método — mucho más rápido y certero que iterar por prueba y error
+  sobre el bundle.
+- Al agregar un nuevo panel a un `ResizablePanelGroup` existente,
+  recalcular el `defaultSize` de los paneles hermanos para que la suma siga
+  dando ~100%, y considerar si hace falta una `key` para forzar un remount
+  limpio cuando el panel se agrega/quita en caliente en vez de solo al
+  montar la app.

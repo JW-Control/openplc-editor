@@ -1,5 +1,5 @@
 import { Node } from '@xyflow/react'
-import { ComponentPropsWithRef, forwardRef, useEffect, useMemo, useState } from 'react'
+import { ComponentPropsWithRef, forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import { PLCVariable } from '../../../../../../middleware/shared/ports'
@@ -13,9 +13,9 @@ import { useOpenPLCStore } from '../../../../../store'
 import { cn } from '../../../../../utils/cn'
 import { getLiteralType, isLegalIdentifier } from '../../../../../utils/keywords'
 import { validateVariableType } from '../../../../../utils/PLC/validate-variable-type'
+import { findFunctionBlockVariables, findStructureVariables, PouVariable } from '../../../../../utils/pou-helpers'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
-import { findFunctionBlockVariables, findStructureVariables, PouVariable } from '../../../../../utils/pou-helpers'
 import { AutocompleteVariableItem, GraphicalEditorAutocomplete } from '../../autocomplete'
 import { getLadderPouVariablesRungNodeAndEdges } from '../utils'
 import { BasicNodeData, BlockNodeData, BlockVariant, LadderBlockConnectedVariables, VariableNode } from '../utils/types'
@@ -71,15 +71,22 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
     ref,
   ) => {
     const pouName = useBoundPou()
-    const {
-      project: {
-        data: { pous, dataTypes, configurations },
-      },
-      libraries,
-      projectActions: { createVariable },
-      ladderFlows,
-      ladderFlowActions: { updateNode },
-    } = useOpenPLCStore()
+    // Mounted whenever a coil/contact/variable/block's name field is opened
+    // for editing — the exact "montado por elemento + suscripción sin
+    // selector" pattern documented in UPDATE.md. Every field renders this
+    // with unstable `pous`/`libraries`/etc. references, which fed
+    // `autocompleteItems` a new array on every unrelated store change and
+    // cascaded into the child dropdown's per-item refs. `ladderFlows` is
+    // only read inside the submit handlers below (never during render), so
+    // it's read via getState() there instead of subscribed to reactively.
+    const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+    const dataTypes = useOpenPLCStore(useCallback((s) => s.project.data.dataTypes, []))
+    const globalVariables = useOpenPLCStore(
+      useCallback((s) => s.project.data.configurations.resource?.globalVariables, []),
+    )
+    const librariesSystem = useOpenPLCStore(useCallback((s) => s.libraries.system, []))
+    const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
+    const { updateNode } = useOpenPLCStore(useCallback((s) => s.ladderFlowActions, []))
 
     const expectedType = expectedTypeForBlock(block, blockType)
 
@@ -103,13 +110,13 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
 
     const allVariables = useMemo<PLCVariable[]>(() => {
       const pouVars = pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []
-      const globalVars = configurations?.resource?.globalVariables ?? []
+      const globalVars = globalVariables ?? []
       return [...pouVars, ...globalVars]
-    }, [pous, pouName, configurations])
+    }, [pous, pouName, globalVariables])
 
     const getCompatibleMembers = (varType: string | undefined): PouVariable[] => {
       if (!varType) return []
-      const fbVars = findFunctionBlockVariables(varType, pous, libraries?.system ?? [])
+      const fbVars = findFunctionBlockVariables(varType, pous, librariesSystem ?? [])
       const members = fbVars ?? findStructureVariables(varType, dataTypes ?? []) ?? []
       if (!expectedType) return members
       return members.filter((m) => {
@@ -125,7 +132,10 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
       if (valueToSearch.includes('.')) {
         const dotIndex = valueToSearch.lastIndexOf('.')
         const prefix = valueToSearch.slice(0, dotIndex).trim()
-        const memberSearch = valueToSearch.slice(dotIndex + 1).trim().toLowerCase()
+        const memberSearch = valueToSearch
+          .slice(dotIndex + 1)
+          .trim()
+          .toLowerCase()
 
         const instanceVar = allVariables.find((v) => v.name.toLowerCase() === prefix.toLowerCase())
         let localMembers: AutocompleteVariableItem[] = []
@@ -226,9 +236,10 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
       }
 
       return result
-    }, [blockType, valueToSearch, allVariables, pous, libraries, dataTypes, expectedType, candidates])
+    }, [blockType, valueToSearch, allVariables, pous, librariesSystem, dataTypes, expectedType, candidates])
 
     const submitVariableToBlock = (variable: PLCVariable) => {
+      const { ladderFlows } = useOpenPLCStore.getState()
       const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
         nodeId: (block as Node<BasicNodeData>).id,
       })
@@ -288,6 +299,7 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
     }
 
     const submitAddVariable = ({ variableName }: { variableName: string }) => {
+      const { ladderFlows } = useOpenPLCStore.getState()
       if (!variableName.trim()) {
         // For variable nodes on block handles, clearing the name resets the variable
         // so that a branch (contacts/coils) can be placed on the handle instead.
