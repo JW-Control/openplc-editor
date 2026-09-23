@@ -137,14 +137,15 @@ VPP_SHA256=83fdd4b22d5193d31904959aceb72a86089996b836b4b2315671bfa7a3abfd20
 ---
 
 ### 5.3 Esclavo programable desde OpenPLC (VPP 2.1.0-alpha.22)
-- Nuevo dispositivo **JWPLC BASIC Remote I/O [2.0.0]**. Se crea un proyecto con esa placa, se configura en la pantalla **Remote I/O Slave** (Slave ID, Baudrate, Formato, Failsafe) y se sube por USB.
+- Nuevo dispositivo **JWPLC BASIC Remote IO [2.0.0]** (sin `/`: el nombre se usa como carpeta de build; corregido en alpha.23). Se crea un proyecto con esa placa, se configura en la pantalla **Remote I/O Slave** (Slave ID, Baudrate, Formato, Failsafe) y se sube por USB.
 - La lógica es la misma que la del sketch validado. El programa IEC del esclavo no controla su I/O.
 - Un valor inválido detiene la compilación.
 - No requirió cambios en el editor: es solo VPP.
+- Proyecto del esclavo: **separado** del maestro, y con al menos una variable en `main` (p. ej. `Vida : BOOL;`), porque `xml2st` rechaza un `main` sin variables.
 
 ```text
-VPP_VERSION=2.1.0-alpha.22
-VPP_SHA256=7e58453090b322e04cd95cf325f102bde231038ae7b952306a20f6454907ef18
+VPP_VERSION=2.1.0-alpha.23
+VPP_SHA256=df37f1ed3adf1ee3d699e2ea2b17c4c947c6517b587399130ed294857fa706ff
 REMOTE_IO_SLAVE_FROM_OPENPLC=PENDING_PHYSICAL
 ```
 
