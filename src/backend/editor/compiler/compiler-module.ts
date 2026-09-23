@@ -95,6 +95,7 @@ const POST_BUILD_START_POLL_INTERVAL_MS = 150
 import { assertPathContained } from '@root/backend/editor/utils/path-containment'
 import { getRuntimeHttpsOptions } from '@root/backend/editor/utils/runtime-https-config'
 import { isNewTranspilerEnabled } from '@root/backend/editor/utils/transpiler-mode'
+import { completeEmptyFirmwarePrograms, isIecProgramOptional } from '@root/backend/shared/compile/firmware-only-program'
 import { runCompilePipeline } from '@root/backend/shared/compile/pipeline'
 import { mergeStrucppRuntimeIntoSkeleton } from '@root/backend/shared/compile/steps/merge-strucpp-runtime-into-skeleton'
 import { readHalsFile } from '@root/backend/shared/firmware/hals-loader'
@@ -2784,10 +2785,25 @@ class CompilerModule {
       }
     }
 
+    // Firmware-only VPP devices (e.g. JWPLC Remote I/O slave) may be
+    // compiled with an empty main; complete it in memory for the
+    // transpiler. The project on disk is never modified.
+    let pipelineProjectData = projectData
+    if (isIecProgramOptional(boardEntry)) {
+      const completed = completeEmptyFirmwarePrograms(projectData)
+      pipelineProjectData = completed.project
+      if (completed.completedPous.length > 0) {
+        _mainProcessPort.postMessage({
+          logLevel: 'info',
+          message: `Firmware device: empty program ${completed.completedPous.join(', ')} completed with a no-op body (the IEC program does not control this device's I/O).`,
+        })
+      }
+    }
+
     // --- Run the shared pipeline ---
     const result = await runCompilePipeline(
       {
-        projectData,
+        projectData: pipelineProjectData,
         boardTarget,
         boardRuntime,
         boardEntry,
