@@ -1,7 +1,9 @@
 # Update — JWPLC Backplane (Alpha12)
 
 **Fecha:** 2026-09-23
-**Alcance:** OpenPLC Engineering Closure. Bus RS-485 del Backplane configurable, Remote I/O multi-slot y validación del Slave ID.
+**Alcance:** OpenPLC Engineering Closure. Bus RS-485 del Backplane configurable, Remote I/O multi-slot, validación del Slave ID y esclavo Remote I/O programable desde OpenPLC.
+
+**Estado al cierre de la sesión:** primera versión funcional **validada en banco**. Un maestro JWPLC Basic con Backplane comanda un esclavo JWPLC Basic programado **íntegramente desde OpenPLC**, sin Arduino IDE.
 
 ---
 
@@ -16,9 +18,9 @@
 EDITOR_VERSION=4.2.8-jwplc.2 (bump a 4.2.8-jwplc.3 al cierre)
 STRUCPP_VERSION=v0.5.13
 VPP_VERSION_BEFORE=2.1.0-alpha.19
-VPP_VERSION_AFTER=2.1.0-alpha.20
+VPP_VERSION_AFTER=2.1.0-alpha.24   (versión vigente; historial en §7)
 VPP_KEY_ID=jwcontrol-2026
-VPP_SHA256=ad4a5411923c85b31c68f26391ccb0c5c9d2a6508c49420cf2dab434888d94bd
+VPP_SHA256=2670e80771133aa41b3494698fdabf647698f7b9ac5780e8446376a2597da0fd
 ```
 
 ---
@@ -90,6 +92,8 @@ El codificador de bytes del VPP enmascara a 8 bits, así que un Slave ID **258 s
 | Maestro JWPLC Basic con Backplane (slot 2 Remote I/O, 115200/8N1 por defecto) | PASS: el Master RTU arranca en Serial2 |
 | Esclavo con sketch Arduino `JWPLC_RemoteIO_Slave_RTU` (ID 2, 115200/8N1) | PASS: hay comunicación maestro ↔ esclavo y responde |
 | Diagnóstico sin esclavo programado | Maestro BUS `TMO` y esclavo BUS `INI`, según lo esperado |
+| Reabrir proyecto con variables ligadas a alias del Backplane (tras la corrección §5.1) | PASS: las variables de `main` se conservan |
+| **Esclavo programado desde OpenPLC** (placa JWPLC BASIC Remote IO, ID 2, 115200/8N1, failsafe 1000 ms, `main` vacío) comandado por el maestro (VPP alpha.24) | **PASS**: compila, sube por USB y responde al maestro |
 
 ### Hallazgo en el banco: librerías con el mismo nombre
 Las copias antiguas en `Documents\Arduino\libraries` (`JWPLC_ModbusRTU_old`, `JWPLC_RS485_old`, `JWPLC_Ethernet_yo`) declaran el mismo `name=` que las del core, en su versión 1.0.0. El Arduino IDE les da prioridad y ocultaba los ejemplos Remote I/O; además habrían compilado con una API vieja. **Solución:** sacarlas de `libraries`. Hay que documentarlo para los técnicos.
@@ -97,7 +101,9 @@ Las copias antiguas en `Documents\Arduino\libraries` (`JWPLC_ModbusRTU_old`, `JW
 ### Pendiente
 
 ```text
-BACKPLANE_RTU_CONFIG_PERSISTENCE=PENDING (save -> cerrar -> reabrir)
+REMOTE_IO_SLAVE_FROM_OPENPLC=PASS_PHYSICAL (1 esclavo)
+POU_VARIABLES_REOPEN=PASS (tras 05f2d8360)
+BACKPLANE_RTU_CONFIG_PERSISTENCE=PENDING (baud/formato no default: save -> cerrar -> reabrir)
 SLAVE_ID_SAVE/REOPEN/RECOMPILE=PENDING
 RTU_ALTERNATE_PROFILE=PENDING_PHYSICAL (p. ej. 38400/8E1 en maestro y esclavo)
 REMOTE_IO_MULTISLOT=PENDING_PHYSICAL (>= 2 esclavos)
@@ -146,12 +152,62 @@ VPP_SHA256=83fdd4b22d5193d31904959aceb72a86089996b836b4b2315671bfa7a3abfd20
 ```text
 VPP_VERSION=2.1.0-alpha.24
 VPP_SHA256=2670e80771133aa41b3494698fdabf647698f7b9ac5780e8446376a2597da0fd
-REMOTE_IO_SLAVE_FROM_OPENPLC=PENDING_PHYSICAL
+REMOTE_IO_SLAVE_FROM_OPENPLC=PASS_PHYSICAL (2026-09-23, 1 esclavo ID 2, 115200/8N1)
 ```
 
 ---
 
-## 6. Diferido (fuera de Alpha12)
+## 6. Guía rápida para el técnico
+
+**Maestro**
+1. Package Manager: instalar el VPP `jwplc-basic-openplc-2.1.0-alpha.24.jwcontrol-signed.vpp`.
+2. Proyecto con la placa **JWPLC BASIC [2.0.0]**.
+3. Pantalla **JWPLC Backplane**:
+   - en **RS-485 Backplane**, elegir Baudrate y Formato;
+   - en los slots 2..8, agregar **JWPLC Basic Remote I/O** con su Slave ID;
+   - dar alias a los canales.
+4. En el programa, usar esos alias en variables de clase **Local (VAR)**. Input/Output no admiten ubicación.
+5. Compilar y subir.
+
+**Cada esclavo**
+1. Proyecto **separado**, con la placa **JWPLC BASIC Remote IO [2.0.0]**. `main` puede quedar vacío.
+2. En la pantalla **Remote I/O Slave**, configurar Slave ID (el mismo del slot), Baudrate y Formato (los mismos del maestro) y el Failsafe (1000 ms recomendado).
+3. Compilar y subir por USB.
+
+**Indicador BUS del display**
+
+| Código | Significado |
+|---|---|
+| `---` verde | Comunicación correcta |
+| `TMO` rojo | Timeout: el otro extremo no responde (cableado, ID o baud distintos) |
+| `CRC` rojo | Error de trama: A/B invertidos, formato distinto o ruido |
+| `INI` | RS-485 sin iniciar: el equipo no tiene firmware de maestro ni de esclavo |
+
+---
+
+## 7. Historial de versiones del VPP (sesión 2026-09-23)
+
+| VPP | Commit platform | Cambio |
+|---|---|---|
+| 2.1.0-alpha.20 | `4d0d6919` `0e94c444` `6b34bfa3` | Bus RS-485 configurable, HAL multi-slot, validación de Slave ID |
+| 2.1.0-alpha.21 | `ac99a307` `413226de` `cce5082f` | Un fallo corta el ciclo del slot, sondeo acotado de slots fuera de línea, failsafe del sketch a 1000 ms |
+| 2.1.0-alpha.22 | `64e5dc87` `27ae9676` | Nuevo dispositivo esclavo Remote I/O configurable desde OpenPLC |
+| 2.1.0-alpha.23 | `957c427d` | Nombre del esclavo sin `/` (rompía la carpeta de build) |
+| 2.1.0-alpha.24 | `caf330b3` | Esclavo con `capabilities.iecProgramOptional` (compila con `main` vacío) |
+
+Commits del editor posteriores a la primera publicación:
+
+| Commit | Cambio |
+|---|---|
+| `05f2d8360` | No perder variables al reabrir un POU con `AT` en VAR_INPUT; el store impide ubicación en clases sin `AT` |
+| `3437c77db` | Dispositivos VPP de firmware (`iecProgramOptional`) compilan con `main` vacío; se completa solo en memoria |
+| `91db7f8b5` | Tests para 100 % de statements/lines en `src/backend/shared` |
+
+Validación automática acumulada del editor: `tsc` y ESLint limpios; Jest con 3686 tests en store, utils, services, shared y components; umbrales de cobertura del repo cumplidos en los archivos modificados. En el HAL del maestro se compilaron 7 variantes y en el del esclavo otras 7, con el core real (4 fallos esperados en ambos casos).
+
+---
+
+## 8. Diferido (fuera de Alpha12)
 
 - **Commissioning por el bus** (registros 224–240 de `JWPLC_REMOTE_IO_RTU_PROTOCOL`): asignar el Slave ID sin reprogramar, identificar por UID y guardar en FRAM.
 - **Estado en línea / fuera de línea por slot visible en el programa IEC:** corresponde a Alpha17 Diagnostics.
