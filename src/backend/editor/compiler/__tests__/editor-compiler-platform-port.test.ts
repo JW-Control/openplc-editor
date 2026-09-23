@@ -219,7 +219,10 @@ describe('createEditorCompilerPlatformPort', () => {
   it('installArduinoLib skips legacy global libraries for VPP targets', async () => {
     const handleLibraryInstallation = jest.fn(async () => undefined)
     const port = createEditorCompilerPlatformPort(makeHandlers({ handleLibraryInstallation }), makeContext())
-    await port.installArduinoLib({ libId: '', extraLibraries: [], includeLegacyGlobalLibraries: false }, () => undefined)
+    await port.installArduinoLib(
+      { libId: '', extraLibraries: [], includeLegacyGlobalLibraries: false },
+      () => undefined,
+    )
     expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), false)
   })
 
