@@ -136,9 +136,22 @@ VPP_SHA256=83fdd4b22d5193d31904959aceb72a86089996b836b4b2315671bfa7a3abfd20
 
 ---
 
+### 5.3 Esclavo programable desde OpenPLC (VPP 2.1.0-alpha.22)
+- Nuevo dispositivo **JWPLC BASIC Remote I/O [2.0.0]**. Se crea un proyecto con esa placa, se configura en la pantalla **Remote I/O Slave** (Slave ID, Baudrate, Formato, Failsafe) y se sube por USB.
+- La lógica es la misma que la del sketch validado. El programa IEC del esclavo no controla su I/O.
+- Un valor inválido detiene la compilación.
+- No requirió cambios en el editor: es solo VPP.
+
+```text
+VPP_VERSION=2.1.0-alpha.22
+VPP_SHA256=7e58453090b322e04cd95cf325f102bde231038ae7b952306a20f6454907ef18
+REMOTE_IO_SLAVE_FROM_OPENPLC=PENDING_PHYSICAL
+```
+
+---
+
 ## 6. Diferido (fuera de Alpha12)
 
-- **Dispositivo "JWPLC BASIC Remote I/O" dentro del VPP:** programar el esclavo desde OpenPLC, con Slave ID, baud, formato y failsafe configurables. Hoy se usa el sketch de Arduino.
 - **Commissioning por el bus** (registros 224–240 de `JWPLC_REMOTE_IO_RTU_PROTOCOL`): asignar el Slave ID sin reprogramar, identificar por UID y guardar en FRAM.
 - **Estado en línea / fuera de línea por slot visible en el programa IEC:** corresponde a Alpha17 Diagnostics.
 - **Backport upstream #966** (alias en LSP): requiere STruCpp v0.6.1.
