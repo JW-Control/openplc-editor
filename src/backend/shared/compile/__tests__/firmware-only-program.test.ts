@@ -76,6 +76,37 @@ describe('completeEmptyFirmwarePrograms', () => {
     expect(programOf(input).language).toBe('ld')
   })
 
+  const programWithBody = (language: string, body: unknown, variables: PLCVariable[] = []): SchemaPou =>
+    ({
+      type: 'program',
+      data: { language, name: 'main', variables, body: { language, value: body }, documentation: '' },
+    }) as unknown as SchemaPou
+
+  it('treats an FBD program without nodes as empty and one with nodes as having a body', () => {
+    const empty = completeEmptyFirmwarePrograms(project([programWithBody('fbd', { nodes: [] }, [boolVar('a')])]))
+    expect(programOf(empty.project).body.language).toBe('st')
+    const withNodes = completeEmptyFirmwarePrograms(project([programWithBody('fbd', { nodes: [{ id: 'n1' }] })]))
+    expect(programOf(withNodes.project).body.language).toBe('fbd')
+  })
+
+  it('treats a blank ST body as empty', () => {
+    const { project: out } = completeEmptyFirmwarePrograms(project([programWithBody('st', '   ', [boolVar('a')])]))
+    expect(programOf(out).body).toEqual({ language: 'st', value: `${FIRMWARE_IDLE_VARIABLE} := FALSE;` })
+  })
+
+  it('never replaces the body of other languages, only adds the variable', () => {
+    const { project: out } = completeEmptyFirmwarePrograms(project([programWithBody('python', '')]))
+    expect(programOf(out).body.language).toBe('python')
+    expect(programOf(out).variables.map((v) => v.name)).toEqual([FIRMWARE_IDLE_VARIABLE])
+  })
+
+  it('does not duplicate an existing placeholder variable', () => {
+    const { project: out } = completeEmptyFirmwarePrograms(
+      project([programWithBody('ld', { rungs: [] }, [boolVar(FIRMWARE_IDLE_VARIABLE)])]),
+    )
+    expect(programOf(out).variables.map((v) => v.name)).toEqual([FIRMWARE_IDLE_VARIABLE])
+  })
+
   it('ignores functions and function blocks', () => {
     const fb = {
       type: 'function-block',

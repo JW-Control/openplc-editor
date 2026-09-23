@@ -855,6 +855,13 @@ describe('JWPLC backplane slave identity', () => {
     expect(errors[1]).toContain('slot 3')
   })
 
+  it('skips empty slots', () => {
+    const data: VendorScreenData = {
+      'module-configuration': { slots: ['jwplc-basic-controller', null, remote], slotsConfig: { '3': { slaveId: 3 } } },
+    }
+    expect(validateModuleConfigValues(data, modules)).toEqual([])
+  })
+
   it('rejects non-integer Slave IDs', () => {
     const errors = validateModuleConfigValues(vsd({ '2': { slaveId: 2.5 } }, 1), modules)
     expect(errors).toHaveLength(1)
