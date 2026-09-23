@@ -10,10 +10,40 @@ import {
 } from '@root/types/IPC/project-service'
 import { app, BrowserWindow, dialog } from 'electron'
 import { promises } from 'fs'
-import { dirname, join, normalize } from 'path'
+import { basename, dirname, join, normalize } from 'path'
 
 import { fileOrDirectoryExists } from '../../utils'
 import { createProjectDefaultStructure, readProjectFiles } from './utils'
+
+/**
+ * Resolve the root directory for a newly-created project.
+ *
+ * Alpha7 project-root policy: selected parent + project name, without duplicate nesting.
+ * The create dialog historically supplied a directory and ProjectService wrote
+ * project.json directly into it. For a selected parent `OpenPLC` and project
+ * `CONTROL_BOMBAS`, creation now targets `OpenPLC/CONTROL_BOMBAS`.
+ *
+ * If the selected directory already has the project name, keep it unchanged so
+ * `CONTROL_BOMBAS/CONTROL_BOMBAS` is never produced. The comparison is
+ * case-insensitive because the primary desktop target is Windows.
+ */
+export function resolveNewProjectDirectory(selectedPath: string, projectName: string): string {
+  const normalizedSelectedPath = normalize(selectedPath)
+  const trimmedName = projectName.trim()
+
+  if (!trimmedName) {
+    throw new Error('Project name must not be empty')
+  }
+  if (trimmedName === '.' || trimmedName === '..' || trimmedName.includes('/') || trimmedName.includes('\\')) {
+    throw new Error('Project name must be a single directory name')
+  }
+
+  const selectedDirectoryName = basename(normalizedSelectedPath)
+  if (selectedDirectoryName.toLocaleLowerCase() === trimmedName.toLocaleLowerCase()) {
+    return normalizedSelectedPath
+  }
+  return join(normalizedSelectedPath, trimmedName)
+}
 
 class ProjectService {
   constructor(private serviceManager: InstanceType<typeof BrowserWindow>) {}
@@ -36,19 +66,62 @@ class ProjectService {
   }
 
   async createProject(data: CreateProjectFileProps): Promise<IProjectServiceResponse> {
-    const projectDefaultDirectoriesResponse = createProjectDefaultStructure(data.path, data)
+    let projectPath: string
+    try {
+      projectPath = resolveNewProjectDirectory(data.path, data.name)
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          title: 'Invalid project name',
+          description: error instanceof Error ? error.message : 'Unable to resolve project directory.',
+          error,
+        },
+      }
+    }
+
+    // The selected parent may contain other projects. Protect only the final
+    // parent/projectName target from accidental overwrite.
+    try {
+      const existingEntries = await promises.readdir(projectPath)
+      if (existingEntries.length > 0) {
+        return {
+          success: false,
+          error: {
+            title: 'Project directory is not empty',
+            description: `The project directory "${projectPath}" already exists and is not empty. Choose another project name or parent directory.`,
+            error: null,
+          },
+        }
+      }
+    } catch (error) {
+      const code = (error as { code?: string }).code
+      if (code !== 'ENOENT') {
+        return {
+          success: false,
+          error: {
+            title: 'Unable to inspect project directory',
+            description: `Unable to verify the project directory "${projectPath}" before creation.`,
+            error,
+          },
+        }
+      }
+    }
+
+    const resolvedData = { ...data, path: projectPath }
+    const projectDefaultDirectoriesResponse = createProjectDefaultStructure(projectPath, resolvedData)
     if (!projectDefaultDirectoriesResponse.success || !projectDefaultDirectoriesResponse.data) {
       return {
         success: false,
         error: projectDefaultDirectoriesResponse.error,
       }
     }
-    await this.updateProjectHistory(data.path)
+    await this.updateProjectHistory(projectPath)
     return {
       success: true,
       data: {
         meta: {
-          path: data.path, // Use the directory path instead of projectPath
+          path: projectPath,
         },
         content: projectDefaultDirectoriesResponse.data.content,
       },

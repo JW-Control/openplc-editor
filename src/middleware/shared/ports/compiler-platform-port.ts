@@ -240,6 +240,12 @@ export interface InstallArduinoLibArgs {
    *  arduino-cli can't find it, the user needs to know now, not
    *  during the arduino-cli compile step. */
   extraLibraries?: string[]
+  /**
+   * Keep the editor's historical GLOBAL_LIBRARIES compatibility set.
+   * VPP targets set this to false because their manifest already owns the
+   * per-board dependency contract. Static/built-in boards leave it enabled.
+   */
+  includeLegacyGlobalLibraries?: boolean
 }
 
 /** Runtime-version probe (used for the v4 strucpp-compatibility

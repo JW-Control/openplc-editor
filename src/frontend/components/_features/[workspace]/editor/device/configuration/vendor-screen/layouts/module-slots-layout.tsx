@@ -71,6 +71,10 @@ type ConfigFieldDef = {
   label: string
   type: string
   default?: FieldValue
+  /** Initialize this field from the 1-based slot number only when no explicit value is stored yet. */
+  defaultFromSlot?: boolean
+  /** Values for this field must be unique among populated modules in the same backplane. */
+  uniqueAcrossSlots?: boolean
   help?: string
   min?: number
   max?: number
@@ -369,6 +373,85 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
   const selectedModuleId = slots[selectedSlot] ?? null
   const selectedModule = findModule(selectedModuleId)
 
+  /* Alpha7 Backplane identity policy: slot-derived defaults are persisted once and then follow the module.
+   *
+   * A vendor field can opt into `defaultFromSlot`. The renderer materializes
+   * the current 1-based slot number only when that field has never been
+   * persisted for the module. Once stored, reorder/remove operations already
+   * move slotsConfig together with the module, so an explicitly configured
+   * physical identity is not rewritten just because the UI position changes.
+   */
+  useEffect(() => {
+    let changed = false
+    const nextSlotsConfig: SlotConfigMap = { ...slotsConfig }
+
+    for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+      const moduleId = slots[slotIndex]
+      if (!moduleId) continue
+
+      const moduleDef = findModule(moduleId)
+      const fields = collectConfigFields(
+        moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined,
+      )
+      if (fields.length === 0) continue
+
+      const key = String(slotIndex + 1)
+      const currentForSlot = nextSlotsConfig[key] ?? {}
+      let nextForSlot = currentForSlot
+      let slotChanged = false
+
+      for (const field of fields) {
+        if (!field.defaultFromSlot) continue
+        if (Object.prototype.hasOwnProperty.call(currentForSlot, field.id)) continue
+
+        let value = slotIndex + 1
+        if (typeof field.min === 'number') value = Math.max(field.min, value)
+        if (typeof field.max === 'number') value = Math.min(field.max, value)
+
+        if (!slotChanged) nextForSlot = { ...currentForSlot }
+        nextForSlot[field.id] = value
+        slotChanged = true
+        changed = true
+      }
+
+      if (slotChanged) nextSlotsConfig[key] = nextForSlot
+    }
+
+    if (!changed) return
+    setVendorScreenData(persistenceKey, { ...moduleConfig, slots, slotsConfig: nextSlotsConfig })
+    // Intentionally initialize only absent fields. Subsequent slotsConfig
+    // changes re-run this effect but become a no-op once values exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots, slotsConfig, findModule, persistenceKey, setVendorScreenData])
+
+  const conflictingSlotsForField = useCallback(
+    (fieldId: string, value: FieldValue, currentSlot1: number): number[] => {
+      const conflicts: number[] = []
+      for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+        const slot1 = slotIndex + 1
+        if (slot1 === currentSlot1) continue
+
+        const moduleId = slots[slotIndex]
+        if (!moduleId) continue
+        const moduleDef = findModule(moduleId)
+        const fields = collectConfigFields(
+          moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined,
+        )
+        const peerField = fields.find((field) => field.id === fieldId && field.uniqueAcrossSlots)
+        if (!peerField) continue
+
+        const stored = slotsConfig[String(slot1)] ?? {}
+        let peerValue: FieldValue | undefined = stored[fieldId]
+        if (peerValue === undefined && peerField.defaultFromSlot) peerValue = slot1
+        if (peerValue === undefined) peerValue = peerField.default as FieldValue | undefined
+
+        if (peerValue === value) conflicts.push(slot1)
+      }
+      return conflicts
+    },
+    [slots, slotsConfig, findModule],
+  )
+
   /* ------------------------------------------------------------ */
   /* Module image (lazy fetch via the SystemPort preview endpoint) */
   /* ------------------------------------------------------------ */
@@ -656,6 +739,23 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
   }
 
   const handleFieldChange = (slotIndex: number, fieldId: string, value: FieldValue) => {
+    const moduleDef = findModule(slots[slotIndex])
+    const fieldDef = collectConfigFields(
+      moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined,
+    ).find((field) => field.id === fieldId)
+
+    if (fieldDef?.uniqueAcrossSlots) {
+      const conflicts = conflictingSlotsForField(fieldId, value, slotIndex + 1)
+      if (conflicts.length > 0) {
+        toast({
+          title: `${fieldDef.label} already in use`,
+          description: `Value ${String(value)} is already assigned to Slot ${conflicts.join(', ')}. Each module on this backplane must use a unique value.`,
+          variant: 'fail',
+        })
+        return
+      }
+    }
+
     const key = String(slotIndex + 1)
     const slotValues = { ...(slotsConfig[key] ?? {}), [fieldId]: value }
     writeModuleConfig({
@@ -919,6 +1019,134 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                     )
                   })()}
 
+                  {/* Alpha7 UX: module configuration belongs directly under the module picker. */}
+                  {/* Defensive hint: manifest declared a configScreen path
+                  but the parsed definition didn't reach us. Almost
+                  always means an installed vpp predates the per-module
+                  screens. Surface it instead of silently dropping the
+                  config form. */}
+                  {(selectedModule as { configScreen?: string }).configScreen &&
+                    !(selectedModule as { configScreenDefinition?: unknown }).configScreenDefinition && (
+                      <p className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300'>
+                        This module ships a configuration screen but it could not be loaded. Reinstall the vendor
+                        package to pick up the latest assets.
+                      </p>
+                    )}
+
+                  {/* Configuration (only when this module has a configScreen).
+                  TooltipProvider scopes the help-icon hover behaviour. */}
+                  {configFields.length > 0 && (
+                    <TooltipProvider>
+                      <section>
+                        <h4 className='mb-2 font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
+                          Configuration
+                        </h4>
+                        <div className='flex flex-col gap-3'>
+                          {configFields.map((field) => {
+                            if (!evalVisible(field.visible, slotValues)) return null
+                            const current = slotValues[field.id]
+                            const setValue = (v: FieldValue) => handleFieldChange(selectedSlot, field.id, v)
+                            const duplicateSlots = field.uniqueAcrossSlots
+                              ? conflictingSlotsForField(field.id, current, selectedSlot + 1)
+                              : []
+                            return (
+                              <div key={field.id} className='flex items-center gap-2'>
+                                {field.type === 'boolean' ? (
+                                  <>
+                                    <Checkbox
+                                      id={`slot${selectedSlot + 1}-${field.id}`}
+                                      checked={current === true}
+                                      onCheckedChange={(c) => setValue(c as boolean)}
+                                      className={
+                                        current === true
+                                          ? 'h-[14px] w-[14px] border-brand'
+                                          : 'h-[14px] w-[14px] border-neutral-300'
+                                      }
+                                    />
+                                    <Label
+                                      htmlFor={`slot${selectedSlot + 1}-${field.id}`}
+                                      className='text-xs text-neutral-950 dark:text-white'
+                                    >
+                                      {field.label}
+                                    </Label>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Label className='w-44 shrink-0 text-xs text-neutral-950 dark:text-white'>
+                                      {field.label}
+                                    </Label>
+                                    {field.type === 'number' ? (
+                                      <div className='flex items-center gap-1'>
+                                        <input
+                                          type='number'
+                                          value={String(current ?? '')}
+                                          min={field.min}
+                                          max={field.max}
+                                          step={field.step}
+                                          onChange={(e) => setValue(Number(e.target.value))}
+                                          className='flex h-[30px] w-32 items-center rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                                        />
+                                        {field.unit && (
+                                          <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                                            {field.unit}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : field.type === 'select' ? (
+                                      <Select value={String(current ?? '')} onValueChange={(v) => setValue(v)}>
+                                        <SelectTrigger
+                                          aria-label={field.label}
+                                          placeholder='Select...'
+                                          withIndicator
+                                          className='flex h-[30px] w-64 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                                        />
+                                        <SelectContent
+                                          className='h-fit max-h-[240px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-100 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'
+                                          sideOffset={5}
+                                          position='popper'
+                                          align='center'
+                                          side='bottom'
+                                        >
+                                          {(field.options ?? []).map((opt) => {
+                                            const v = typeof opt === 'string' ? opt : opt.value
+                                            const l = typeof opt === 'string' ? opt : opt.label
+                                            return (
+                                              <SelectItem
+                                                key={v}
+                                                value={v}
+                                                className='flex w-full cursor-pointer items-center px-2 py-[6px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850'
+                                              >
+                                                <span className='font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                                                  {l}
+                                                </span>
+                                              </SelectItem>
+                                            )
+                                          })}
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <input
+                                        type='text'
+                                        value={String(current ?? '')}
+                                        onChange={(e) => setValue(e.target.value)}
+                                        className='flex h-[30px] w-64 items-center rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                                      />
+                                    )}
+                                  </>
+                                )}
+                                {field.help && <FieldHelpIcon text={field.help} />}
+                                {duplicateSlots.length > 0 && (
+                                  <span className='text-xs font-medium text-red-600 dark:text-red-400'>
+                                    Already used by Slot {duplicateSlots.join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    </TooltipProvider>
+                  )}
                   {selectedModule && (
                     <>
                       {(selectedModule as { description?: string }).description && (
@@ -1032,125 +1260,6 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                     </section>
                   )}
 
-                  {/* Defensive hint: manifest declared a configScreen path
-                  but the parsed definition didn't reach us. Almost
-                  always means an installed vpp predates the per-module
-                  screens. Surface it instead of silently dropping the
-                  config form. */}
-                  {(selectedModule as { configScreen?: string }).configScreen &&
-                    !(selectedModule as { configScreenDefinition?: unknown }).configScreenDefinition && (
-                      <p className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300'>
-                        This module ships a configuration screen but it could not be loaded. Reinstall the vendor
-                        package to pick up the latest assets.
-                      </p>
-                    )}
-
-                  {/* Configuration (only when this module has a configScreen).
-                  TooltipProvider scopes the help-icon hover behaviour. */}
-                  {configFields.length > 0 && (
-                    <TooltipProvider>
-                      <section>
-                        <h4 className='mb-2 font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
-                          Configuration
-                        </h4>
-                        <div className='flex flex-col gap-3'>
-                          {configFields.map((field) => {
-                            if (!evalVisible(field.visible, slotValues)) return null
-                            const current = slotValues[field.id]
-                            const setValue = (v: FieldValue) => handleFieldChange(selectedSlot, field.id, v)
-                            return (
-                              <div key={field.id} className='flex items-center gap-2'>
-                                {field.type === 'boolean' ? (
-                                  <>
-                                    <Checkbox
-                                      id={`slot${selectedSlot + 1}-${field.id}`}
-                                      checked={current === true}
-                                      onCheckedChange={(c) => setValue(c as boolean)}
-                                      className={
-                                        current === true
-                                          ? 'h-[14px] w-[14px] border-brand'
-                                          : 'h-[14px] w-[14px] border-neutral-300'
-                                      }
-                                    />
-                                    <Label
-                                      htmlFor={`slot${selectedSlot + 1}-${field.id}`}
-                                      className='text-xs text-neutral-950 dark:text-white'
-                                    >
-                                      {field.label}
-                                    </Label>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Label className='w-44 shrink-0 text-xs text-neutral-950 dark:text-white'>
-                                      {field.label}
-                                    </Label>
-                                    {field.type === 'number' ? (
-                                      <div className='flex items-center gap-1'>
-                                        <input
-                                          type='number'
-                                          value={String(current ?? '')}
-                                          min={field.min}
-                                          max={field.max}
-                                          step={field.step}
-                                          onChange={(e) => setValue(Number(e.target.value))}
-                                          className='flex h-[30px] w-32 items-center rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
-                                        />
-                                        {field.unit && (
-                                          <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                                            {field.unit}
-                                          </span>
-                                        )}
-                                      </div>
-                                    ) : field.type === 'select' ? (
-                                      <Select value={String(current ?? '')} onValueChange={(v) => setValue(v)}>
-                                        <SelectTrigger
-                                          aria-label={field.label}
-                                          placeholder='Select...'
-                                          withIndicator
-                                          className='flex h-[30px] w-64 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
-                                        />
-                                        <SelectContent
-                                          className='h-fit max-h-[240px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-100 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'
-                                          sideOffset={5}
-                                          position='popper'
-                                          align='center'
-                                          side='bottom'
-                                        >
-                                          {(field.options ?? []).map((opt) => {
-                                            const v = typeof opt === 'string' ? opt : opt.value
-                                            const l = typeof opt === 'string' ? opt : opt.label
-                                            return (
-                                              <SelectItem
-                                                key={v}
-                                                value={v}
-                                                className='flex w-full cursor-pointer items-center px-2 py-[6px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850'
-                                              >
-                                                <span className='font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
-                                                  {l}
-                                                </span>
-                                              </SelectItem>
-                                            )
-                                          })}
-                                        </SelectContent>
-                                      </Select>
-                                    ) : (
-                                      <input
-                                        type='text'
-                                        value={String(current ?? '')}
-                                        onChange={(e) => setValue(e.target.value)}
-                                        className='flex h-[30px] w-64 items-center rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
-                                      />
-                                    )}
-                                  </>
-                                )}
-                                {field.help && <FieldHelpIcon text={field.help} />}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </section>
-                    </TooltipProvider>
-                  )}
                 </div>
               ) : (
                 /* Empty-slot state: nothing else to show — the always-

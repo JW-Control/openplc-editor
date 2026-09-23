@@ -3,6 +3,7 @@ import { StateCreator } from 'zustand'
 
 import type { DeviceConfiguration, DevicePin } from '../../../../middleware/shared/ports/types'
 import { defaultDeviceConfiguration } from './data/types'
+import { buildDefaultPinMapping } from './default-pin-mapping'
 import type { DeviceSlice, DeviceSliceRoot, PinUpdateResponse } from './types'
 import {
   checkIfPinAliasIsValid,
@@ -30,6 +31,7 @@ function getActivePinsDraft(draft: DeviceSlice): DevicePin[] {
   }
   return draft.deviceDefinitions.pinMapping.pinsByBoard[board]
 }
+
 
 const createDeviceSlice: StateCreator<DeviceSliceRoot, [], [], DeviceSlice> = (setState, getState) => ({
   deviceAvailableOptions: {
@@ -62,7 +64,8 @@ const createDeviceSlice: StateCreator<DeviceSliceRoot, [], [], DeviceSlice> = (s
   deviceActions: {
     setAvailableOptions: ({ availableBoards, availableCommunicationPorts }): void => {
       setState(
-        produce(({ deviceAvailableOptions }: DeviceSlice) => {
+        produce((draft: DeviceSlice) => {
+          const { deviceAvailableOptions } = draft
           if (availableBoards) {
             deviceAvailableOptions.availableBoards = availableBoards
           }
@@ -140,6 +143,38 @@ const createDeviceSlice: StateCreator<DeviceSliceRoot, [], [], DeviceSlice> = (s
           deviceDefinitions.pinMapping.currentSelectedPinTableRow = selectedRow
         }),
       )
+    },
+
+    loadDefaultPinMapping: (): void => {
+      const activeBoard = getState().deviceDefinitions.configuration.deviceBoard
+      const boardInfo = getState().deviceAvailableOptions.availableBoards.get(activeBoard)
+      if (!activeBoard || !boardInfo?.vpp) return
+
+      const defaults = buildDefaultPinMapping(boardInfo.pins)
+      if (defaults.length === 0) return
+
+      setState(
+        produce((draft: DeviceSlice) => {
+          draft.deviceUpdated.updated = true
+          draft.deviceDefinitions.pinMapping.pinsByBoard[activeBoard] = defaults
+          draft.deviceDefinitions.pinMapping.currentSelectedPinTableRow = -1
+        }),
+      )
+      getState().projectActions.recalculateIecAddresses()
+    },
+
+    clearPinMapping: (): void => {
+      const activeBoard = getState().deviceDefinitions.configuration.deviceBoard
+      if (!activeBoard) return
+
+      setState(
+        produce((draft: DeviceSlice) => {
+          draft.deviceUpdated.updated = true
+          draft.deviceDefinitions.pinMapping.pinsByBoard[activeBoard] = []
+          draft.deviceDefinitions.pinMapping.currentSelectedPinTableRow = -1
+        }),
+      )
+      getState().projectActions.recalculateIecAddresses()
     },
 
     createNewPin: (): void => {
@@ -355,7 +390,8 @@ const createDeviceSlice: StateCreator<DeviceSliceRoot, [], [], DeviceSlice> = (s
     setDeviceBoard: (deviceBoard): void => {
       const previousBoard = getState().deviceDefinitions.configuration.deviceBoard
       setState(
-        produce(({ deviceDefinitions, deviceUpdated }: DeviceSlice) => {
+        produce((draft: DeviceSlice) => {
+          const { deviceDefinitions, deviceUpdated } = draft
           deviceUpdated.updated = true
           // Wipe platformOption selections when the board changes — they're
           // declared per-board in the VPP manifest, so a `cpu=atmega328old`

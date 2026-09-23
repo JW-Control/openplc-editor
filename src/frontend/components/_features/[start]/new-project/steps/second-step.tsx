@@ -129,7 +129,7 @@ const Step2 = ({ onNext, onPrev, isFinalStep = false, onFinish, onClose }: Step2
         {capabilities.hasNativeFileDialogs && (
           <div className='flex flex-col items-center'>
             <h2 className='mb-2 select-none text-center text-lg font-semibold text-neutral-1000 dark:text-white'>
-              Choose an empty directory for your project: *
+              Choose a parent directory for your project: *
             </h2>
             <div className='relative h-20 w-64'>
               {' '}
