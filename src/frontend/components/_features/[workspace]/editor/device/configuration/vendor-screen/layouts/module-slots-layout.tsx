@@ -390,9 +390,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
       if (!moduleId) continue
 
       const moduleDef = findModule(moduleId)
-      const fields = collectConfigFields(
-        moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined,
-      )
+      const fields = collectConfigFields(moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined)
       if (fields.length === 0) continue
 
       const key = String(slotIndex + 1)
@@ -434,16 +432,14 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
         const moduleId = slots[slotIndex]
         if (!moduleId) continue
         const moduleDef = findModule(moduleId)
-        const fields = collectConfigFields(
-          moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined,
-        )
+        const fields = collectConfigFields(moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined)
         const peerField = fields.find((field) => field.id === fieldId && field.uniqueAcrossSlots)
         if (!peerField) continue
 
         const stored = slotsConfig[String(slot1)] ?? {}
         let peerValue: FieldValue | undefined = stored[fieldId]
         if (peerValue === undefined && peerField.defaultFromSlot) peerValue = slot1
-        if (peerValue === undefined) peerValue = peerField.default as FieldValue | undefined
+        if (peerValue === undefined) peerValue = peerField.default
 
         if (peerValue === value) conflicts.push(slot1)
       }
@@ -740,9 +736,9 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
 
   const handleFieldChange = (slotIndex: number, fieldId: string, value: FieldValue) => {
     const moduleDef = findModule(slots[slotIndex])
-    const fieldDef = collectConfigFields(
-      moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined,
-    ).find((field) => field.id === fieldId)
+    const fieldDef = collectConfigFields(moduleDef?.configScreenDefinition as ConfigScreenDefinition | undefined).find(
+      (field) => field.id === fieldId,
+    )
 
     if (fieldDef?.uniqueAcrossSlots) {
       const conflicts = conflictingSlotsForField(fieldId, value, slotIndex + 1)
@@ -1049,6 +1045,17 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                             const duplicateSlots = field.uniqueAcrossSlots
                               ? conflictingSlotsForField(field.id, current, selectedSlot + 1)
                               : []
+                            // Out-of-range numbers would be masked to the encoded
+                            // width at compile time; the build rejects them, so
+                            // flag them here first.
+                            const rangeError =
+                              field.type === 'number' &&
+                              current !== undefined &&
+                              (!Number.isInteger(current) ||
+                                (typeof field.min === 'number' && (current as number) < field.min) ||
+                                (typeof field.max === 'number' && (current as number) > field.max))
+                                ? `Must be an integer between ${field.min ?? '-∞'} and ${field.max ?? '∞'}`
+                                : null
                             return (
                               <div key={field.id} className='flex items-center gap-2'>
                                 {field.type === 'boolean' ? (
@@ -1138,6 +1145,11 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                                 {duplicateSlots.length > 0 && (
                                   <span className='text-xs font-medium text-red-600 dark:text-red-400'>
                                     Already used by Slot {duplicateSlots.join(', ')}
+                                  </span>
+                                )}
+                                {rangeError && (
+                                  <span className='text-xs font-medium text-red-600 dark:text-red-400'>
+                                    {rangeError}
                                   </span>
                                 )}
                               </div>
@@ -1259,7 +1271,6 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                       </table>
                     </section>
                   )}
-
                 </div>
               ) : (
                 /* Empty-slot state: nothing else to show — the always-
