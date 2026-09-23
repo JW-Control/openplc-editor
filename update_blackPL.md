@@ -141,11 +141,11 @@ VPP_SHA256=83fdd4b22d5193d31904959aceb72a86089996b836b4b2315671bfa7a3abfd20
 - La lógica es la misma que la del sketch validado. El programa IEC del esclavo no controla su I/O.
 - Un valor inválido detiene la compilación.
 - No requirió cambios en el editor: es solo VPP.
-- Proyecto del esclavo: **separado** del maestro, y con al menos una variable en `main` (p. ej. `Vida : BOOL;`), porque `xml2st` rechaza un `main` sin variables.
+- Proyecto del esclavo: **separado** del maestro. Puede tener `main` **vacío**: el dispositivo declara `iecProgramOptional` y el editor (`3437c77db`) completa en memoria una variable y un cuerpo ST no-op para `xml2st`, sin tocar el proyecto. Verificado con `XmlGenerator` + `xml2st.exe` reales.
 
 ```text
-VPP_VERSION=2.1.0-alpha.23
-VPP_SHA256=df37f1ed3adf1ee3d699e2ea2b17c4c947c6517b587399130ed294857fa706ff
+VPP_VERSION=2.1.0-alpha.24
+VPP_SHA256=2670e80771133aa41b3494698fdabf647698f7b9ac5780e8446376a2597da0fd
 REMOTE_IO_SLAVE_FROM_OPENPLC=PENDING_PHYSICAL
 ```
 
