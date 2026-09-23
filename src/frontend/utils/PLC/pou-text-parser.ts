@@ -110,7 +110,9 @@ export const parseTextualPouFromString = (content: string, language: string, typ
     }
 
     const variables = variablesString.trim()
-      ? parseIecStringToVariables(variablesString).map((v) => ({ ...v, debug: false }))
+      ? parseIecStringToVariables(variablesString, undefined, undefined, undefined, {
+          repairLocatedClassFor: type as PouType,
+        }).map((v) => ({ ...v, debug: false }))
       : []
 
     const endKeywords = {
@@ -209,7 +211,9 @@ export const parseHybridPouFromString = (content: string, language: string, type
     }
 
     const variables = variablesString.trim()
-      ? parseIecStringToVariables(variablesString).map((v) => ({ ...v, debug: false }))
+      ? parseIecStringToVariables(variablesString, undefined, undefined, undefined, {
+          repairLocatedClassFor: type as PouType,
+        }).map((v) => ({ ...v, debug: false }))
       : []
 
     // Strip the trailing END keyword from the body content, matching how textual/graphical parsers handle it
@@ -307,7 +311,9 @@ export const parseGraphicalPouFromString = (content: string, language: string, t
     }
 
     const variables: PLCVariable[] = variablesString.trim()
-      ? parseIecStringToVariables(variablesString).map((v) => ({ ...v, debug: false }))
+      ? parseIecStringToVariables(variablesString, undefined, undefined, undefined, {
+          repairLocatedClassFor: type as PouType,
+        }).map((v) => ({ ...v, debug: false }))
       : []
 
     const endKeywords: Record<string, string> = {

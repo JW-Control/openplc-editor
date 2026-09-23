@@ -37,6 +37,15 @@ const checkIfVariableExists = (variables: PLCVariable[], name: string, exclude?:
   return nameAlreadyInUse
 }
 
+/** Variable classes on which IEC 61131-3 does not allow an `AT` location. */
+const LOCATION_DISALLOWED_CLASSES: Array<NonNullable<PLCVariable['class']>> = [
+  'input',
+  'output',
+  'inOut',
+  'external',
+  'temp',
+]
+
 /**
  * This is a validation to check if the value of the location is unique.
  *
@@ -418,6 +427,23 @@ const updateVariableValidation = (
     }
     if (dataToBeUpdated.type.definition === 'derived') {
       response.data = { ...(response.data ? response.data : {}), location: '', initialValue: '', class: 'local' }
+    }
+  }
+
+  // IEC only allows `AT` on VAR / VAR_GLOBAL. Enforce it here, in one
+  // update, so no UI path can persist a located VAR_INPUT/OUTPUT/... that
+  // the loader would later reject.
+  const effectiveClass = dataToBeUpdated.class ?? variableToUpdate.class
+  if (effectiveClass && LOCATION_DISALLOWED_CLASSES.includes(effectiveClass)) {
+    if (dataToBeUpdated.location) {
+      return {
+        ok: false,
+        title: 'Location not allowed.',
+        message: `Variables of class "${effectiveClass}" cannot have a location. Use class "local".`,
+      }
+    }
+    if (dataToBeUpdated.class && variableToUpdate.location) {
+      response.data = { ...(response.data ? response.data : {}), location: '' }
     }
   }
 

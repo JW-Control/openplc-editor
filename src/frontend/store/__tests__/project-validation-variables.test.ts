@@ -411,9 +411,29 @@ describe('updateVariableValidation', () => {
   const existingVars = [makeVariable('Var1', 'INT', '%QW0'), makeVariable('Var2', 'BOOL', '%QX0.0')]
 
   it('returns ok: true when updating class only', () => {
+    const result = updateVariableValidation(existingVars, { class: 'local' }, existingVars[0])
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual({ class: 'local' })
+  })
+
+  // -- IEC: AT is only allowed on VAR / VAR_GLOBAL --
+  it('clears the location in the same update when the class changes to one without locations', () => {
     const result = updateVariableValidation(existingVars, { class: 'output' }, existingVars[0])
     expect(result.ok).toBe(true)
-    expect(result.data).toEqual({ class: 'output' })
+    expect(result.data).toEqual({ class: 'output', location: '' })
+  })
+
+  it('rejects setting a location on a variable whose class does not allow it', () => {
+    const input = { ...makeVariable('In1', 'BOOL', ''), class: 'input' as const }
+    const result = updateVariableValidation([input], { location: 'Int1' }, input)
+    expect(result.ok).toBe(false)
+    expect(result.title).toBe('Location not allowed.')
+  })
+
+  it('rejects a location together with a class change to input', () => {
+    const local = makeVariable('Loc1', 'BOOL', '')
+    const result = updateVariableValidation([local], { class: 'input', location: 'Int1' }, local)
+    expect(result.ok).toBe(false)
   })
 
   // -- Name validation --

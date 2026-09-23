@@ -81,11 +81,23 @@ const parseArrayType = (typeStr: string): PLCVariable['type'] | null => {
   }
 }
 
+export type ParseIecVariablesOptions = {
+  /**
+   * Loading a saved POU must never drop its declarations. When set, a
+   * location on a class that does not accept one is repaired instead of
+   * rejected: in a PROGRAM the variable becomes a local `VAR` (it has no
+   * caller, so the binding is kept); in functions and function blocks the
+   * location is removed. Interactive editing keeps the strict behaviour.
+   */
+  repairLocatedClassFor?: 'program' | 'function' | 'function-block'
+}
+
 export const parseIecStringToVariables = (
   iecString: string,
   pous?: PLCPou[],
   _dataTypes?: PLCDataType[], // Reserved for future use: will enable user-defined data type validation
   libraries?: LibraryState['libraries'],
+  options?: ParseIecVariablesOptions,
 ): PLCVariable[] => {
   const variables: PLCVariable[] = []
   const lines = iecString.split(/\r?\n/)
@@ -118,11 +130,24 @@ export const parseIecStringToVariables = (
       throw new Error(`Syntax error on line ${lineNumber}: "${line}". Possible cause: ${guessErrorReason(line)}.`)
     }
 
-    const { name, location, type, initialValue, documentation } = match.groups
+    const { name, type, initialValue, documentation } = match.groups
+    let { location } = match.groups
+    let variableClass: PLCVariable['class'] = currentClass
 
     const disallowedLocationClasses: Array<PLCVariable['class']> = ['input', 'output', 'inOut', 'external', 'temp']
 
-    if (location && disallowedLocationClasses.includes(currentClass)) {
+    if (location && disallowedLocationClasses.includes(variableClass) && options?.repairLocatedClassFor) {
+      if (options.repairLocatedClassFor === 'program' && variableClass !== 'external') {
+        variableClass = 'local'
+      } else {
+        location = ''
+      }
+      console.warn(
+        `[pou-load] line ${lineNumber}: "${name.trim()}" had a location on class "${currentClass}"; repaired as class "${variableClass}"${location ? '' : ' without location'}.`,
+      )
+    }
+
+    if (location && disallowedLocationClasses.includes(variableClass)) {
       throw new Error(
         `Syntax error on line ${lineNumber}: Location ("AT") is not allowed for variables of class "${currentClass.toUpperCase()}".`,
       )
@@ -141,7 +166,7 @@ export const parseIecStringToVariables = (
     if (arrayType) {
       variables.push({
         name: name.trim(),
-        class: currentClass,
+        class: variableClass,
         type: arrayType,
         location: location ? location.trim() : '',
         initialValue: initialValue ? initialValue.trim() : null,
@@ -178,7 +203,7 @@ export const parseIecStringToVariables = (
 
     variables.push({
       name: name.trim(),
-      class: currentClass,
+      class: variableClass,
       type: typeDefinition,
       location: location ? location.trim() : '',
       initialValue: initialValue ? initialValue.trim() : null,

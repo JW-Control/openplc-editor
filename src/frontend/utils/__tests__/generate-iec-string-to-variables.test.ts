@@ -456,3 +456,39 @@ describe('findDuplicateVariableName', () => {
     )
   })
 })
+
+describe('parseIecStringToVariables — load-time repair of located classes', () => {
+  const text = [
+    'VAR_INPUT',
+    '  Entrada1 : BOOL AT Int1;',
+    'END_VAR',
+    'VAR',
+    '  Salida1 : BOOL AT Ou1;',
+    'END_VAR',
+  ].join('\n')
+
+  beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => undefined))
+  afterEach(() => jest.restoreAllMocks())
+
+  it('keeps rejecting located VAR_INPUT in strict (interactive) mode', () => {
+    expect(() => parseIecStringToVariables(text)).toThrow('Location ("AT") is not allowed')
+  })
+
+  it('moves a located VAR_INPUT of a PROGRAM to VAR and keeps its binding', () => {
+    const vars = parseIecStringToVariables(text, undefined, undefined, undefined, { repairLocatedClassFor: 'program' })
+    expect(vars.map((v) => [v.name, v.class, v.location])).toEqual([
+      ['Entrada1', 'local', 'Int1'],
+      ['Salida1', 'local', 'Ou1'],
+    ])
+  })
+
+  it('drops the location (not the variable) in a FUNCTION_BLOCK', () => {
+    const vars = parseIecStringToVariables(text, undefined, undefined, undefined, {
+      repairLocatedClassFor: 'function-block',
+    })
+    expect(vars.map((v) => [v.name, v.class, v.location])).toEqual([
+      ['Entrada1', 'input', ''],
+      ['Salida1', 'local', 'Ou1'],
+    ])
+  })
+})
