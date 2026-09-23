@@ -109,11 +109,30 @@ EDITOR_VALIDATION_UI=PENDING (probar el editor dev de esta rama: error de rango 
 
 ---
 
-## 5. Limitación conocida (resolver antes del gate multi-slot)
+## 5. Correcciones posteriores a la primera prueba en banco
 
-El sketch esclavo aplica `OUTPUT_FAILSAFE_MS = 100`: apaga las salidas si pasan 100 ms sin `FC05`/`FC15`. Con **un** esclavo no afecta. Con **varios** slots, a baud bajo o con un esclavo fuera de línea (timeout de 250 ms), el maestro puede tardar más de 100 ms en volver a cada módulo, y las salidas de los esclavos sanos **parpadearían**. Hay que:
-- subir o hacer configurable el failsafe del esclavo (unos 500–1000 ms);
-- limitar en el maestro la frecuencia de sondeo de los slots fuera de línea.
+### 5.1 Variables del POU perdidas al reabrir (editor, `05f2d8360`)
+**Síntoma:** después de cerrar y reabrir el proyecto, `main` aparecía con `VAR / END_VAR` vacío. Los slots del Backplane sí se conservaban.
+
+**Causa:** `Entrada1 : BOOL AT Int1` estaba en **VAR_INPUT**. El archivo se guardó bien, pero al reabrir el parser estricto rechazaba `AT` en VAR_INPUT y el cargador creaba en silencio un POU de respaldo con las variables vacías. Si se hubiera guardado en ese estado, las variables se habrían perdido.
+
+**Corrección:**
+- Al cargar, nunca se descarta una declaración. En un PROGRAM la variable pasa a `VAR` conservando su alias; en FUNCTION/FB solo se quita la ubicación.
+- En el store, cambiar la clase a una sin `AT` borra la ubicación en la misma operación, y se rechaza asignar ubicación a input/output/inOut/external/temp.
+- Verificado con el `main.ld` real del banco: las 7 variables cargan con sus alias.
+
+### 5.2 Failsafe de 100 ms (platform, VPP 2.1.0-alpha.21)
+- Maestro: un fallo corta el ciclo del slot y los slots fuera de línea se sondean de a uno, como máximo cada 1000 ms.
+- Esclavo `JWPLC_RemoteIO_Slave_RTU`: `OUTPUT_FAILSAFE_MS = 1000`.
+- Peor caso entre escrituras a un módulo sano: unos 670 ms (7 slots a 9600 + 1 timeout).
+- HAL compilado en 3 variantes y sketch esclavo compilado. Firma `valid=true`.
+
+```text
+VPP_VERSION=2.1.0-alpha.21
+VPP_SHA256=83fdd4b22d5193d31904959aceb72a86089996b836b4b2315671bfa7a3abfd20
+```
+
+**Para probar en banco:** importar el VPP alpha.21 en el maestro y **volver a cargar el sketch esclavo** actualizado (`FAILSAFE_MS=1000` en el monitor serie).
 
 ---
 
