@@ -220,3 +220,20 @@ describe('generateVppConfigContent', () => {
     expect(out).toContain('#define VPP_MODBUS_RTU_BAUD_RATE 115200')
   })
 })
+
+describe('generateVppConfigContent — JWPLC Backplane RS-485 contract', () => {
+  // jwplcbasic.cpp reads these exact names; renaming them silently drops
+  // the bus configuration back to the 115200 / 8N1 fallback.
+  it('emits the backplane_rtu section as semantic string macros', () => {
+    const out = generateVppConfigContent({
+      vendorScreenData: { backplane_rtu: { baud_rate: '38400', serial_format: '8E1' } },
+    })
+    expect(out).toContain('#define VPP_BACKPLANE_RTU_BAUD_RATE "38400"')
+    expect(out).toContain('#define VPP_BACKPLANE_RTU_SERIAL_FORMAT "8E1"')
+  })
+
+  it('omits the macros when the section was never edited', () => {
+    const out = generateVppConfigContent({ vendorScreenData: { 'module-configuration': { slots: [] } } })
+    expect(out).not.toContain('VPP_BACKPLANE_RTU_')
+  })
+})

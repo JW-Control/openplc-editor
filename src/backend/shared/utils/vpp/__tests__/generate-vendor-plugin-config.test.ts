@@ -1,6 +1,7 @@
 import {
   buildModuleConfigEntries,
   generateVendorPluginConfig,
+  validateModuleConfigValues,
   type VendorScreenData,
   type VppModuleDefinition,
 } from '../generate-vendor-plugin-config'
@@ -779,5 +780,91 @@ describe('buildModuleConfigEntries', () => {
 
   it('returns [] when there is no module-configuration', () => {
     expect(buildModuleConfigEntries({} as VendorScreenData, modules)).toEqual([])
+  })
+})
+
+// JWPLC Basic Remote I/O: one-byte Modbus Slave ID whose default follows the slot.
+const moduleRemoteIo: VppModuleDefinition = {
+  id: 'jwplc-basic-remote-io',
+  name: 'JWPLC Basic Remote I/O',
+  configScreenDefinition: {
+    sections: [
+      {
+        id: 'rtu-config',
+        layout: 'form',
+        totalBytes: 1,
+        fields: [
+          {
+            id: 'slaveId',
+            label: 'Slave ID',
+            type: 'number',
+            default: 2,
+            defaultFromSlot: true,
+            uniqueAcrossSlots: true,
+            min: 1,
+            max: 247,
+            encoding: { byteOffset: 0, size: 1 },
+          },
+        ],
+      },
+    ],
+  },
+}
+
+describe('JWPLC backplane slave identity', () => {
+  const controller: VppModuleDefinition = { id: 'jwplc-basic-controller', name: 'JWPLC Basic v2.0.0' }
+  const modules = [controller, moduleRemoteIo]
+  const remote = 'jwplc-basic-remote-io'
+
+  function vsd(slotsConfig: Record<string, Record<string, string | number | boolean>>, count = 3): VendorScreenData {
+    return {
+      'module-configuration': {
+        slots: ['jwplc-basic-controller', ...Array.from({ length: count }, () => remote)],
+        slotsConfig,
+      },
+    }
+  }
+
+  it('encodes stored Slave IDs for every remote slot', () => {
+    const entries = buildModuleConfigEntries(
+      vsd({ '2': { slaveId: 10 }, '3': { slaveId: 11 }, '4': { slaveId: 12 } }),
+      modules,
+    )
+    expect(entries).toEqual([
+      { slot: 2, bytes: [10] },
+      { slot: 3, bytes: [11] },
+      { slot: 4, bytes: [12] },
+    ])
+  })
+
+  it('derives an unset Slave ID from the slot number, as the editor displays it', () => {
+    const entries = buildModuleConfigEntries(vsd({}), modules)
+    expect(entries.map((e) => e.bytes[0])).toEqual([2, 3, 4])
+  })
+
+  it('accepts a valid configuration', () => {
+    expect(validateModuleConfigValues(vsd({ '2': { slaveId: 2 }, '3': { slaveId: 3 } }, 2), modules)).toEqual([])
+    expect(validateModuleConfigValues(vsd({}), modules)).toEqual([])
+  })
+
+  it('rejects out-of-range Slave IDs instead of masking them to one byte', () => {
+    const errors = validateModuleConfigValues(vsd({ '2': { slaveId: 258 }, '3': { slaveId: 0 } }, 2), modules)
+    expect(errors).toHaveLength(2)
+    expect(errors[0]).toContain('slot 2')
+    expect(errors[0]).toContain('258 is out of range 1..247')
+    expect(errors[1]).toContain('slot 3')
+  })
+
+  it('rejects non-integer Slave IDs', () => {
+    const errors = validateModuleConfigValues(vsd({ '2': { slaveId: 2.5 } }, 1), modules)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('must be an integer')
+  })
+
+  it('rejects duplicated Slave IDs, including slot-derived defaults', () => {
+    const errors = validateModuleConfigValues(vsd({ '4': { slaveId: 3 } }), modules)
+    expect(errors).toEqual([
+      'Backplane slot 4 (JWPLC Basic Remote I/O): Slave ID 3 is already used by Backplane slot 3.',
+    ])
   })
 })

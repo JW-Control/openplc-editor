@@ -113,6 +113,7 @@ import { XmlGenerator } from '@root/backend/shared/utils/PLC/xml-generator'
 import {
   buildModuleConfigEntries,
   generateVendorPluginConfig,
+  validateModuleConfigValues,
 } from '@root/backend/shared/utils/vpp/generate-vendor-plugin-config'
 import { getErrorMessage } from '@root/frontend/utils/get-error-message'
 import { app as electronApp, dialog, MessageChannelMain } from 'electron'
@@ -2345,12 +2346,16 @@ class CompilerModule {
    * `module-config` key so the `vpp_config.h` generator emits
    * `VPP_MODULE_CONFIG_ENTRIES_*` macros for the HAL.
    *
-   * Returns [] for non-modular / non-VPP boards. Never throws.
+   * `errors` lists module-configuration values that cannot be encoded
+   * safely (out of range, duplicated identities); the caller must stop
+   * the build when it is non-empty.
+   *
+   * Returns no entries for non-modular / non-VPP boards. Never throws.
    */
   async buildVppArduinoModuleConfig(
     boardTarget: string,
     vendorScreenData: Record<string, unknown>,
-  ): Promise<Array<{ slot: number; bytes: number[] }>> {
+  ): Promise<{ entries: Array<{ slot: number; bytes: number[] }>; errors: string[] }> {
     try {
       const packageManager = new PackageManagerModule()
       const installed = packageManager.listInstalled()
@@ -2369,7 +2374,9 @@ class CompilerModule {
       }
 
       const rawModules = matchingDevice?.moduleSystem?.modules
-      if (!matchingDevice || !matchingPackagePath || !rawModules || rawModules.length === 0) return []
+      if (!matchingDevice || !matchingPackagePath || !rawModules || rawModules.length === 0) {
+        return { entries: [], errors: [] }
+      }
 
       const pkgPath = matchingPackagePath
       const modules = await Promise.all(
@@ -2388,12 +2395,13 @@ class CompilerModule {
         }),
       )
 
-      return buildModuleConfigEntries(
-        vendorScreenData as Parameters<typeof buildModuleConfigEntries>[0],
-        modules as Parameters<typeof buildModuleConfigEntries>[1],
-      )
+      const typedData = vendorScreenData as Parameters<typeof buildModuleConfigEntries>[0]
+      const typedModules = modules as Parameters<typeof buildModuleConfigEntries>[1]
+      const errors = validateModuleConfigValues(typedData, typedModules)
+      if (errors.length > 0) return { entries: [], errors }
+      return { entries: buildModuleConfigEntries(typedData, typedModules), errors: [] }
     } catch {
-      return []
+      return { entries: [], errors: [] }
     }
   }
 
@@ -2756,7 +2764,21 @@ class CompilerModule {
     // non-VPP / runtime-v4 / simulator targets.
     let effectiveVendorScreenData = vendorScreenData
     if (!isRuntimeV4 && !isSimulator) {
-      const moduleConfigEntries = await this.buildVppArduinoModuleConfig(boardTarget, vendorScreenData ?? {})
+      const { entries: moduleConfigEntries, errors: moduleConfigErrors } = await this.buildVppArduinoModuleConfig(
+        boardTarget,
+        vendorScreenData ?? {},
+      )
+      if (moduleConfigErrors.length > 0) {
+        for (const message of moduleConfigErrors) {
+          _mainProcessPort.postMessage({ logLevel: 'error', message })
+        }
+        _mainProcessPort.postMessage({
+          logLevel: 'error',
+          message: 'Invalid backplane module configuration. Stopping compilation process.',
+        })
+        _mainProcessPort.close()
+        return
+      }
       if (moduleConfigEntries.length > 0) {
         effectiveVendorScreenData = { ...(vendorScreenData ?? {}), 'module-config': { entries: moduleConfigEntries } }
       }

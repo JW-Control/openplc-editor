@@ -291,7 +291,7 @@ function buildSlots(vendorScreenData: VendorScreenData, modules: VppModuleDefini
     // Module configuration bytes — only when the manifest declared a
     // configScreen for this SKU and the editor has either user input
     // or schema defaults to feed the encoder.
-    const moduleConfigBytes = encodeModuleConfig(configScreenDef, slotConfigValues)
+    const moduleConfigBytes = encodeModuleConfig(configScreenDef, slotConfigValues, slotNumber)
     if (moduleConfigBytes !== null) slot.module_config = bytesToHexString(moduleConfigBytes)
 
     slots.push(slot)
@@ -332,10 +332,86 @@ export function buildModuleConfigEntries(
     const moduleDef = modules.find((m) => m.id === moduleId)
     if (!moduleDef) continue
     const slotNumber = slotIndex + 1
-    const bytes = encodeModuleConfig(moduleDef.configScreenDefinition, slotsConfigBag[String(slotNumber)] ?? {})
+    const bytes = encodeModuleConfig(
+      moduleDef.configScreenDefinition,
+      slotsConfigBag[String(slotNumber)] ?? {},
+      slotNumber,
+    )
     if (bytes && bytes.length > 0) entries.push({ slot: slotNumber, bytes })
   }
   return entries
+}
+
+/**
+ * Validate the per-slot module-configuration values before they are
+ * encoded for an Arduino VPP target.
+ *
+ * The byte encoder masks every value to its field width, so an
+ * out-of-range number would be silently aliased (e.g. Slave ID 258 ->
+ * byte 2) and could address a different device on the bus. The
+ * compiler calls this first and aborts the build on any error.
+ *
+ * Checks, per populated slot whose module declares a configScreen:
+ *   - encoded `number` fields resolve to an integer within [min, max];
+ *   - `uniqueAcrossSlots` fields do not repeat across the backplane.
+ *
+ * Returns human-readable errors (empty when the configuration is valid).
+ */
+export function validateModuleConfigValues(
+  vendorScreenData: VendorScreenData,
+  modules: VppModuleDefinition[],
+): string[] {
+  const moduleConfig = (vendorScreenData['module-configuration'] as ModuleConfiguration | undefined) ?? {}
+  const slotAssignments = moduleConfig.slots ?? []
+  const slotsConfigBag = moduleConfig.slotsConfig ?? {}
+
+  const errors: string[] = []
+  const uniqueSeen = new Map<string, number>()
+
+  for (let slotIndex = 0; slotIndex < slotAssignments.length; slotIndex++) {
+    const moduleId = slotAssignments[slotIndex]
+    if (!moduleId) continue
+    const moduleDef = modules.find((m) => m.id === moduleId)
+    if (!moduleDef?.configScreenDefinition) continue
+
+    const slotNumber = slotIndex + 1
+    const where = `Backplane slot ${slotNumber} (${moduleDef.name})`
+    const { fields } = collectConfigFormFields(moduleDef.configScreenDefinition)
+    const values = resolveFieldValues(fields, slotsConfigBag[String(slotNumber)] ?? {}, slotNumber)
+
+    for (const field of fields) {
+      const label = field.label ?? field.id
+      const value = values[field.id]
+
+      if (field.type === 'number' && field.encoding) {
+        const numeric = typeof value === 'number' ? value : Number(value)
+        if (value === undefined || value === '' || !Number.isInteger(numeric)) {
+          errors.push(
+            `${where}: ${label} must be an integer (current: ${value === undefined ? 'empty' : String(value)}).`,
+          )
+          continue
+        }
+        const min = typeof field.min === 'number' ? field.min : undefined
+        const max = typeof field.max === 'number' ? field.max : undefined
+        if ((min !== undefined && numeric < min) || (max !== undefined && numeric > max)) {
+          errors.push(`${where}: ${label} ${numeric} is out of range ${min ?? '-inf'}..${max ?? '+inf'}.`)
+          continue
+        }
+      }
+
+      if (field.uniqueAcrossSlots && value !== undefined && value !== '') {
+        const key = `${field.id}\u0000${String(value)}`
+        const firstSlot = uniqueSeen.get(key)
+        if (firstSlot !== undefined) {
+          errors.push(`${where}: ${label} ${String(value)} is already used by Backplane slot ${firstSlot}.`)
+        } else {
+          uniqueSeen.set(key, slotNumber)
+        }
+      }
+    }
+  }
+
+  return errors
 }
 
 /**
@@ -381,7 +457,15 @@ function buildPins(devicePins: DevicePinInput[]): PluginPin[] {
 
 type FormField = {
   id: string
+  label?: string
+  type?: string
   default?: unknown
+  /** Initialize from the 1-based slot number when no value is stored. */
+  defaultFromSlot?: boolean
+  /** Values must be unique among populated slots of the backplane. */
+  uniqueAcrossSlots?: boolean
+  min?: number
+  max?: number
   encoding?: unknown
 }
 
@@ -424,28 +508,46 @@ function collectConfigFormFields(def: unknown): { fields: FormField[]; totalByte
  * no encodable fields.
  *
  * Field values come from the user's stored input where present and
- * from the field's `default` otherwise — mirroring what the editor's
+ * from the field's default otherwise — mirroring what the editor's
  * UI shows so the runtime gets what the user sees.
  */
 function encodeModuleConfig(
   configScreenDef: unknown,
   storedValues: Record<string, string | number | boolean>,
+  slotNumber: number,
 ): number[] | null {
   if (!configScreenDef) return null
   const { fields, totalBytes } = collectConfigFormFields(configScreenDef)
   if (fields.length === 0) return null
 
+  return encodeConfigBytes(fields, resolveFieldValues(fields, storedValues, slotNumber), totalBytes)
+}
+
+/**
+ * Merge stored values with defaults. A `defaultFromSlot` field without a
+ * stored value takes the 1-based slot number, as the backplane editor
+ * displays it; otherwise the declared `default` applies.
+ */
+function resolveFieldValues(
+  fields: FormField[],
+  storedValues: Record<string, string | number | boolean>,
+  slotNumber: number,
+): Record<string, string | number | boolean> {
   const merged: Record<string, string | number | boolean> = {}
   for (const f of fields) {
     const v = storedValues[f.id]
     if (v !== undefined && v !== null && v !== '') {
       merged[f.id] = v
+    } else if (f.defaultFromSlot) {
+      let slotDefault = slotNumber
+      if (typeof f.min === 'number') slotDefault = Math.max(f.min, slotDefault)
+      if (typeof f.max === 'number') slotDefault = Math.min(f.max, slotDefault)
+      merged[f.id] = slotDefault
     } else if (f.default !== undefined && f.default !== null && f.default !== '') {
       merged[f.id] = f.default as string | number | boolean
     }
   }
-
-  return encodeConfigBytes(fields, merged, totalBytes)
+  return merged
 }
 
 /**
