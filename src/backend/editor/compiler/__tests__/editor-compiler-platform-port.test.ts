@@ -201,7 +201,11 @@ describe('createEditorCompilerPlatformPort', () => {
     // The per-board library list is the first argument; the output
     // callback follows.  Asserting the exact list catches accidental
     // drops in plumbing between port → handler.
-    expect(handleLibraryInstallation).toHaveBeenCalledWith(['Arduino_Opta_Blueprint', 'P1AM'], expect.any(Function))
+    expect(handleLibraryInstallation).toHaveBeenCalledWith(
+      ['Arduino_Opta_Blueprint', 'P1AM'],
+      expect.any(Function),
+      true,
+    )
     expect(result).toEqual({ ok: true })
   })
 
@@ -209,7 +213,14 @@ describe('createEditorCompilerPlatformPort', () => {
     const handleLibraryInstallation = jest.fn(async () => undefined)
     const port = createEditorCompilerPlatformPort(makeHandlers({ handleLibraryInstallation }), makeContext())
     await port.installArduinoLib({ libId: '' }, () => undefined)
-    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function))
+    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), true)
+  })
+
+  it('installArduinoLib skips legacy global libraries for VPP targets', async () => {
+    const handleLibraryInstallation = jest.fn(async () => undefined)
+    const port = createEditorCompilerPlatformPort(makeHandlers({ handleLibraryInstallation }), makeContext())
+    await port.installArduinoLib({ libId: '', extraLibraries: [], includeLegacyGlobalLibraries: false }, () => undefined)
+    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), false)
   })
 
   it('installArduinoLib warns and returns ok:true when the install machinery throws', async () => {
