@@ -83,6 +83,14 @@ type RemoteIOPresetGroup = {
   errorHandling: 'keep-last-value' | 'set-to-zero'
 }
 
+/**
+ * Alpha12: JWPLC Remote I/O modules are configured from the JWPLC Backplane
+ * screen (Slave ID per slot, RS-485 bus settings) and served by the VPP HAL.
+ * This Remote Devices preset was the Alpha7 PoC path; it stays hidden so the
+ * Backplane remains the single source of truth. Kept for re-evaluation.
+ */
+const SHOW_JWPLC_BASIC_REMOTE_IO_PRESET = false
+
 const JWPLC_BASIC_REMOTE_IO_PRESET_GROUPS: RemoteIOPresetGroup[] = [
   {
     name: 'JWPLC Remote Digital Inputs',
@@ -1016,19 +1024,21 @@ const RemoteDeviceEditor = () => {
         <div className='mb-2 flex items-center justify-between'>
           <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>IO Tag Mapping</h3>
           <div className='flex items-center gap-2'>
-            <button
-              type='button'
-              onClick={handleAddJwplcBasicRemoteIoPreset}
-              disabled={hasJwplcBasicRemoteIoPreset}
-              title={
-                hasJwplcBasicRemoteIoPreset
-                  ? 'JWPLC Basic Remote I/O preset already added'
-                  : 'Add JWPLC Basic Remote I/O preset'
-              }
-              className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand disabled:cursor-not-allowed disabled:border-neutral-400 disabled:text-neutral-400 disabled:hover:bg-transparent dark:disabled:border-neutral-700 dark:disabled:text-neutral-600'
-            >
-              JWPLC Basic Remote I/O
-            </button>
+            {SHOW_JWPLC_BASIC_REMOTE_IO_PRESET && (
+              <button
+                type='button'
+                onClick={handleAddJwplcBasicRemoteIoPreset}
+                disabled={hasJwplcBasicRemoteIoPreset}
+                title={
+                  hasJwplcBasicRemoteIoPreset
+                    ? 'JWPLC Basic Remote I/O preset already added'
+                    : 'Add JWPLC Basic Remote I/O preset'
+                }
+                className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand disabled:cursor-not-allowed disabled:border-neutral-400 disabled:text-neutral-400 disabled:hover:bg-transparent dark:disabled:border-neutral-700 dark:disabled:text-neutral-600'
+              >
+                JWPLC Basic Remote I/O
+              </button>
+            )}
 
             <TableActions
               actions={[
