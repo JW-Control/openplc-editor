@@ -12,15 +12,16 @@
 | Repo | Rama | Base |
 |---|---|---|
 | `JW-Control/openplc-editor` | `develop/alpha12-backplane-closure` | `integration/jwplc-alpha7-alpha12-upstream` @ `db3d05506` |
-| `JW-Control/platform-jwplc` | `v2.1.0-alpha.12/feature/openplc-engineering-closure` | `release/v2.1.x` @ `165f94fb` (alpha11 + roadmap) |
+| `JW-Control/platform-jwplc` | `v2.1.0-alpha.12/feature/openplc-engineering-closure` | `main` @ `aa0bfed1` (Alpha12 publicada; antes `release/v2.1.x` @ `165f94fb`, alpha11) |
 
 ```text
 EDITOR_VERSION=4.2.8-jwplc.2 (bump a 4.2.8-jwplc.3 al cierre)
 STRUCPP_VERSION=v0.5.13
 VPP_VERSION_BEFORE=2.1.0-alpha.19
-VPP_VERSION_AFTER=2.1.0-alpha.24   (versión vigente; historial en §7)
+VPP_VERSION_AFTER=2.1.0-alpha.26   (versión vigente; historial en §7)
 VPP_KEY_ID=jwcontrol-2026
-VPP_SHA256=2670e80771133aa41b3494698fdabf647698f7b9ac5780e8446376a2597da0fd
+VPP_SHA256=0992c24cfc6b416d30dd0011aecf617a8d449d25cb145e2fd836bb3503c78918
+PLATFORM_CORE=jwplc:esp32 2.1.0-alpha.12 (requerido desde VPP alpha.25)
 ```
 
 ---
@@ -160,7 +161,7 @@ REMOTE_IO_SLAVE_FROM_OPENPLC=PASS_PHYSICAL (2026-09-23, 1 esclavo ID 2, 115200/8
 ## 6. Guía rápida para el técnico
 
 **Maestro**
-1. Package Manager: instalar el VPP `jwplc-basic-openplc-2.1.0-alpha.24.jwcontrol-signed.vpp`.
+1. Board Manager: core `jwplc:esp32` **2.1.0-alpha.12**. Package Manager: instalar el VPP `jwplc-basic-openplc-2.1.0-alpha.26.jwcontrol-signed.vpp`.
 2. Proyecto con la placa **JWPLC BASIC [2.0.0]**.
 3. Pantalla **JWPLC Backplane**:
    - en **RS-485 Backplane**, elegir Baudrate y Formato;
@@ -194,6 +195,8 @@ REMOTE_IO_SLAVE_FROM_OPENPLC=PASS_PHYSICAL (2026-09-23, 1 esclavo ID 2, 115200/8
 | 2.1.0-alpha.22 | `64e5dc87` `27ae9676` | Nuevo dispositivo esclavo Remote I/O configurable desde OpenPLC |
 | 2.1.0-alpha.23 | `957c427d` | Nombre del esclavo sin `/` (rompía la carpeta de build) |
 | 2.1.0-alpha.24 | `caf330b3` | Esclavo con `capabilities.iecProgramOptional` (compila con `main` vacío) |
+| 2.1.0-alpha.25 | `2aa46439` | Rama rebasada sobre `main` (Alpha12). Master RTU con `motor(ASYNC)` explícito y API unificada `readCoils`/`readDiscreteInputs`/`writeMultipleCoils`; `#error` si el core es anterior a Alpha12 |
+| 2.1.0-alpha.26 | `1b54c7f9` | Serial2 exclusivo del Backplane: el módulo Remote I/O declara `exclusiveSerialPort`; `static_assert` en el HAL si Modbus RTU (debugger) usa Serial2 con módulos |
 
 Commits del editor posteriores a la primera publicación:
 
@@ -204,6 +207,43 @@ Commits del editor posteriores a la primera publicación:
 | `91db7f8b5` | Tests para 100 % de statements/lines en `src/backend/shared` |
 
 Validación automática acumulada del editor: `tsc` y ESLint limpios; Jest con 3686 tests en store, utils, services, shared y components; umbrales de cobertura del repo cumplidos en los archivos modificados. En el HAL del maestro se compilaron 7 variantes y en el del esclavo otras 7, con el core real (4 fallos esperados en ambos casos).
+
+---
+
+## 7b. Rebase sobre la Alpha12 publicada (2026-10-06)
+
+- `platform-jwplc`: la rama se rebasó sobre `main @ aa0bfed1` (Alpha12 publicada) sin conflictos y sin tocar el core ni las librerías de Alpha12. Push con `--force-with-lease`. Respaldo local: `backup/openplc-engineering-closure-alpha11-0da901ae`.
+- Alpha12 trae en `JWPLC_ModbusRTU` un selector de motor `SYNC`/`ASYNC` y en `JWPLC_RS485` la dirección del bus por hardware. El HAL maestro se adaptó (VPP alpha.25): `motor(ASYNC)` explícito y API unificada. El frame gap (2 ms) y el HAL esclavo no cambian.
+- Detalle y verificación: `docs/v2.1.0-alpha.12/BACKPLANE_RTU_CONFIGURATION.md` §11 en `platform-jwplc`.
+
+```text
+ALPHA12_CORE_COMPILE=PASS (maestro, esclavo OpenPLC y sketch esclavo)
+ALPHA12_CORE_PHYSICAL=PASS (maestro <-> esclavo con core Alpha12, HAL alpha.24)
+VPP_ALPHA25_SIGNATURE=valid
+VPP_ALPHA25_PHYSICAL=PENDING
+```
+
+---
+
+## 7c. Debugger y bus del Backplane: Serial2 exclusivo (2026-10-06)
+
+El debugger usa el servidor Modbus RTU de **Device > Modbus**, que es independiente del Master RTU del Backplane. Para depurar hay que usar **Interface = USB (Serial0)**, con el COM de carga y Slave ID/baud propios (no chocan con el bus).
+
+Si se elegía **RS-485 (Serial2)** con módulos Remote I/O, el sketch reabría el UART del Backplane, los módulos quedaban fuera de línea con sus salidas en fail-safe y **compilaba sin aviso**. Ahora hay dos capas de protección:
+
+| Capa | Cambio |
+|---|---|
+| Editor `f4cece27b` | `validateExclusiveSerialPorts()`: si un slot tiene un módulo con `exclusiveSerialPort` y Modbus RTU está activo en ese puerto, la compilación se detiene con un mensaje por slot |
+| VPP alpha.26 (platform `1b54c7f9`) | El manifest declara `exclusiveSerialPort: "Serial2"` en `jwplc-basic-remote-io`, y el HAL tiene un `static_assert` para builds de editores que no validan |
+
+Siguen permitidos el debugger por USB y Serial2 sin módulos Remote I/O (JWPLC como esclavo RS-485 de un SCADA).
+
+```text
+SERIAL2_EXCLUSIVE_EDITOR=PASS (72 tests, 100 % líneas en los archivos tocados)
+SERIAL2_EXCLUSIVE_HAL=PASS (5 variantes compiladas; solo Serial2 + Remote I/O falla)
+VPP_ALPHA26_SIGNATURE=valid
+VPP_ALPHA26_PHYSICAL=PENDING
+```
 
 ---
 
