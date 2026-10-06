@@ -260,6 +260,7 @@ class HardwareModule {
                   io: m.io,
                   parameters: m.parameters,
                   addressMapping: m.addressMapping,
+                  exclusiveSerialPort: m.exclusiveSerialPort,
                 })),
               )
             : []

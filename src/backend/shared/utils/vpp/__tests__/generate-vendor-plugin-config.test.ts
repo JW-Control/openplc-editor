@@ -1,6 +1,7 @@
 import {
   buildModuleConfigEntries,
   generateVendorPluginConfig,
+  validateExclusiveSerialPorts,
   validateModuleConfigValues,
   type VendorScreenData,
   type VppModuleDefinition,
@@ -873,5 +874,67 @@ describe('JWPLC backplane slave identity', () => {
     expect(errors).toEqual([
       'Backplane slot 4 (JWPLC Basic Remote I/O): Slave ID 3 is already used by Backplane slot 3.',
     ])
+  })
+})
+
+describe('validateExclusiveSerialPorts — Modbus RTU vs. a module-owned UART', () => {
+  const controller: VppModuleDefinition = { id: 'jwplc-basic-controller', name: 'JWPLC Basic v2.0.0' }
+  const remote: VppModuleDefinition = {
+    id: 'jwplc-basic-remote-io',
+    name: 'JWPLC Basic Remote I/O',
+    exclusiveSerialPort: 'Serial2',
+  }
+  const modules = [controller, remote]
+
+  function vsd(rtu: Record<string, unknown> | undefined, slots: (string | null)[]): VendorScreenData {
+    return {
+      'module-configuration': { slots },
+      ...(rtu ? { modbus_rtu: rtu } : {}),
+    }
+  }
+  const withRemote = ['jwplc-basic-controller', 'jwplc-basic-remote-io']
+
+  it('rejects a Modbus RTU server on the port a remote slot owns', () => {
+    expect(validateExclusiveSerialPorts(vsd({ enabled: true, rtu_interface: 'Serial2' }, withRemote), modules)).toEqual(
+      [
+        'Modbus RTU (Device > Modbus) uses Serial2, which Backplane slot 2 (JWPLC Basic Remote I/O) reserves ' +
+          'for its bus. Select another interface (e.g. USB) or remove the module.',
+      ],
+    )
+  })
+
+  it('reports every slot that owns the port', () => {
+    const errors = validateExclusiveSerialPorts(
+      vsd({ enabled: true, rtu_interface: 'Serial2' }, [...withRemote, null, 'jwplc-basic-remote-io']),
+      modules,
+    )
+    expect(errors).toHaveLength(2)
+    expect(errors[1]).toContain('slot 4')
+  })
+
+  it('accepts the debugger on USB (Serial0), explicit or by default', () => {
+    expect(validateExclusiveSerialPorts(vsd({ enabled: true, rtu_interface: 'Serial' }, withRemote), modules)).toEqual(
+      [],
+    )
+    expect(validateExclusiveSerialPorts(vsd({ enabled: true }, withRemote), modules)).toEqual([])
+  })
+
+  it('accepts Serial2 when no module owns it', () => {
+    expect(
+      validateExclusiveSerialPorts(
+        vsd({ enabled: true, rtu_interface: 'Serial2' }, ['jwplc-basic-controller']),
+        modules,
+      ),
+    ).toEqual([])
+  })
+
+  it('ignores a disabled or absent Modbus RTU section', () => {
+    expect(
+      validateExclusiveSerialPorts(vsd({ enabled: false, rtu_interface: 'Serial2' }, withRemote), modules),
+    ).toEqual([])
+    expect(validateExclusiveSerialPorts(vsd(undefined, withRemote), modules)).toEqual([])
+    expect(validateExclusiveSerialPorts({ modbus_rtu: { enabled: true, rtu_interface: 'Serial2' } }, modules)).toEqual(
+      [],
+    )
   })
 })

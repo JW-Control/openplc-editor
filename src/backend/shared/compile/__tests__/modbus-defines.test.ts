@@ -75,6 +75,12 @@ describe('generateModbusDefines', () => {
     expect(out).toContain('#define MBSERIAL_SLAVE 42')
   })
 
+  it('flags the JWPLC RS-485 port so Baremetal.ino routes the server through JWPLC_RS485', () => {
+    const out = generateModbusDefines({ modbus_rtu: { enabled: true, rtu_interface: 'Serial2' } })
+    expect(out).toContain('#define MBSERIAL_IFACE Serial2\n#define MBSERIAL_IFACE_IS_SERIAL2\n')
+    expect(generateModbusDefines({ modbus_rtu: { enabled: true } })).not.toContain('IS_SERIAL2')
+  })
+
   it('emits MBSERIAL_TXPIN only when the RS485 EN pin checkbox is on AND a pin value is set', () => {
     // Pin set but checkbox off → no MBSERIAL_TXPIN (matches screen visibility gate).
     const checkboxOff = generateModbusDefines({

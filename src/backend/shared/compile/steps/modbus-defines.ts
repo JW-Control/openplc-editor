@@ -87,7 +87,7 @@ function formatIpForDefine(raw: string): string {
 // firmware still needs MBSERIAL_IFACE / MBSERIAL_BAUD / MBSERIAL_SLAVE
 // to compile (ModbusSlave.cpp uses them as object/literal values).
 // Keep these in sync if the screen schema's defaults change.
-const RTU_DEFAULTS = {
+export const RTU_DEFAULTS = {
   rtu_interface: 'Serial',
   rtu_baud_rate: '115200',
   rtu_slave_id: 1,

@@ -114,6 +114,7 @@ import { XmlGenerator } from '@root/backend/shared/utils/PLC/xml-generator'
 import {
   buildModuleConfigEntries,
   generateVendorPluginConfig,
+  validateExclusiveSerialPorts,
   validateModuleConfigValues,
 } from '@root/backend/shared/utils/vpp/generate-vendor-plugin-config'
 import { getErrorMessage } from '@root/frontend/utils/get-error-message'
@@ -2398,7 +2399,10 @@ class CompilerModule {
 
       const typedData = vendorScreenData as Parameters<typeof buildModuleConfigEntries>[0]
       const typedModules = modules as Parameters<typeof buildModuleConfigEntries>[1]
-      const errors = validateModuleConfigValues(typedData, typedModules)
+      const errors = [
+        ...validateModuleConfigValues(typedData, typedModules),
+        ...validateExclusiveSerialPorts(typedData, typedModules),
+      ]
       if (errors.length > 0) return { entries: [], errors }
       return { entries: buildModuleConfigEntries(typedData, typedModules), errors: [] }
     } catch {

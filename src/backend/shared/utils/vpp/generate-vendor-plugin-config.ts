@@ -28,6 +28,7 @@
  * scaled counts) or the 32-bit image table (%ID, IEEE-754 floats).
  */
 
+import { RTU_DEFAULTS, type VppModbusScreenState } from '../../compile/steps/modbus-defines'
 import { bytesToHexString, encodeConfigBytes } from './byte-encoder'
 
 type ModuleChannel = {
@@ -46,6 +47,10 @@ type VppModuleDefinition = {
    *  (compiler-module) so this pure-function generator never touches
    *  the filesystem. */
   configScreenDefinition?: unknown
+  /** Hardware serial port this module's bus owns exclusively (e.g. the
+   *  RS-485 UART a backplane master drives). While the module sits in a
+   *  slot, no other function may open that port. */
+  exclusiveSerialPort?: string
 }
 
 type ModuleConfiguration = {
@@ -411,6 +416,41 @@ export function validateModuleConfigValues(
     }
   }
 
+  return errors
+}
+
+/**
+ * Reject a Modbus RTU server (Device > Modbus) bound to a serial port a
+ * backplane module owns.
+ *
+ * Both would open the same UART: the server re-initialises the port with
+ * its own baud rate and consumes the module's response bytes, so every
+ * remote module drops offline and its outputs fall back to their
+ * fail-safe state. The firmware compiles fine either way, so the compiler
+ * calls this first and aborts the build on any error.
+ *
+ * Returns human-readable errors (empty when there is no conflict).
+ */
+export function validateExclusiveSerialPorts(
+  vendorScreenData: VendorScreenData,
+  modules: VppModuleDefinition[],
+): string[] {
+  const rtu = vendorScreenData['modbus_rtu'] as VppModbusScreenState['modbus_rtu']
+  if (rtu?.enabled !== true) return []
+  const rtuInterface = rtu.rtu_interface ?? RTU_DEFAULTS.rtu_interface
+
+  const moduleConfig = (vendorScreenData['module-configuration'] as ModuleConfiguration | undefined) ?? {}
+  const slotAssignments = moduleConfig.slots ?? []
+
+  const errors: string[] = []
+  for (let slotIndex = 0; slotIndex < slotAssignments.length; slotIndex++) {
+    const moduleDef = modules.find((m) => m.id === slotAssignments[slotIndex])
+    if (!moduleDef?.exclusiveSerialPort || moduleDef.exclusiveSerialPort !== rtuInterface) continue
+    errors.push(
+      `Modbus RTU (Device > Modbus) uses ${rtuInterface}, which Backplane slot ${slotIndex + 1} ` +
+        `(${moduleDef.name}) reserves for its bus. Select another interface (e.g. USB) or remove the module.`,
+    )
+  }
   return errors
 }
 

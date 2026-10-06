@@ -690,6 +690,10 @@ export interface VppModuleDefinition {
     max?: number
   }>
   addressMapping?: unknown
+  /** Hardware serial port (e.g. `Serial2`) this module's bus owns
+   *  exclusively. The compiler rejects a Modbus RTU server on the same
+   *  port while the module sits in a slot. */
+  exclusiveSerialPort?: string
 }
 
 export interface VppMetadata {
