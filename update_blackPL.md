@@ -283,6 +283,9 @@ Referencia: orden de trabajo `JWPLC_ALPHA12_OPENPLC_ENGINEERING_CLOSURE_WORK_ORD
 | Core Alpha12 + VPP alpha.25 | PASS físico | Banco 2026-10-06 |
 | Serial2 exclusivo + debugger USB (VPP alpha.26) | PASS físico | Banco 2026-10-06: maestro, esclavo y debugger funcionando |
 | Firma VPP alpha.26 | PASS | `verifyPackageSignature` → `valid=true`; HAL alterado → `Tampered file detected` |
+| `REMOTE_IO_MULTIBIT` — camino de salida (8 patrones) | PASS físico | Banco 2026-10-07: patrones forzados desde el debugger → Ladder → FC15 → salidas físicas del esclavo, 8/8 y 0 bits cruzados. El camino de entrada (FC02) sigue pendiente (§9.6) |
+| `REMOTE_IO_OFFLINE_SAFE_STATE` | PASS físico | Banco 2026-10-07: al desconectar el RS-485 se pierde la comunicación y al reconectar se recupera sola, sin reprogramar (§9.6) |
+| `RTU_ALTERNATE_PROFILE` (baudrate 38400, 8N1) | PASS físico | Banco 2026-10-07: con baudrates distintos el bus falla; con 38400 en ambos, BUS `---` y patrones PASS. El formato serie no se cambió: falta probar 8E1 (§9.6) |
 | Backports upstream #948, #949, #950, #1085, #1083, #1088, #1078 | Integrados | Rama de integración (ver `docs/jwplc/alpha12/SOURCE_FREEZE.md`) |
 | `JWPLC_EDITOR_ALPHA9_SOURCE_RECOVERED` | PASS | Vía `2faf717e4` |
 | Build limpio del editor | PASS | §9.3 |
@@ -325,12 +328,12 @@ JWPLC_EDITOR_REPRODUCIBLE=PARTIAL (payload idéntico; el .exe NSIS no es byte-de
 
 | Gate | Cómo |
 |---|---|
-| `REMOTE_IO_MULTIBIT` (8 patrones) | `0x00 0xFF 0x55 0xAA 0x0F 0xF0 0x81 0x42` en las entradas del esclavo, sin bits cruzados hasta la salida. Incluir una desconexión y reconexión del RS-485. |
-| `RTU_ALTERNATE_PROFILE` | 38400/8E1: cambiar en UI → guardar → cerrar y reabrir → compilar → subir maestro y esclavo. |
-| `REMOTE_IO_OFFLINE_SAFE_STATE` | Desconectar el bus: entradas remotas a 0 en el maestro y salidas del esclavo OFF en 1 s. Al reconectar se recupera solo. |
+| `REMOTE_IO_MULTIBIT` — camino de entrada (FC02) | Los 8 patrones aplicados **físicamente** en las entradas del esclavo. Requiere una fuente o interruptores para las entradas (hoy no disponible en el banco). |
+| `RTU_ALTERNATE_PROFILE` (formato) | Formato **8E1** en maestro (RS-485 Backplane) y esclavo (Remote I/O Slave), con 38400. El baudrate ya se validó. |
+| `BACKPLANE_RTU_CONFIG_PERSISTENCE` | Por confirmar: que 38400/8E1 y el Slave ID 2 se conserven al cerrar y reabrir el editor (parte de `RTU_ALTERNATE_PROFILE`; también lo cubre la prueba de persistencia completa). |
 | `PROJECT_SAVE_REOPEN_RECOMPILE` / `SLAVE_ID_PERSISTENCE` | Proyecto con 2 slots (ID 2 real, ID 3 sin equipo), baud y formato no default, alias, TON/TOF/TP con `.Q`: guardar → cerrar app → reabrir → compilar → reabrir → recompilar. |
 | Slot ausente | Con ese proyecto, el slot 2 sigue funcionando con el 3 fuera de línea. |
-| `BUS_CYCLE_TIME` | Medir con el probe de timing (sin el debugger: ambos usan Serial0). |
+| `BUS_CYCLE_TIME` | Caso A medido (§9.6). Faltan los casos B (slot 3 ausente) y C (slots 3 y 4 ausentes), la latencia entrada→salida (`in2out`) y el feedback FC01 con un patrón distinto de `0x00`. |
 
 **Requiere un tercer PLC:** `REMOTE_IO_MULTISLOT` con 2 esclavos reales a la vez.
 
@@ -354,3 +357,102 @@ JWPLC_EDITOR_REPRODUCIBLE=PARTIAL (payload idéntico; el .exe NSIS no es byte-de
 6. **Tercer PLC** para la prueba multi-slot con 2 esclavos reales.
 7. **Semántica de `as: 'boolean'`** en `debug-spec`: confirmar si el cambio de `a7a541571` es el comportamiento deseado, para corregir el test.
 8. **Dónde generar los instaladores oficiales:** una PC sin Smart App Control o CI de GitHub. `release.yml` construye todas las plataformas y tiene un job `create-release`.
+
+### 9.6 Resultados de banco
+
+#### `REMOTE_IO_MULTIBIT` — 2026-10-07
+
+**Montaje:** 1 maestro + 1 esclavo (ID 2, 115200/8N1), VPP 2.1.0-alpha.26, debugger por USB (Serial0). Proyecto `PruebaMultibit`, copia de `PruebasBlackplane`.
+
+- Slot 2 del Backplane con alias `RI0..RI7` (`%IX1.0..%IX1.7`, entradas del esclavo) y `RQ0..RQ7` (`%QX1.0..%QX1.7`, salidas del esclavo).
+- `main` en Ladder con 8 rungs `RIk → RQk` (variables de clase Local).
+- Solo se usan las entradas y salidas físicas del esclavo; las del maestro no intervienen.
+
+**Método:** el banco no tiene fuente ni interruptores para activar las entradas físicas del esclavo, así que los patrones se aplicaron **forzando las variables desde el debugger**.
+
+**Cadena verificada por patrón:** valor forzado en el debugger → Ladder → `RQ` en el debugger → FC15 → salidas físicas del esclavo (LEDs).
+
+**No cubierto:** entradas físicas del esclavo → FC02 → `RI`. Queda pendiente con patrones reales en las entradas (§9.4).
+
+| Patrón | Binario (bit 7…bit 0) | Bits en ON | Resultado (salidas físicas del esclavo) |
+|---|---|---|---|
+| `0x00` | `00000000` | ninguna | PASS |
+| `0xFF` | `11111111` | todas | PASS |
+| `0x55` | `01010101` | I0_0, I0_2, I0_4, I0_6 | PASS |
+| `0xAA` | `10101010` | I0_1, I0_3, I0_5, I0_7 | PASS |
+| `0x0F` | `00001111` | I0_0, I0_1, I0_2, I0_3 | PASS |
+| `0xF0` | `11110000` | I0_4, I0_5, I0_6, I0_7 | PASS |
+| `0x81` | `10000001` | I0_0, I0_7 | PASS |
+| `0x42` | `01000010` | I0_1, I0_6 | PASS |
+
+**Desconexión y reconexión del RS-485** (incluida en la prueba, como pide la orden): al desconectar el bus se pierde la comunicación; al reconectar, maestro y esclavo se recuperan solos y el patrón vuelve sin reprogramar ni perder la configuración. No se midieron los tiempos de caída (umbral de 3 fallos en el maestro y failsafe de 1000 ms en el esclavo).
+
+```text
+REMOTE_IO_MULTIBIT_OUTPUT_PATH=8/8_PASS_PHYSICAL (2026-10-07, patrones forzados desde el debugger)
+REMOTE_IO_CROSSED_BITS_OUTPUT=0
+REMOTE_IO_MULTIBIT_INPUT_PATH=PENDING_PHYSICAL (requiere fuente para las entradas del esclavo)
+REMOTE_IO_MULTIBIT=PARTIAL
+REMOTE_IO_OFFLINE_SAFE_STATE=PASS_PHYSICAL (2026-10-07, recuperación automática al reconectar)
+FC01_FEEDBACK=NO_OBSERVADO (solo visible con el probe de diagnóstico, que el editor no permite activar)
+```
+
+#### `RTU_ALTERNATE_PROFILE` — baudrate 38400 — 2026-10-07
+
+**Montaje:** el mismo de `REMOTE_IO_MULTIBIT` (proyecto `PruebaMultibit`, esclavo ID 2, VPP 2.1.0-alpha.26).
+
+| Paso | Configuración | Resultado |
+|---|---|---|
+| 1. Solo el maestro cambia (comprobación negativa) | Maestro 38400, esclavo 115200 | PASS: el bus deja de comunicar y el indicador BUS pasa a rojo. El maestro aplica de verdad el baudrate nuevo y no sigue en el default. |
+| 2. El esclavo cambia al mismo baudrate | Maestro y esclavo 38400 | PASS: BUS `---` en verde en ambos equipos y la cadena de patrones funciona. |
+
+**Corrección (revisión posterior de los proyectos):** en `devices/configuration.json`, tanto `backplane_rtu` (maestro) como `remote_io_slave` (esclavo) guardan solo `{"baud_rate": "38400"}`. El formato serie quedó en su default, **8N1**, en los dos equipos, así que la prueba validó **38400/8N1**. La pantalla persiste bien los campos (combina el nuevo con los anteriores); simplemente el formato no se cambió.
+
+```text
+RTU_DEFAULT_115200_8N1=PASS_PHYSICAL
+RTU_ALTERNATE_BAUD_38400=PASS_PHYSICAL (2026-10-07, 38400/8N1)
+RTU_BAUD_MISMATCH_DETECTED=PASS (baudrates distintos -> sin comunicación)
+RTU_ALTERNATE_SERIAL_FORMAT=PENDING_PHYSICAL (8E1 en maestro y esclavo)
+BACKPLANE_RTU_CONFIG_PERSISTENCE=POR_CONFIRMAR (cerrar y reabrir el editor conservando el perfil y el Slave ID)
+```
+
+#### `BUS_CYCLE_TIME` — caso A (1 slot) — 2026-10-07
+
+**Cómo se midió.** El probe de diagnóstico (`JWPLC_ALPHA7_RTU_TIMING_DIAGNOSTICS=1`) no se puede activar desde el editor, así que se usó un firmware **solo de banco**:
+
+1. En `PruebaMultibit`, Device > Modbus → Modbus RTU **desactivado** (el probe imprime por Serial0, que también usa el debugger). Se compiló en el editor.
+2. Ese mismo build (`build/JWPLC BASIC [2.0.0]`) se recompiló con `arduino-cli` añadiendo `-DJWPLC_ALPHA7_RTU_TIMING_DIAGNOSTICS=1` y se subió al maestro por COM3. **El VPP firmado no se modificó.**
+3. Se leyeron 30 s de Serial0 a 115200. El probe imprime un reporte cada 2 s.
+
+**Condiciones:** maestro y esclavo (ID 2) en 38400/8N1, 1 slot remoto, tarea PLC de 20 ms, entradas y salidas del esclavo quietas en `0x00`.
+
+| Métrica | Último / promedio / máximo | Nota |
+|---|---|---|
+| **`fc15_cycle_us` (ciclo del bus)** | **21,1 / 22,4 / 56,3 ms** | Una vuelta completa FC15 → FC01 → FC02 al slot; ~45 vueltas por segundo |
+| `fc15_rtt_us` (escritura de salidas) | 7,0 / 7,1 / 37,0 ms | 18 bytes en el bus (petición + respuesta) |
+| `fc01_rtt_us` (feedback de salidas) | 6,1 / 6,2 / 40,1 ms | 14 bytes |
+| `fc02_rtt_us` (lectura de entradas) | 5,9 / 6,2 / 40,1 ms | 14 bytes |
+| `scan_us` (ciclo PLC) | 19,9 / 20,0 / 35,2 ms | Tarea del proyecto: 20 ms |
+| `service_gap_us` (atención del bus entre scans) | 0,04 / 0,93 / 35,3 ms | |
+| Transacciones | FC02 2021/0, FC15 2022/0, FC01 2021/0 (OK/fallo) | **0 fallos** |
+| `[RTU-SLOT]` | `slot=2 id=2 online=1 requested=0x00 feedback=0x00 mismatch=0x00 mismatch_count=0` | El feedback coincide con lo comandado |
+
+**Lectura de los números:**
+
+- Cuadran con la teoría. A 38400 baud y 8N1, un byte tarda ≈ 0,26 ms. FC15 son 18 bytes ≈ 4,7 ms, más ~2 ms del gap de trama del esclavo ≈ 7 ms medidos. El ciclo de ~22 ms es la suma de las tres transacciones más una sobrecarga pequeña.
+- Los picos de ~56 ms coinciden con el máximo de `service_gap` (~35 ms): cuando un ciclo del PLC se alarga, retrasa la atención del bus. No produjeron fallos y quedan muy por debajo del failsafe de 1000 ms del esclavo.
+
+**No medido en esta captura:**
+
+- `in2out_us` (entrada del esclavo → su salida) quedó en 0 porque las entradas no cambiaron. Medirlo requiere activar entradas físicas del esclavo, y no hay fuente en el banco.
+- El feedback FC01 solo se vio con `0x00`. Con el probe activo no se puede usar el debugger para forzar patrones (los dos usan Serial0). La alternativa es un Ladder que **genere solo** los 8 patrones en `RQ0..RQ7` con un temporizador, sin debugger ni fuente: así el probe muestra `requested`/`feedback` de cada patrón.
+
+```text
+BUS_CYCLE_TIME_1_SLOT_38400_8N1=22.4 ms promedio / 56.3 ms máximo (0 fallos)
+FC15_RTT=7.1 ms  FC01_RTT=6.2 ms  FC02_RTT=6.2 ms (promedios)
+FC01_FEEDBACK_0x00=MATCH (mismatch_count=0)
+BUS_CYCLE_TIME_2_SLOTS=PENDING (slot 3 sin equipo)
+BUS_CYCLE_TIME_3_SLOTS=PENDING (slots 3 y 4 sin equipo)
+IN2OUT_LATENCY=PENDING (requiere entradas físicas)
+```
+
+**Al terminar las mediciones:** volver a activar Modbus RTU (debugger por USB) en `PruebaMultibit` y subir desde el editor el firmware normal.
