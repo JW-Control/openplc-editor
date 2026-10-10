@@ -1,8 +1,9 @@
 # JWPLC Basic — Pantalla HMI programable desde OpenPLC
 
 Fecha: 2026-10-10
-Estado: **análisis y propuesta** (sin código todavía). Decisión: opción C;
-plan en [JWPLC_HMI_PLAN_INDUSTRIAL.md](JWPLC_HMI_PLAN_INDUSTRIAL.md)
+Estado: **análisis y propuesta** (sin código todavía). Decisión: opción C con
+**una sola herramienta** (OpenPLC aloja el JWPLC HMI Designer); plan en
+[JWPLC_HMI_PLAN_INDUSTRIAL.md](JWPLC_HMI_PLAN_INDUSTRIAL.md)
 Repos: `openplc-editor` (rama `develop/alpha12-backplane-closure`) y `platform-jwplc`
 
 ---

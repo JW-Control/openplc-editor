@@ -1,23 +1,34 @@
-# JWPLC Basic — Plan industrial: editor de pantallas HMI integrado en OpenPLC
+# JWPLC Basic — Plan industrial: HMI de la pantalla integrada desde OpenPLC
 
-Fecha: 2026-10-10
-Estado: **plan aprobado en dirección (opción C)**; implementación no iniciada
+Fecha: 2026-10-10 (rev. 2)
+Estado: **plan aprobado en dirección**; implementación no iniciada
 Antecedente: [JWPLC_HMI_PANTALLA_OPENPLC_PROPUESTA.md](JWPLC_HMI_PANTALLA_OPENPLC_PROPUESTA.md)
 Repos: `openplc-editor`, `platform-jwplc`
+
+> **Cambio de la rev. 2.** Por indicación del jefe hay **una sola herramienta
+> de diseño: JWPLC HMI Designer** (`platform-jwplc/tools/jwplc-hmi-designer`).
+> OpenPLC no tendrá un editor de pantallas propio: **abre el Designer**, primero
+> en una ventana vinculada al proyecto y después como pestaña dentro del
+> editor. Así se mantiene y se da soporte a un solo producto.
 
 ---
 
 ## 1. Decisión
 
-Se adopta la **opción C**: un **editor de pantallas HMI dentro de OpenPLC**, al
-estilo Unitronics (VisiLogic/UniLogic) y CODESYS Visualization, para la pantalla
-TFT integrada del JWPLC Basic (ST7789, 320 × 170, 7 teclas).
+- La pantalla TFT del JWPLC Basic (ST7789, 320 × 170, 7 teclas) se diseña con
+  **JWPLC HMI Designer** y se programa desde **OpenPLC**.
+- El Designer es **un solo producto con tres anfitriones**:
 
+| Anfitrión | Cómo se abre | Para quién |
+| --- | --- | --- |
+| **OpenPLC Editor** | Botón "Pantalla HMI" del dispositivo JWPLC: ventana vinculada (fase F3) y luego pestaña integrada (fase F4) | Programación IEC (objetivo del jefe) |
+| Aplicación de escritorio | `JWPLC-HMI-Designer.exe` | Usuarios sin OpenPLC |
+| Arduino IDE 2 | Extensión `jwplc-hmi-launcher` (ya existe) | Usuarios de sketches |
+
+- Los tres usan **los mismos archivos** del Designer (`poc/`). Lo único que
+  cambia es un adaptador pequeño que sabe dónde guardar y de dónde leer las
+  variables.
 - Primera versión: solo el **maestro**.
-- La HMI forma parte del proyecto OpenPLC: se diseña, se valida, se compila, se
-  descarga y se depura junto con el programa.
-- Los objetos de la pantalla se enlazan a las **variables del programa IEC**;
-  la HMI no declara variables propias.
 
 ---
 
@@ -25,39 +36,37 @@ TFT integrada del JWPLC Basic (ST7789, 320 × 170, 7 teclas).
 
 | # | Principio | Consecuencia práctica |
 | --- | --- | --- |
-| P1 | **Una sola base de variables** | El selector de variables lee las variables del proyecto. Renombrar o borrar una variable enlazada es un error de compilación, no un fallo silencioso |
-| P2 | **El scan del PLC manda** | La HMI nunca dibuja dentro del scan. El scan solo copia una foto de las variables enlazadas; el dibujo ocurre en el tiempo libre |
-| P3 | **Escrituras deterministas** | Teclas y setpoints se aplican al inicio del scan siguiente, con límites min/max validados en el equipo, no solo en el editor |
-| P4 | **Fallos visibles y estados seguros** | Si la HMI no se puede cargar o un enlace es inválido, el equipo muestra la IDLE con el aviso y el PLC sigue corriendo. Una falla del PLC (ERR/STOP) siempre se ve, aunque se esté en una pantalla del usuario |
-| P5 | **Lo que se ve en el editor es lo que se ve en el equipo** | Una sola implementación de la geometría, las fuentes y el codegen (núcleo compartido), validada contra el hardware con pruebas de paridad por píxel |
-| P6 | **Compatibilidad hacia atrás** | La API pública de `JWPLC_Display` (Alpha11) y el formato `.jwhmi` siguen funcionando; los proyectos sin HMI compilan igual que hoy |
-| P7 | **Trazabilidad** | La HMI se guarda en el proyecto, en texto (JSON con esquema versionado), y se compara con diff como el resto del código |
-| P8 | **Neutral respecto a la placa** | El editor HMI se activa solo si el VPP declara la capacidad `hmiDisplay`; otras placas y los merges con upstream no se ven afectados |
-| P9 | **Buenas prácticas de HMI** | Guía de estilo basada en **ISA-101** (fondos neutros, color solo para estados anormales, jerarquía de información) y, para alarmas, **ISA-18.2** |
+| P1 | **Una sola herramienta** | Toda función de diseño se implementa una vez, en el Designer. OpenPLC solo lo aloja, le pasa el contexto del proyecto y compila |
+| P2 | **Una sola base de variables** | En OpenPLC, cada objeto se enlaza a una variable del programa IEC elegida de una lista. Renombrar o borrar una variable enlazada es un error de compilación |
+| P3 | **El scan del PLC manda** | La HMI nunca dibuja dentro del scan. El scan solo copia una foto de las variables enlazadas |
+| P4 | **Escrituras deterministas** | Teclas y setpoints se aplican al inicio del scan siguiente, con límites validados en el equipo |
+| P5 | **Fallos visibles y estados seguros** | HMI inválida o desactualizada: no compila, o el equipo muestra la IDLE con el aviso y el PLC sigue corriendo. ERR/STOP siempre visibles |
+| P6 | **Lo que se ve es lo que sale** | El Designer solo ofrece objetos y propiedades que el firmware dibuja igual. Se valida con pruebas de paridad editor ↔ TFT |
+| P7 | **Integridad** | El Designer que abre OpenPLC viaja dentro del VPP firmado: no se ejecuta nada que no esté firmado |
+| P8 | **Trazabilidad** | La HMI se guarda dentro del proyecto OpenPLC (`hmi/`), en texto, versionada junto con el programa |
+| P9 | **Neutral respecto a la placa** | OpenPLC aprende un mecanismo genérico ("herramientas del dispositivo" declaradas por el VPP). Otras placas y los merges con upstream no se ven afectados |
+| P10 | **Buenas prácticas de HMI** | Guía de estilo basada en **ISA-101**; para alarmas, **ISA-18.2** |
 
 ---
 
 ## 3. Estado de partida
 
-### 3.1 Lo que ya existe
-
-- **Motor gráfico** `JWPLC_Display` (platform-jwplc): IDLE + USER, fields
-  `VALUE`, `TEXT`, `BOOL`, `BAR`, páginas, PixelMap, máximo 32 fields,
-  callbacks `jwplcUIEnter` / `jwplcUIPageEnter` / `jwplcUIUpdate` /
-  `jwplcUIExit`, acceso a dibujo directo con `JWPLC_Display.tft()`.
-- **JWPLC HMI Designer** (Alpha11, publicado en `main`) y su continuación en la
-  rama de Andr3manuel (ver sección 4).
-- **OpenPLC Editor (fork JWPLC)**: pantallas VPP declarativas, camino
-  `vendorScreenData` → `vpp_config.h` → HAL, tabla del debugger
-  (`get_var_addr`) para leer variables por índice, buffers ubicados
-  (`%IX/%QX/%MW/%MD`), POUs C/C++.
-
-### 3.2 Lo que falta
-
-- El editor OpenPLC no tiene nada de HMI.
-- No existe un núcleo HMI independiente de la interfaz (ver 4.3).
-- El motor no tiene objetos de entrada (teclas → bits, setpoints), texto fijo
-  sin variable, íconos de estado, multiestado ni alarmas.
+- **Motor gráfico** `JWPLC_Display`: IDLE + USER, fields `VALUE`, `TEXT`,
+  `BOOL`, `BAR`, páginas, PixelMap, máximo 32 fields, callbacks
+  `jwplcUIEnter` / `jwplcUIPageEnter` / `jwplcUIUpdate` / `jwplcUIExit`,
+  dibujo directo con `JWPLC_Display.tft()`.
+- **JWPLC HMI Designer**: aplicación web (1,1 MB) con envoltorio Electron 31.
+  Ya tiene un **puente nativo** (`window.JWPLCHMINative`: vincular un sketch,
+  escribir `JWPLC_HMI_Generated.h` y el proyecto `.jwhmi`), usado solo desde
+  `designer-native-project.js` y `designer-project-integration-fix.js`. Ese
+  puente es el punto natural para conectarlo con OpenPLC.
+- **Integración con Arduino IDE**: extensión VSIX que **lanza** el Designer
+  instalado (no lo incrusta). Es el mismo patrón que se propone para la
+  primera etapa con OpenPLC.
+- **OpenPLC Editor** (fork JWPLC 4.2.8, Electron 35): pantallas VPP
+  declarativas, camino `vendorScreenData` → `vpp_config.h` → HAL, tabla del
+  debugger (`get_var_addr`), buffers ubicados (`%IX/%QX/%MW/%MD`), VPP con firma
+  ed25519 por archivo (`signature.json`).
 
 ---
 
@@ -72,290 +81,335 @@ Revisado el 2026-10-10 sobre una copia (`git archive`), sin tocar la rama.
 Unas **+11 700 / −930 líneas** respecto de `main`, casi todo en
 `tools/jwplc-hmi-designer/poc`:
 
-- **Lienzo tipo CAD**: lienzo infinito con paneo, zoom y ajuste a la
-  selección, reglas, grilla (rejilla o puntos), snap, selección por marquesina y
-  por contorno, multiselección, caja con 8 tiradores, rotación y espejo,
-  copiar y pegar.
+- **Lienzo tipo CAD**: lienzo infinito, zoom y ajuste a la selección, reglas,
+  grilla y snap, selección por marquesina y por contorno, multiselección,
+  tiradores, rotación y espejo, copiar y pegar.
 - **Dibujo**: línea, rectángulo, elipse, triángulo, polígono, texto libre
-  (`RAW_TEXT`), relleno, cuentagotas, colores recientes.
-- **Fuentes**: catálogo de 15 fuentes con glifos reales de TFT_eSPI (GLCD,
-  FONT2, FONT4 y FreeFonts Sans/Serif/Mono de 9 y 12 pt) y cambios en
+  (`RAW_TEXT`), relleno, cuentagotas.
+- **Fuentes**: 15 fuentes con glifos reales de TFT_eSPI y cambios en
   `JWPLC_TFT` (`setFont`, `setTextDatum`, `drawString`).
-- **BAR**: rediseño del inspector (pestañas Diseño / Datos PLC / Técnico) y
-  variantes nuevas: barra con degradado y circular.
-- **BOOL**: sin cambios de lógica respecto de Alpha11 (solo se adaptó el
-  selector del botón de la barra de herramientas).
+- **BAR**: inspector rediseñado y variantes nuevas (circular y con degradado).
+- **BOOL**: sin cambios de lógica respecto de Alpha11.
 
-### 4.2 Prueba del BOOL (lo que se reporta como operativo)
+### 4.2 Prueba del BOOL
 
 Prueba hecha el 2026-10-10:
 
 1. Se abrió el Designer de la rama en Chrome sin interfaz (Playwright).
-2. Se creó un campo BOOL, con textos `PARADO`/`MARCHA` y estado de prueba
-   `true`.
-3. Se generó el código y se compiló en un sketch para
-   `jwplc:esp32:jwplcbasic` (core 2.1.0-alpha.12 instalado).
+2. Se creó un campo BOOL con textos `PARADO`/`MARCHA`.
+3. Se generó el código y se compiló para `jwplc:esp32:jwplcbasic` (core
+   2.1.0-alpha.12).
 
 | Verificación | Resultado |
 | --- | --- |
-| Crear campo BOOL, editar textos y estado de prueba | **PASS**: el inspector y el lienzo se actualizan (`MARCHA` con estado `true`) |
-| Código BOOL generado contra la API real (`JWPLC_UIBoolField`, `JWPLC_UIBoolText`, `JWPLC_UIBoolStyle`, `setBool`) | **PASS**: coincide con `JWPLC_UI.h` |
-| Compilación del header generado + sketch | **PASS**: 420 661 B de flash (10 %), 34 428 B de RAM (10 %) |
-| `jwplcUIUpdate()` generado reemplaza al *weak* del runtime | **PASS**: en el ELF queda `T jwplcUIUpdate` con enlace C |
-| Prueba en hardware (dibujo real en la TFT) | **No hecha** en esta revisión |
-
-**Conclusión:** el BOOL está operativo hasta compilación y enlace. Falta la
-validación en el equipo.
+| Crear campo BOOL, editar textos y estado de prueba | **PASS** |
+| Código contra la API real (`JWPLC_UIBoolField`, `setBool`, ...) | **PASS** |
+| Compilación del header + sketch | **PASS**: 420 661 B de flash (10 %), 34 428 B de RAM (10 %) |
+| `jwplcUIUpdate()` generado reemplaza al *weak* del runtime | **PASS**: `T jwplcUIUpdate` con enlace C en el ELF |
+| Dibujo real en la TFT | **No hecho** en esta revisión |
 
 ### 4.3 Observaciones
 
-Están ordenadas por impacto en el plan.
+Pasan al backlog de la fase F1. Como ahora el Designer es la única
+herramienta, son **bloqueantes** para OpenPLC.
 
-| # | Observación | Impacto | Recomendación |
-| --- | --- | --- | --- |
-| O1 | Las figuras y el `RAW_TEXT` generan `JWPLC_Display.getTFT()->...`, pero ese método **no existe**. Compilado: `error: 'class JWPLC_DisplayClass' has no member named 'getTFT'`. La API real es `JWPLC_Display.tft()` (referencia, no puntero) | Cualquier diseño con una figura o un texto libre **no compila** | Generar `JWPLC_Display.tft().drawRect(...)`. Lo reconoce su propia nota `TFT_FONTS_RECOMPILE_PENDING.md` |
-| O2 | Las figuras y el texto libre se dibujan dentro de `jwplcUIUpdate()`, que con `USER_REFRESH_PERIODIC` corre en cada refresco | Redibujo continuo del fondo: parpadeo, tiempo de SPI desperdiciado y pelea de capas con los fields | El fondo estático va en `jwplcUIPageEnter(page)` (se dibuja una vez por página), o mejor como objeto del motor (sección 6.3) |
-| O3 | BAR circular y con degradado generan `JWPLC_UICircularField` y `JWPLC_UIGradientBarField`, que **no existen** en `JWPLC_Display` | Esos diseños no compilan | El Designer no debe ofrecer objetos que el firmware no soporta; agregarlos primero al motor (Alpha13) o marcarlos "experimental" sin codegen |
-| O4 | Las fuentes nuevas están solo en fuente: `libJWPLC_TFT.a` **no se regeneró** (lo dice su nota). Además, `tft_setup.h` carga todas las FreeFonts | Fuentes distintas de GLCD no funcionan en el equipo; posible aumento de flash | Regenerar el `.a`, medir la flash y limitar el catálogo |
-| O5 | El codegen ignora la rotación y el espejo de las figuras, la elipse sale como círculo (`r = max(rx, ry)`) y el relleno del polígono se ignora | Lo que se ve en el Designer **no es** lo que se ve en el equipo (rompe P5) | El codegen solo debe emitir lo que el equipo dibuja igual; si no, bloquear la propiedad |
-| O6 | **Arquitectura del codegen**: `app.js` genera el texto y luego 7 módulos (`designer-bool`, `designer-codegen`, `designer-pages`, `designer-pixelmap*`, ...) lo parchean con reemplazos de texto y regex sobre el `textContent` del DOM. El BOOL, por ejemplo, se crea como un TEXT y se reescribe | Frágil, sin pruebas automáticas posibles, difícil de llevar a OpenPLC | Extraer un **núcleo HMI puro** (sección 6.1). Es la pieza que se reutilizará en OpenPLC |
-| O7 | Un campo nuevo se crea encima de los existentes (BOOL en 28,28 sobre TEXT en 20,20) y no hay aviso de solapamiento | El usuario puede generar pantallas que se pisan | Validación de solapamiento y de límites del lienzo |
-| O8 | El header define variables y funciones (no `extern`/`inline`) | Error de "multiple definition" si se incluye desde dos archivos | Para OpenPLC lo incluirá un solo archivo (HAL); en Arduino, documentarlo o separar `.h` y `.cpp` |
-| O9 | Higiene del repo: commits con mensaje `.` o `,`; `desktop.html` en la raíz del repo; `poc/fix.py`; PNG de referencia de 2,4 MB; paréntesis en el nombre de la rama | Historial difícil de auditar; el nombre de la rama falla en shells y CI | Mensajes descriptivos, limpiar archivos sueltos y renombrar la rama (p. ej. `v2.1.0-alpha.13/feature/hmi-designer-cad`) |
-
-Lo valioso para el plan: **el lienzo, la interacción tipo CAD, el catálogo de
-fuentes con glifos reales y el inspector BAR**. Son la base de la interfaz del
-editor dentro de OpenPLC una vez separados del DOM (O6).
+| # | Observación | Recomendación |
+| --- | --- | --- |
+| O1 | Figuras y `RAW_TEXT` generan `JWPLC_Display.getTFT()->...`, que **no existe** (compilado: `no member named 'getTFT'`). La API real es `JWPLC_Display.tft()` | Generar `JWPLC_Display.tft().drawRect(...)` |
+| O2 | Figuras y texto libre se dibujan dentro de `jwplcUIUpdate()`, que corre en cada refresco | Dibujar el fondo una vez por página (`jwplcUIPageEnter`) o como objeto del motor |
+| O3 | BAR circular y con degradado generan `JWPLC_UICircularField` y `JWPLC_UIGradientBarField`, que **no existen** en la librería | No ofrecerlos sin soporte en el firmware, o agregarlos al motor primero |
+| O4 | Fuentes nuevas solo en fuente: `libJWPLC_TFT.a` **no regenerado** | Regenerar, medir la flash y acotar el catálogo |
+| O5 | El codegen ignora rotación y espejo; la elipse sale como círculo; el relleno del polígono se pierde | Bloquear las propiedades que el equipo no reproduce |
+| O6 | El código se genera parcheando texto del DOM con regex desde 7 módulos | Extraer el modelo y el codegen a un módulo puro y probado (F1/F6) |
+| O7 | Los campos nuevos se crean encima de los existentes, sin aviso de solapamiento | Validar solapamiento y límites del lienzo |
+| O8 | El header define variables y funciones (no `extern`/`inline`) | Lo incluye un solo archivo (el HAL en OpenPLC); documentarlo |
+| O9 | Commits con mensaje `.`/`,`; `desktop.html` en la raíz del repo; `poc/fix.py`; PNG de 2,4 MB; paréntesis en el nombre de la rama | Higiene del repo y renombrar la rama |
 
 ---
 
 ## 5. Arquitectura objetivo
 
 ```text
-┌──────────────────────── openplc-editor ────────────────────────┐
-│  Proyecto OpenPLC                                               │
-│   ├─ POUs / variables                                           │
-│   └─ hmi/  (pantallas, objetos, enlaces, recursos)  ◄── P7      │
-│                                                                 │
-│  Editor HMI (React)  ──usa──►  @jwplc/hmi-core (TS puro)        │
-│   canvas · inspector ·          modelo + esquema + validación   │
-│   selector de variables ·       geometría + fuentes + PixelMap  │
-│   vista en vivo (debugger)      codegen  (golden tests)         │
-│                                                                 │
-│  Compilación: paso generate-hmi ──► src/jwplc_hmi_generated.h   │
-│               (tabla de enlaces: field ↔ índice de variable)    │
-└─────────────────────────────────────────────────────────────────┘
-                              │ firmware
-┌──────────────────────── JWPLC Basic ────────────────────────────┐
-│  scan PLC ─► updateOutputBuffers(): foto de variables enlazadas │
-│  hardwareService() (tiempo libre): JWPLC_Display redibuja solo  │
-│               los fields que cambiaron                          │
-│  teclas/setpoints ─► cola ─► updateInputBuffers() (inicio scan) │
-│  IDLE (sistema) ⇄ USER (HMI del proyecto)                       │
-└─────────────────────────────────────────────────────────────────┘
-
-JWPLC HMI Designer (Arduino IDE) ──usa──► el mismo @jwplc/hmi-core
+┌──────────────────────────── OpenPLC Editor ────────────────────────────┐
+│ Proyecto/                                                               │
+│   ├─ POUs, variables                                                    │
+│   └─ hmi/  pantalla.jwhmi  +  JWPLC_HMI_Generated.h   (P8)              │
+│                                                                         │
+│ Dispositivo JWPLC ─► [Pantalla HMI]                                     │
+│        │                                                                │
+│        ▼                                                                │
+│  Host de herramientas VPP (genérico, P9)                                │
+│   • sirve los archivos del Designer desde el VPP instalado (firmado)    │
+│   • F3: ventana propia · F4: pestaña (iframe)                           │
+│   • puente  jwplc-hmi-host/1  ◄──────────────►  JWPLC HMI Designer      │
+│        contexto, variables, guardar,                (mismos archivos    │
+│        valores en vivo                               que el .exe)       │
+│                                                                         │
+│ Compilación: paso generate-hmi                                          │
+│   • verifica que el header corresponda al .jwhmi (revisión)             │
+│   • valida enlaces (existe, tipo compatible)                            │
+│   • genera jwplc_hmi_bindings (variable HMI ↔ índice de variable PLC)   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                   │ firmware
+┌────────────────────────────── JWPLC Basic ──────────────────────────────┐
+│ updateOutputBuffers(): foto PLC ─► variables HMI   (bindings)           │
+│ hardwareService(): JWPLC_Display redibuja solo lo que cambió            │
+│ teclas/setpoints ─► cola ─► updateInputBuffers() (inicio del scan)      │
+│ IDLE (sistema) ⇄ USER (HMI del proyecto)                                │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.1 Componentes
+### 5.1 Cómo llega el Designer a OpenPLC
 
-| Componente | Repo | Responsabilidad |
-| --- | --- | --- |
-| `hmi-core` | platform-jwplc (`tools/jwplc-hmi-core`), consumido por el editor | Modelo y esquema JSON versionado, migraciones, validación, geometría idéntica al motor, métricas de fuentes, PixelMap, codegen. **Sin DOM.** |
-| Editor HMI | openplc-editor | Árbol del proyecto "Pantallas HMI", canvas, inspector, selector de variables, vista en vivo, mensajes de validación |
-| Paso `generate-hmi` | openplc-editor (`src/backend/shared/compile/steps/`) | Resuelve los enlaces a índices de variables, valida y escribe el header en el bundle del firmware |
-| Capacidad `hmiDisplay` | VPP `manifest.json` | Tamaño, formato de color, teclas, límites (fields, flash de recursos) |
-| HAL | VPP `hal/jwplcbasic.cpp` | `jwplcHMISetup()` en `hardwareInit()`, foto y escrituras alrededor del scan, estado de la HMI hacia la IDLE |
-| Motor | `JWPLC_Display` / `JWPLC_TFT` | Dibujo, objetos nuevos, enlace por tabla, navegación, alarmas |
-| Designer standalone | `tools/jwplc-hmi-designer` | Sigue sirviendo para Arduino IDE, reescrito sobre `hmi-core` |
-
-### 5.2 Modelo de datos (esquema v1, resumen)
+**Dentro del VPP firmado** (`vpp/tools/hmi-designer/`, unos 1,1 MB). El
+manifest del dispositivo lo declara:
 
 ```json
+"tools": [
+  {
+    "id": "hmi-designer",
+    "title": "Pantalla HMI",
+    "entry": "tools/hmi-designer/desktop.html",
+    "modes": ["window", "tab"],
+    "bridge": "jwplc-hmi-host/1",
+    "projectFolder": "hmi"
+  }
+]
+```
+
+- **Una sola fuente**: el script de empaquetado del VPP copia
+  `platform-jwplc/tools/jwplc-hmi-designer/poc` (versión etiquetada) dentro del
+  VPP y lo firma. El `.exe` standalone se construye desde la misma etiqueta.
+- **Actualizar el Designer = publicar un VPP nuevo**. No hace falta reinstalar
+  OpenPLC, y la versión del Designer queda ligada a la del HAL que entiende su
+  código.
+- Alternativa descartada: que OpenPLC lance el `.exe` instalado aparte. Habría
+  dos instalaciones con versiones que pueden no coincidir y menos control de
+  la integridad.
+
+### 5.2 Contrato del puente `jwplc-hmi-host/1`
+
+El Designer deja de usar `window.JWPLCHMINative` directamente y pasa a usar un
+**adaptador de anfitrión** con la misma interfaz en los tres casos:
+
+| Función | Navegador / `.exe` / Arduino IDE | OpenPLC |
+| --- | --- | --- |
+| `getContext()` | Sketch vinculado | Proyecto, dispositivo, versión del VPP, pantalla 320 × 170 |
+| `loadProject()` / `saveProject(jwhmi)` | Archivo `.jwhmi` del sketch | `Proyecto/hmi/pantalla.jwhmi` |
+| `writeGeneratedHeader(text)` | `JWPLC_HMI_Generated.h` del sketch | `Proyecto/hmi/JWPLC_HMI_Generated.h` |
+| `listVariables(filtro)` | — (no aplica) | Variables globales del proyecto: nombre, tipo IEC, dirección |
+| `onLiveValues(cb)` | WebSerial (actual) | Valores del debugger de OpenPLC |
+| `onHostCommand(cb)` | — | Guardar (Ctrl+S del editor), cerrar, tema claro/oscuro |
+| `setDirty(bool)` | — | Marca de "sin guardar" en la pestaña |
+
+Implementación:
+
+- **Ventana (F3)**: `BrowserWindow` propio de OpenPLC, con un preload que
+  expone el adaptador por IPC. Sin acceso a Node para el Designer.
+- **Pestaña (F4)**: `iframe` dentro de la pestaña del editor. El adaptador
+  habla con la pestaña por `postMessage`, validando origen y versión del
+  contrato, y la pestaña reenvía al proceso principal.
+- Los archivos se sirven por un protocolo propio de solo lectura (p. ej.
+  `vpp-tool://<packageId>/...`), solo desde el VPP instalado y verificado.
+
+### 5.3 Enlace de variables en modo OpenPLC
+
+Cambio mínimo en el Designer: en el inspector aparece **"Variable PLC"** (lista
+de `listVariables`, filtrada por tipo compatible), que se guarda en el campo:
+
+```json
+{ "type": "BOOL", "id": "FIELD_BOOL_2", "variable": "estado2",
+  "plcBinding": { "var": "Bomba1_Marcha", "access": "R" } }
+```
+
+- El header del Designer **no cambia** (sigue declarando `bool estado2`).
+- OpenPLC genera el código de enlace al compilar. El índice de cada variable
+  se resuelve en cada compilación, como ya hace el debugger:
+
+```cpp
+// jwplc_hmi_bindings.cpp (generado por OpenPLC)
+void jwplcHMIBindingsSnapshot()          // llamado desde updateOutputBuffers()
 {
-  "schema": "jwplc-hmi/1",
-  "target": { "width": 320, "height": 170, "color": "RGB565" },
-  "startup": { "screen": "IDLE", "wakeKey": "OK", "returnKey": "ESC" },
-  "screens": [
-    {
-      "id": "principal", "title": "Principal", "background": "0x0000",
-      "keys": { "LEFT": "screen:alarmas", "F1": "write:Marcha:momentary" },
-      "objects": [
-        { "type": "label", "x": 8, "y": 6, "text": "Bomba 1", "font": "GLCD", "size": 2 },
-        { "type": "lamp", "x": 8, "y": 40,
-          "bind": { "var": "Bomba1_Marcha", "access": "R" },
-          "states": [ { "text": "PARADA", "color": "0x8410" },
-                      { "text": "MARCHA", "color": "0x07E0" } ] },
-        { "type": "numeric", "x": 8, "y": 70,
-          "bind": { "var": "Presion", "access": "R" },
-          "format": { "digits": 4, "decimals": 1, "unit": "bar" } },
-        { "type": "setpoint", "x": 8, "y": 100,
-          "bind": { "var": "Presion_SP", "access": "RW", "min": 0, "max": 10 },
-          "format": { "digits": 4, "decimals": 1, "unit": "bar" } }
-      ]
-    }
-  ],
-  "alarms": [],
-  "resources": { "images": [] }
+    estado2 = (*(IEC_BOOL *)get_var_addr(HMI_IDX_BOMBA1_MARCHA)) != 0;
+    temperatura = (float)(*(IEC_REAL *)get_var_addr(HMI_IDX_TEMP));
 }
 ```
 
-- Los enlaces apuntan a **variables por nombre** (globales del recurso o
-  `%MW/%QX`). El índice de la tabla del debugger se resuelve en cada
-  compilación, así que no se guarda en el proyecto.
-- El `.jwhmi` actual se importa con una migración `jwhmi → jwplc-hmi/1`.
+Tipos:
 
-### 5.3 Contrato del runtime
+| Variable PLC | Objeto | Regla |
+| --- | --- | --- |
+| `BOOL` | BOOL / ícono | Exacto |
+| `INT`, `DINT`, `UINT`, ... | VALUE / BAR | Conversión a `float` |
+| `REAL` | VALUE / BAR | Exacto |
+| `STRING` | TEXT | Truncado a la capacidad, con advertencia |
+| Otro | — | Error de compilación |
+
+- **Consistencia**: el `.jwhmi` y el header llevan el mismo número de revisión.
+  Si no coinciden (alguien editó uno sin guardar el otro), la compilación
+  falla con "Abre Pantalla HMI y guarda".
+
+### 5.4 Contrato del runtime
 
 | Situación | Comportamiento |
 | --- | --- |
-| Arranque | IDLE o la pantalla inicial, según `startup`. La HMI se registra en `hardwareInit()` |
-| Scan normal | En `updateOutputBuffers()` se copian solo las variables enlazadas de la pantalla activa (y de las alarmas). Presupuesto: < 50 µs por scan con 32 enlaces (a validar en la Fase 0) |
-| Tiempo libre | `hardwareService()` redibuja solo los fields que cambiaron; refresco objetivo 5 Hz (los ensayos A14.3 dieron estable con 175–200 ms) |
-| Escritura desde la HMI | Se encola; se aplica en `updateInputBuffers()` del scan siguiente; se rechaza si está fuera de min/max; no pisa un forzado del debugger |
-| PLC en STOP o ERR | La HMI muestra una franja de estado o salta a la IDLE (configurable); las escrituras se bloquean |
-| Enlace inválido en el equipo (versión cruzada) | La HMI no se activa; la IDLE muestra "HMI inválida" y el PLC sigue corriendo |
-| Debugger forzando una variable | El objeto la marca como forzada (misma convención que la IDLE: rayado + F) |
-| Sin HMI en el proyecto | Comportamiento actual (solo IDLE), sin código extra enlazado |
+| Arranque | IDLE o la pantalla inicial (configurable); `jwplcHMISetup()` en `hardwareInit()` |
+| Scan normal | `jwplcHMIBindingsSnapshot()` en `updateOutputBuffers()`. Presupuesto: < 50 µs con 32 enlaces (a medir en F0) |
+| Tiempo libre | `hardwareService()` redibuja solo lo que cambió; objetivo de 5 Hz (los ensayos A14.3 dieron estable con 175–200 ms) |
+| Escritura desde la HMI | Encolada; se aplica en `updateInputBuffers()`; se rechaza fuera de min/max; no pisa forzados |
+| PLC en STOP o ERR | Franja de estado o salto a la IDLE; escrituras bloqueadas |
+| Variable forzada | Se marca en pantalla (misma convención que la IDLE: rayado + F) |
+| Proyecto sin HMI | Igual que hoy (solo IDLE), sin código extra |
 
 ---
 
 ## 6. Plan por fases
 
 Cada fase cierra con un **gate**: pruebas automáticas, compilación de la matriz
-de ejemplos y prueba en banco, documentados en `docs/` y en la bitácora. Las
-ramas y versiones siguen la convención del proyecto (VPP firmado con versión
-monotónica, package nuevo del core cuando cambia una librería).
+de ejemplos y prueba en banco, documentados en `docs/` y en la bitácora.
 
-### Fase 0 — Prueba de concepto en el HAL (riesgo técnico)
+### F0 — Prueba de concepto en el HAL (riesgo técnico)
 
-Objetivo: validar el acople scan ↔ pantalla antes de invertir en la interfaz.
+- HAL de prueba con 3 fields: VALUE ← `%MW0`, BOOL ← `%QX0.0`, BAR ← `%MW1`,
+  y un enlace **por nombre** con `get_var_addr(índice)`.
+- Usar un header generado por el Designer actual (el BOOL ya compila).
+- Medir el tiempo de scan con y sin HMI y la latencia variable → pantalla.
 
-- HAL de prueba con 3 fields fijos: VALUE ← `%MW0`, BOOL ← `%QX0.0`,
-  BAR ← `%MW1`, más un enlace **por nombre** usando `get_var_addr(índice)`.
-- Medir el tiempo de scan (con y sin HMI) y la latencia variable → pantalla.
+**Gate F0:** el ladder mueve los valores y se ven en la TFT; el scan no
+aumenta más de 5 %; la IDLE, el debugger (USB/TCP) y el Backplane siguen
+funcionando.
 
-**Gate F0:** el programa ladder mueve los tres valores y se ven en la TFT; el
-scan no aumenta más de 5 %; la IDLE, el debugger (USB y TCP) y el Backplane
-siguen funcionando; el informe de tiempos está en `docs/`.
+### F1 — Designer confiable (una sola herramienta = cero código roto)
 
-### Fase 1 — Núcleo `hmi-core` (sin interfaz nueva)
+Responsable principal: Andr3manuel.
 
-Objetivo: una sola fuente de verdad para el modelo y el codegen (resuelve O6,
-O1, O5).
+- Corregir O1 a O5 y O7: solo se genera código que compila y que se dibuja
+  igual en el equipo; los objetos sin soporte en el firmware quedan ocultos o
+  marcados como "experimental" sin codegen.
+- **CI del Designer**: Playwright crea cada tipo de objeto, genera el header y
+  lo compila con `arduino-cli` (el procedimiento ya probado en la revisión del
+  BOOL).
+- Validar en hardware TEXT, VALUE, BOOL y BAR.
+- Higiene del repo (O9) y versión etiquetada del Designer.
 
-- Extraer del Designer el modelo, la geometría, las fuentes, PixelMap y el
-  codegen a TypeScript puro, con esquema JSON `jwplc-hmi/1` y la migración
-  desde `.jwhmi`.
-- El codegen genera solo API existente; los objetos sin soporte en el firmware
-  se rechazan con un mensaje claro.
-- El Designer standalone pasa a usar `hmi-core` (el trabajo de Andr3manuel
-  sobre el lienzo se conserva; cambia solo de dónde sale el modelo y el
-  código).
+**Gate F1:** matriz "objeto × página × fuente" compila en CI; foto de la TFT
+igual al lienzo para los 4 objetos básicos; `.jwhmi` de Alpha11 abren sin
+pérdida.
 
-**Gate F1:** golden tests del codegen (cada tipo de objeto y combinación de
-páginas); 100 % de cobertura en el núcleo; matriz de compilación con
-`arduino-cli` para todos los ejemplos; los proyectos `.jwhmi` de Alpha11 abren y
-generan el mismo resultado.
+### F2 — Contrato de anfitrión `jwplc-hmi-host/1`
 
-### Fase 2 — Motor ampliado (Alpha13, platform-jwplc)
+- Reemplazar el uso directo de `JWPLCHMINative` por el adaptador de 5.2, con
+  implementaciones para navegador, `.exe` y Arduino IDE (sin cambiar lo que
+  ve el usuario hoy).
+- Agregar en el inspector "Variable PLC" (solo cuando el anfitrión entrega
+  `listVariables`), `plcBinding` en el `.jwhmi` y número de revisión compartido
+  `.jwhmi` ↔ header.
+- Un anfitrión simulado para pruebas automáticas.
 
-Objetivo: los objetos que necesita una HMI de máquina.
+**Gate F2:** el `.exe` y la extensión de Arduino IDE funcionan igual que
+antes; con el anfitrión simulado se elige una variable, se guarda y se
+regenera de forma determinista.
+
+### F3 — OpenPLC abre el Designer en ventana vinculada
+
+- **VPP**: carpeta `tools/hmi-designer/` firmada y entrada `tools` en el
+  manifest; nueva versión firmada.
+- **Editor (genérico)**:
+  - lector de `tools` del manifest;
+  - protocolo de solo lectura desde el VPP verificado;
+  - ventana con preload y puente IPC;
+  - botón "Pantalla HMI" en el dispositivo.
+- **Editor (proyecto)**: carpeta `hmi/`, entrega de variables al Designer.
+- **Compilación**: paso `generate-hmi` (revisión, validación de enlaces,
+  `jwplc_hmi_bindings`), copia del header al bundle; el HAL llama
+  `jwplcHMISetup()` y el *snapshot*.
+
+**Gate F3:** un técnico abre "Pantalla HMI" desde OpenPLC, diseña 2 páginas,
+enlaza lámparas, numéricos y una barra a variables de un ladder, compila,
+descarga y lo ve en el equipo, **sin Arduino IDE y sin instalar nada aparte**.
+Tests al 100 % en `src/backend/shared` y `src/frontend/utils`.
+
+### F4 — Pestaña integrada en OpenPLC
+
+- El mismo Designer en una pestaña del editor (`iframe` + `postMessage`).
+- Marca de "sin guardar" en la pestaña, Ctrl+S del editor, tema claro y
+  oscuro.
+- Resolver los atajos que comparten el Designer y el editor (Ctrl+Z, Ctrl+C/V,
+  Espacio, Supr): con el foco en la pestaña HMI mandan los del Designer.
+- Al reabrir el proyecto, se reabre la pestaña.
+
+**Gate F4:** el flujo de F3 completo sin salir de la ventana de OpenPLC; los
+diálogos del editor se ven por encima de la pestaña; no hay pérdida de cambios
+al cambiar de pestaña o cerrar el proyecto.
+
+### F5 — Motor ampliado + operación (Alpha13 y siguientes)
+
+Se avanza en paralelo con F2 a F4, en `JWPLC_Display`:
 
 | Objeto | Uso típico |
 | --- | --- |
-| Texto fijo / etiqueta | Títulos y rótulos sin variable |
-| Lámpara multiestado (BOOL o entero → texto/color) | "PARADA / MARCHA / FALLA" |
-| Ícono de estado (PixelMap por estado) | Motor, válvula, bomba |
-| Numérico con formato y escala | Presión, temperatura, contador |
-| Barra (lineal; circular y degradado si se aprueban) | Nivel, porcentaje |
-| Figuras estáticas (línea, rectángulo, marco) | Fondo de pantalla, dibujado una vez por página (resuelve O2) |
-| Setpoint editable con teclas | Ajuste con ↑/↓, OK confirma, ESC cancela, con límites |
-| Tecla → bit (momentáneo, enclavado, set, reset) | Arranque, paro, reconocer alarma |
-| Navegación entre pantallas | Teclas ←/→ o F1 asignables por pantalla |
-| Enlace por tabla `{field, puntero, tipo}` | El HAL alimenta la HMI sin código por field |
+| Texto fijo | Títulos sin variable |
+| Lámpara multiestado | "PARADA / MARCHA / FALLA" |
+| Ícono por estado (PixelMap) | Motor, válvula, bomba |
+| Figuras estáticas dibujadas una vez por página | Fondo (resuelve O2) |
+| Setpoint con teclas (↑/↓, OK, ESC, límites) | Ajustes |
+| Tecla → bit (momentáneo, enclavado, set, reset) | Arranque, paro, reconocer |
+| Navegación entre pantallas por tecla | Menús |
+| BAR circular y con degradado (si se aprueban) | Indicadores |
 
-También: regenerar `libJWPLC_TFT.a` con el catálogo de fuentes acotado
-(resuelve O4) y paridad de píxeles editor ↔ TFT.
+En el Designer y en OpenPLC:
 
-**Gate F2:** un ejemplo de banco por objeto; prueba de paridad (captura del
-editor contra foto de la TFT) en los tamaños de fuente soportados; flash y RAM
-medidas y documentadas; API Alpha11 sin cambios rotos.
+- **Vista en vivo**: el lienzo muestra los valores del debugger de OpenPLC.
+- **Escrituras**: `access: "RW"` en `plcBinding`.
 
-### Fase 3 — Editor HMI en OpenPLC (MVP)
+**Gate F5:** ejemplo de banco por objeto; setpoints y teclas respetan límites
+y forzados; con el PLC en STOP las escrituras se bloquean; la vista en vivo
+coincide con el equipo.
 
-Objetivo: diseñar sin salir de OpenPLC.
+### F6 — Funciones de producto
 
-- Nodo **"Pantallas HMI"** en el árbol del proyecto (solo si el VPP declara
-  `hmiDisplay`).
-- Canvas 320 × 170 con zoom, grilla, snap, selección y alineación (se porta la
-  interacción del Designer).
-- Inspector por tipo de objeto y **selector de variables** con filtro por tipo
-  compatible.
-- Paso `generate-hmi` en la compilación; errores y advertencias en la consola
-  del editor con enlace al objeto (variable inexistente, tipo incompatible,
-  más de 32 fields, solapamiento, fuera del lienzo, flash de recursos
-  excedida).
-- Guardado en el proyecto (`hmi/`), con deshacer/rehacer.
+- **Alarmas** (ISA-18.2 simplificado): lista ligada a bits, prioridad, hora
+  del RTC, reconocimiento, banner, historial en FRAM.
+- **Seguridad**: pantallas con clave (operador / mantenimiento).
+- **Idiomas**: tabla de textos.
+- **Símbolos industriales** y **plantillas** de pantalla.
+- **Recomendado**: codegen del Designer como módulo puro (O6), que OpenPLC
+  pueda ejecutar al compilar sin abrir la ventana. Esto elimina el riesgo de
+  un header desactualizado.
 
-**Gate F3:** un técnico arma una pantalla de 2 páginas con lámparas,
-numéricos y una barra enlazadas a un programa ladder, compila, descarga y la ve
-en el equipo, **sin abrir Arduino IDE**. Tests al 100 % en
-`src/backend/shared` y `src/frontend/utils`; e2e del flujo "crear pantalla →
-compilar".
+**Gate F6:** prueba de aceptación con un caso real de demostración, revisada
+por el jefe.
 
-### Fase 4 — Vista en vivo y operación
+### F7 — Liberación industrial
 
-- **Vista en vivo**: con el debugger conectado, el canvas muestra los valores
-  reales (reutiliza el polling del debugger, sin WebSerial aparte).
-- Objetos de entrada en el editor: setpoints, teclas → bits, navegación.
-- Simulación offline: dar valores a mano a las variables para revisar los
-  estados de cada objeto.
-
-**Gate F4:** en banco, los setpoints y las teclas escriben en el programa
-respetando los límites y los forzados; con el PLC en STOP las escrituras se
-bloquean; la vista en vivo coincide con el equipo.
-
-### Fase 5 — Funciones de producto
-
-- **Alarmas** (ISA-18.2 simplificado): lista ligada a bits, con prioridad,
-  hora del RTC, reconocimiento por tecla, banner en todas las pantallas e
-  historial en FRAM.
-- **Seguridad**: pantallas protegidas por clave (operador / mantenimiento).
-- **Idiomas**: textos en tabla, con idioma seleccionable.
-- **Librería de símbolos industriales** (motor, bomba, válvula, tanque,
-  alarma) en RGB565 optimizado.
-- **Plantillas de pantalla** (estado de máquina, ajustes, alarmas,
-  diagnóstico).
-
-**Gate F5:** prueba de aceptación con un caso real (por ejemplo, una
-estación de bombeo de demostración), revisada por el jefe.
-
-### Fase 6 — Liberación industrial
-
-- Manual de usuario y guía de estilo (ISA-101 aplicada a 320 × 170).
+- Manual de usuario (un solo manual del Designer, con un capítulo por
+  anfitrión).
+- Guía de estilo ISA-101 aplicada a 320 × 170.
 - Ejemplos oficiales en el VPP.
-- Notas de versión y matriz de compatibilidad (editor ↔ VPP ↔ core).
+- Matriz de compatibilidad editor ↔ VPP ↔ Designer ↔ core.
 - Instalador reproducible y VPP firmado.
-- Prueba de larga duración (72 h con HMI activa, Modbus TCP y Backplane) sin
-  pérdida de scan ni bloqueos de pantalla.
+- Prueba de 72 h con HMI, Modbus TCP y Backplane.
 
-**Gate F6:** checklist de liberación firmado; release publicado.
+**Gate F7:** checklist de liberación firmado; release publicado.
 
 ### 6.1 Resumen
 
-| Fase | Entregable | Repo principal | Tamaño |
-| --- | --- | --- | --- |
-| F0 | Prueba de concepto en el HAL | platform-jwplc (VPP) | S |
-| F1 | `hmi-core` + migración `.jwhmi` + golden tests | platform-jwplc (tools) | M |
-| F2 | Motor ampliado (Alpha13) | platform-jwplc (librerías) | L |
-| F3 | Editor HMI en OpenPLC (MVP) | openplc-editor | L |
-| F4 | Vista en vivo, entradas y simulación | openplc-editor + VPP | M |
-| F5 | Alarmas, seguridad, idiomas, símbolos | ambos | L |
-| F6 | Liberación industrial | ambos | M |
+| Fase | Entregable | Repo principal | Tamaño | Depende de |
+| --- | --- | --- | --- | --- |
+| F0 | Prueba de concepto en el HAL | platform-jwplc (VPP) | S | — |
+| F1 | Designer confiable + CI de compilación | platform-jwplc (tools) | M | — |
+| F2 | Contrato de anfitrión + "Variable PLC" | platform-jwplc (tools) | M | F1 |
+| F3 | OpenPLC abre el Designer en ventana | openplc-editor + VPP | M | F0, F2 |
+| F4 | Pestaña integrada | openplc-editor | M | F3 |
+| F5 | Motor ampliado, vista en vivo, escrituras | platform-jwplc + ambos | L | F3 |
+| F6 | Alarmas, seguridad, idiomas, codegen puro | ambos | L | F5 |
+| F7 | Liberación industrial | ambos | M | F6 |
 
-F1 y F2 pueden avanzar en paralelo después de F0. F3 necesita F1 y los objetos
-básicos de F2.
+**Respecto de la rev. 1:**
+
+- Desaparece el editor React propio en OpenPLC (era la fase más grande).
+- El trabajo de interfaz se concentra en el Designer.
+- OpenPLC aporta el anfitrión, las variables y la compilación.
 
 ---
 
@@ -363,16 +417,17 @@ básicos de F2.
 
 | Nivel | Qué se prueba | Herramienta |
 | --- | --- | --- |
-| Unidad | Modelo, validación, geometría, codegen | Jest; golden files del header generado |
-| Compilación | Cada ejemplo y cada tipo de objeto compila para `jwplc:esp32:jwplcbasic` | `arduino-cli` en CI |
-| Paridad | Editor contra TFT, píxel a píxel por objeto y fuente | Captura del canvas contra foto o volcado del framebuffer |
-| Integración | Proyecto OpenPLC con HMI: compilar, descargar, depurar | e2e del editor + banco |
-| Rendimiento | Tiempo de scan, latencia variable → pantalla, refresco, flash y RAM | Instrumentación tipo `[RTU-TIMING]` |
-| Robustez | STOP/ERR, forzados, HMI inválida, 72 h de funcionamiento continuo | Banco |
+| Designer | Crear cada objeto, generar y compilar | Playwright + `arduino-cli` en CI |
+| Contrato | `jwplc-hmi-host/1` con un anfitrión simulado | Tests del Designer |
+| Editor | Host de herramientas, protocolo, puente, `generate-hmi` | Jest (100 % en `shared`/`utils`) + e2e |
+| Paridad | Lienzo contra TFT por objeto y fuente | Captura contra foto o volcado |
+| Rendimiento | Scan, latencia, refresco, flash, RAM | Instrumentación tipo `[RTU-TIMING]` |
+| Robustez | STOP/ERR, forzados, HMI desactualizada, 72 h | Banco |
+| Seguridad | Solo archivos del VPP verificados; el Designer sin Node; mensajes del puente validados | Revisión + tests |
 
-Reglas que se mantienen: 100 % de statements y lines en `src/backend/shared` y
-`src/frontend/utils`; nunca integrar el bypass de firma VPP (`75272a4fb`);
-versión del VPP monotónica y firmada en cada cambio del payload.
+Reglas que se mantienen: nunca integrar el bypass de firma VPP (`75272a4fb`);
+versión del VPP monotónica y firmada en cada cambio del payload (ahora también
+cuando cambia el Designer).
 
 ---
 
@@ -380,14 +435,19 @@ versión del VPP monotónica y firmada en cada cambio del payload.
 
 | Rol | Responsabilidad |
 | --- | --- |
-| Jefe de proyecto | Aprueba los gates, el alcance de cada alpha y la publicación de packages |
-| Integración OpenPLC (editor, HAL, VPP) | F0, paso `generate-hmi`, editor HMI, vista en vivo |
-| HMI Designer / UI (Andr3manuel) | F1 (extraer `hmi-core` desde su trabajo), interacción del canvas, inspector, fuentes |
-| Firmware / librerías | F2: objetos nuevos en `JWPLC_Display` y regeneración de `.a` |
+| Jefe de proyecto | Aprueba los gates, el alcance de cada alpha y los releases |
+| HMI Designer (Andr3manuel) | F1, F2, objetos nuevos del lado del Designer, vista en vivo en el lienzo |
+| Integración OpenPLC | F0, F3, F4, `generate-hmi`, HAL, empaquetado del Designer en el VPP |
+| Firmware / librerías | F5: objetos nuevos en `JWPLC_Display`, regeneración de `.a` |
 | Banco | Pruebas físicas de cada gate |
 
-Acuerdo de interfaz entre equipos: el **esquema `jwplc-hmi/1`** y los **golden
-files** del codegen. Cualquier cambio en ellos se revisa entre ambos frentes.
+**Interfaces acordadas entre los equipos:**
+
+- el contrato `jwplc-hmi-host/1`;
+- el formato `.jwhmi` (incluido `plcBinding` y la revisión);
+- la API pública de `JWPLC_Display`.
+
+Cualquier cambio en ellas se revisa entre ambos frentes.
 
 ---
 
@@ -395,20 +455,24 @@ files** del codegen. Cualquier cambio en ellos se revisa entre ambos frentes.
 
 | Riesgo | Mitigación |
 | --- | --- |
-| El dibujo afecta el tiempo de scan o al Backplane | F0 primero; dibujo solo en el tiempo libre; presupuesto medido en cada gate |
-| Lo que se ve en el editor no coincide con el equipo | Núcleo único (F1), pruebas de paridad (F2) y bloqueo de propiedades sin soporte |
-| Flash y RAM (fuentes, PixelMaps) | Catálogo de fuentes acotado; contador de recursos en el editor; límite declarado en `hmiDisplay` |
-| Divergencia entre el Designer standalone y el editor | Ambos sobre `hmi-core` desde F1 |
-| Merges con OpenPLC upstream | Todo detrás de la capacidad `hmiDisplay`; código del editor HMI en módulos propios |
-| Packages del core (el banco usa archivos reemplazados en `Arduino15`) | Publicar el package de Alpha13 antes de F3 en banco |
+| El Designer genera código que no compila (hoy pasa con figuras y BAR nuevos) | F1 antes de integrar; CI de compilación obligatoria para publicar una versión |
+| Header desactualizado respecto al `.jwhmi` | Revisión compartida y error de compilación; codegen puro en F6 |
+| Conflictos de atajos y foco en la pestaña | F3 en ventana primero; en F4, el foco decide quién maneja los atajos |
+| El VPP crece (+1,1 MB) y cada cambio del Designer obliga a firmar un VPP nuevo | Aceptable; a cambio, versión del Designer y del HAL siempre coherentes |
+| Ejecutar contenido web dentro del editor | Solo archivos firmados, protocolo de solo lectura, sin Node, puente con lista blanca de mensajes |
+| El dibujo afecta al scan o al Backplane | F0 primero; dibujo solo en el tiempo libre |
+| Merges con upstream | Mecanismo genérico de herramientas VPP, en módulos propios del fork |
 
 ---
 
 ## 10. Decisiones pendientes del jefe
 
-1. ¿`hmi-core` vive en `platform-jwplc/tools` o en un repo propio?
-2. ¿BAR circular y con degradado entran en Alpha13 o quedan para después?
-3. ¿Arranque en IDLE o en la pantalla del usuario por defecto?
-4. ¿Las escrituras desde la HMI (setpoints, teclas) entran en el MVP (F3) o en
-   F4?
-5. ¿Nombre y base de las ramas de trabajo (editor y platform)?
+1. ¿Se confirma que el Designer viaja dentro del VPP (recomendado) y no como
+   instalación aparte?
+2. ¿F3 (ventana) como primer entregable y F4 (pestaña) después, o directo a la
+   pestaña?
+3. ¿BAR circular y con degradado entran en Alpha13 o se ocultan hasta tener
+   soporte en el firmware?
+4. ¿Las escrituras desde la HMI (setpoints, teclas) entran con F3 o con F5?
+5. ¿Arranque en IDLE o en la pantalla del usuario por defecto?
+6. ¿Nombre y base de las ramas (la del Designer tiene paréntesis)?
