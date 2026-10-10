@@ -235,6 +235,26 @@ void runtime_apply_located_forces()
 }
 
 // ---------------------------------------------------------------------------
+// Force query for HALs that show forcing state (e.g. a board display marking
+// debugger-forced inputs). `raw` is an image-table slot pointer
+// (bool_input/bool_output), i.e. the variable's raw_ptr(). Only pointers
+// registered in locatedVars as Bit are interpreted as IECVar<BOOL_t>, so a
+// foreign pointer is never misread.
+// ---------------------------------------------------------------------------
+uint8_t runtime_located_bool_is_forced(const void* raw)
+{
+    using namespace strucpp;
+    if (!raw) return 0;
+    for (uint32_t i = 0; i < locatedVarsCount; ++i) {
+        const LocatedVar& lv = locatedVars[i];
+        if (lv.pointer == raw && lv.size == LocatedSize::Bit) {
+            return reinterpret_cast<const IECVar<BOOL_t>*>(raw)->is_forced() ? 1 : 0;
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // One scan cycle: copy inputs → run scheduled programs → copy outputs →
 // advance IEC TIME() so TON/TOF/TP can progress.
 // ---------------------------------------------------------------------------

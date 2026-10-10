@@ -50,6 +50,12 @@ void runtime_plc_cycle();
 // reverse-copy.
 void runtime_apply_located_forces();
 
+// 1 if the BOOL located variable whose image-table slot is `raw`
+// (bool_input[..][..] / bool_output[..][..]) is forced by the debugger, else 0.
+// Unknown pointers return 0. Lets a HAL show forcing state exactly, even when
+// the forced value matches the physical one.
+uint8_t runtime_located_bool_is_forced(const void* raw);
+
 // ---------------------------------------------------------------------------
 // Debug dispatch shims — extern "C" wrappers around strucpp::debug::handle_*.
 //
