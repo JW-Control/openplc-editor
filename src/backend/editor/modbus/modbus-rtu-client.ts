@@ -22,6 +22,20 @@ const MD5_REQUEST_RETRY_DELAY_MS = 500
 
 const FRAME_COMPLETE_TIMEOUT_MS = 10
 
+// disconnect(): how long to let a request already on the wire finish, and how
+// long to wait for the OS to confirm the port is closed.
+const DISCONNECT_DRAIN_TIMEOUT_MS = 1500
+const DISCONNECT_CLOSE_TIMEOUT_MS = 1000
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+// Subset of the serialport API used to close a port.
+interface ClosablePort {
+  isOpen: boolean
+  drain(callback: () => void): void
+  close(callback?: () => void): void
+}
+
 export class ModbusRtuClient {
   private port: string
   private baudRate: number
@@ -31,6 +45,9 @@ export class ModbusRtuClient {
   private serialPort: any = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private injectedSerialPort: any = null
+  // Set by disconnect(): queued requests fail fast instead of writing to a
+  // port that is about to close.
+  private closing = false
 
   private static readonly CRC_HI_TABLE = [
     0x00, 0xc1, 0x81, 0x40, 0x01, 0xc0, 0x80, 0x41, 0x01, 0xc0, 0x80, 0x41, 0x00, 0xc1, 0x81, 0x40, 0x01, 0xc0, 0x80,
@@ -137,11 +154,38 @@ export class ModbusRtuClient {
     })
   }
 
-  disconnect(): void {
-    if (this.serialPort && this.serialPort.isOpen) {
-      this.serialPort.close()
-      this.serialPort = null
+  /**
+   * Close the port without cutting a transfer in half: requests still queued
+   * fail fast, the one on the wire may finish (bounded wait), and the promise
+   * resolves once the OS has released the port. Closing a USB-serial bridge
+   * (e.g. CH340) mid-transfer can wedge its driver until the cable is
+   * replugged, and re-opening the port before the close completes makes the
+   * next debugger MD5 handshake fail.
+   */
+  async disconnect(): Promise<void> {
+    const port = this.serialPort as ClosablePort | null
+    if (!port) return
+    this.closing = true
+
+    await Promise.race([this.sendRequestMutex, wait(DISCONNECT_DRAIN_TIMEOUT_MS)])
+    this.serialPort = null
+    if (!port.isOpen) return
+
+    // Injected ports (simulator) close synchronously and take no callback.
+    if (port === this.injectedSerialPort) {
+      port.close()
+      return
     }
+
+    await new Promise<void>((resolve) => {
+      const guard = setTimeout(resolve, DISCONNECT_CLOSE_TIMEOUT_MS)
+      const finish = () => {
+        clearTimeout(guard)
+        resolve()
+      }
+      // drain(): let the TX buffer reach the wire before the handle goes away.
+      port.drain(() => port.close(finish))
+    })
   }
 
   private flushInputBuffer(): Promise<void> {
@@ -172,6 +216,9 @@ export class ModbusRtuClient {
   }
 
   private async sendRequestImpl(request: Buffer): Promise<Buffer> {
+    if (this.closing) {
+      throw new Error('Serial port is closing')
+    }
     if (!this.serialPort || !this.serialPort.isOpen) {
       throw new Error('Serial port is not open')
     }

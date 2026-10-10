@@ -1582,7 +1582,7 @@ class MainProcessBridge implements MainIpcModule {
       const match = targetMd5.toLowerCase() === expectedMd5.toLowerCase()
 
       if (connectionType === 'tcp') {
-        client.disconnect()
+        await client.disconnect()
       } else {
         this.debuggerModbusClient = client
         this.debuggerConnectionType = 'rtu'
@@ -1593,7 +1593,7 @@ class MainProcessBridge implements MainIpcModule {
 
       return { success: true, match, targetMd5, targetEndian }
     } catch (error) {
-      client?.disconnect()
+      await client?.disconnect()
       wsClient?.disconnect()
       return {
         success: false,
@@ -1766,8 +1766,9 @@ class MainProcessBridge implements MainIpcModule {
       return { success: false, error: result.error }
     } catch (error) {
       if (this.debuggerModbusClient) {
-        this.debuggerModbusClient.disconnect()
+        const previousClient = this.debuggerModbusClient
         this.debuggerModbusClient = null
+        await previousClient.disconnect()
       }
       return { success: false, error: getErrorMessage(error), needsReconnect: true }
     }
@@ -1787,8 +1788,9 @@ class MainProcessBridge implements MainIpcModule {
     try {
       if (connectionType === 'simulator') {
         if (this.debuggerModbusClient) {
-          this.debuggerModbusClient.disconnect()
+          const previousClient = this.debuggerModbusClient
           this.debuggerModbusClient = null
+          await previousClient.disconnect()
         }
 
         const virtualPort = new VirtualSerialPort(this.simulatorModule)
@@ -1809,8 +1811,9 @@ class MainProcessBridge implements MainIpcModule {
         await this.debuggerModbusClient.getMd5Hash()
       } else if (connectionType === 'websocket') {
         if (this.debuggerModbusClient) {
-          this.debuggerModbusClient.disconnect()
+          const previousClient = this.debuggerModbusClient
           this.debuggerModbusClient = null
+          await previousClient.disconnect()
         }
 
         if (!connectionParams.ipAddress || !connectionParams.jwtToken) {
@@ -1836,8 +1839,9 @@ class MainProcessBridge implements MainIpcModule {
         this.debuggerJwtToken = connectionParams.jwtToken
       } else if (connectionType === 'tcp') {
         if (this.debuggerModbusClient) {
-          this.debuggerModbusClient.disconnect()
+          const previousClient = this.debuggerModbusClient
           this.debuggerModbusClient = null
+          await previousClient.disconnect()
         }
 
         if (!connectionParams.ipAddress) {
@@ -1867,8 +1871,9 @@ class MainProcessBridge implements MainIpcModule {
         }
 
         if (this.debuggerModbusClient) {
-          this.debuggerModbusClient.disconnect()
+          const previousClient = this.debuggerModbusClient
           this.debuggerModbusClient = null
+          await previousClient.disconnect()
         }
 
         this.debuggerModbusClient = new ModbusRtuClient({
@@ -1900,10 +1905,11 @@ class MainProcessBridge implements MainIpcModule {
     }
   }
 
-  handleDebuggerDisconnect = (_event: IpcMainInvokeEvent): Promise<{ success: boolean }> => {
+  handleDebuggerDisconnect = async (_event: IpcMainInvokeEvent): Promise<{ success: boolean }> => {
     if (this.debuggerModbusClient) {
-      this.debuggerModbusClient.disconnect()
+      const previousClient = this.debuggerModbusClient
       this.debuggerModbusClient = null
+      await previousClient.disconnect()
     }
     if (this.debuggerWebSocketClient) {
       this.debuggerWebSocketClient.disconnect()
@@ -1916,7 +1922,7 @@ class MainProcessBridge implements MainIpcModule {
     this.debuggerRtuSlaveId = null
     this.debuggerJwtToken = null
     this.debuggerReconnecting = false
-    return Promise.resolve({ success: true })
+    return { success: true }
   }
 
   handleDebuggerSetVariable = async (
