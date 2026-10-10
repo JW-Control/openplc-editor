@@ -1,5 +1,14 @@
 import type { PLCProjectData, PLCVariable } from '../../types/PLC/open-plc'
-import { completeEmptyFirmwarePrograms, FIRMWARE_IDLE_VARIABLE, isIecProgramOptional } from '../firmware-only-program'
+import {
+  buildFirmwareTemplateProject,
+  completeEmptyFirmwarePrograms,
+  FIRMWARE_IDLE_VARIABLE,
+  FIRMWARE_TEMPLATE_INSTANCE,
+  FIRMWARE_TEMPLATE_PROGRAM,
+  FIRMWARE_TEMPLATE_TASK,
+  isIecProgramOptional,
+  usesFirmwareProgramTemplate,
+} from '../firmware-only-program'
 
 type SchemaPou = PLCProjectData['pous'][number]
 
@@ -114,5 +123,72 @@ describe('completeEmptyFirmwarePrograms', () => {
     } as unknown as SchemaPou
     const { completedPous } = completeEmptyFirmwarePrograms(project([fb]))
     expect(completedPous).toEqual([])
+  })
+})
+
+describe('usesFirmwareProgramTemplate', () => {
+  it('reads the VPP capability flag', () => {
+    expect(usesFirmwareProgramTemplate({ capabilities: { firmwareProgramTemplate: true } })).toBe(true)
+    expect(usesFirmwareProgramTemplate({ capabilities: { firmwareProgramTemplate: 1 } })).toBe(false)
+    expect(usesFirmwareProgramTemplate({ capabilities: { iecProgramOptional: true } })).toBe(false)
+    expect(usesFirmwareProgramTemplate(null)).toBe(false)
+  })
+})
+
+describe('buildFirmwareTemplateProject', () => {
+  // A Backplane master project: its main uses remote aliases and must not
+  // reach the slave firmware.
+  const masterProject = {
+    dataTypes: [{ name: 'MyStruct' }],
+    pous: [
+      ldProgram('main', [boolVar('RI0'), boolVar('RQ0')], [{ id: 'rung-1' }]),
+      { type: 'function-block', data: { name: 'MyFb' } },
+    ],
+    configuration: {
+      resource: {
+        tasks: [{ name: 'task0', triggering: 'Cyclic', interval: 'T#20ms', priority: 1 }],
+        instances: [{ name: 'instance0', task: 'task0', program: 'main' }],
+        globalVariables: [boolVar('G1')],
+      },
+    },
+    servers: [{ name: 'srv' }],
+    remoteDevices: [{ name: 'dev' }],
+    libraries: [{ name: 'lib' }],
+  } as unknown as PLCProjectData
+
+  it('replaces the project program with a fixed no-op template', () => {
+    const { project: built, ignoredPous } = buildFirmwareTemplateProject(masterProject)
+
+    expect(ignoredPous).toEqual(['main', 'MyFb'])
+    expect(built.pous).toHaveLength(1)
+    const template = programOf(built)
+    expect(template.name).toBe(FIRMWARE_TEMPLATE_PROGRAM)
+    expect(template.language).toBe('st')
+    expect(template.variables.map((v) => v.name)).toEqual([FIRMWARE_IDLE_VARIABLE])
+    expect(template.body).toEqual({ language: 'st', value: `${FIRMWARE_IDLE_VARIABLE} := FALSE;` })
+
+    expect(built.configuration.resource).toEqual({
+      tasks: [{ name: FIRMWARE_TEMPLATE_TASK, triggering: 'Cyclic', interval: 'T#20ms', priority: 1 }],
+      instances: [
+        { name: FIRMWARE_TEMPLATE_INSTANCE, task: FIRMWARE_TEMPLATE_TASK, program: FIRMWARE_TEMPLATE_PROGRAM },
+      ],
+      globalVariables: [],
+    })
+    expect(built.dataTypes).toEqual([])
+    expect(built.servers).toEqual([])
+    expect(built.remoteDevices).toEqual([])
+    expect(built.libraries).toEqual([])
+  })
+
+  it('never modifies the original project', () => {
+    const snapshot = JSON.stringify(masterProject)
+    buildFirmwareTemplateProject(masterProject)
+    expect(JSON.stringify(masterProject)).toBe(snapshot)
+  })
+
+  it('works with a project that has no POUs', () => {
+    const { project: built, ignoredPous } = buildFirmwareTemplateProject({ ...masterProject, pous: [] })
+    expect(ignoredPous).toEqual([])
+    expect(programOf(built).name).toBe(FIRMWARE_TEMPLATE_PROGRAM)
   })
 })

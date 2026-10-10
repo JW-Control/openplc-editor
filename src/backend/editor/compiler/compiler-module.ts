@@ -95,7 +95,12 @@ const POST_BUILD_START_POLL_INTERVAL_MS = 150
 import { assertPathContained } from '@root/backend/editor/utils/path-containment'
 import { getRuntimeHttpsOptions } from '@root/backend/editor/utils/runtime-https-config'
 import { isNewTranspilerEnabled } from '@root/backend/editor/utils/transpiler-mode'
-import { completeEmptyFirmwarePrograms, isIecProgramOptional } from '@root/backend/shared/compile/firmware-only-program'
+import {
+  buildFirmwareTemplateProject,
+  completeEmptyFirmwarePrograms,
+  isIecProgramOptional,
+  usesFirmwareProgramTemplate,
+} from '@root/backend/shared/compile/firmware-only-program'
 import { runCompilePipeline } from '@root/backend/shared/compile/pipeline'
 import { mergeStrucppRuntimeIntoSkeleton } from '@root/backend/shared/compile/steps/merge-strucpp-runtime-into-skeleton'
 import { readHalsFile } from '@root/backend/shared/firmware/hals-loader'
@@ -2793,7 +2798,19 @@ class CompilerModule {
     // compiled with an empty main; complete it in memory for the
     // transpiler. The project on disk is never modified.
     let pipelineProjectData = projectData
-    if (isIecProgramOptional(boardEntry)) {
+    if (usesFirmwareProgramTemplate(boardEntry)) {
+      // The device's HAL is the whole firmware: compile a fixed template and
+      // leave the project's program (e.g. the Backplane master's main) out.
+      const template = buildFirmwareTemplateProject(projectData)
+      pipelineProjectData = template.project
+      _mainProcessPort.postMessage({
+        logLevel: 'info',
+        message:
+          template.ignoredPous.length > 0
+            ? `Firmware device: compiling the built-in firmware template. The project's program (${template.ignoredPous.join(', ')}) is not used on this device and is not modified.`
+            : 'Firmware device: compiling the built-in firmware template.',
+      })
+    } else if (isIecProgramOptional(boardEntry)) {
       const completed = completeEmptyFirmwarePrograms(projectData)
       pipelineProjectData = completed.project
       if (completed.completedPous.length > 0) {

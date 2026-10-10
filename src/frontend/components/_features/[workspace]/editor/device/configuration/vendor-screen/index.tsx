@@ -5,6 +5,8 @@ import { SectionRenderer } from './section-renderer'
 type ScreenSection = {
   id: string
   title: string
+  /** Optional explanatory text shown under the section title. */
+  description?: string
   layout: string
   collapsible?: boolean
   collapsed?: boolean

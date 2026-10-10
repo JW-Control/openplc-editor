@@ -12,6 +12,10 @@ type SectionRendererProps = {
   moduleSystem: ModuleSystem
 }
 
+function SectionDescription({ text }: { text: string }) {
+  return <p className='mb-3 text-xs text-neutral-600 dark:text-neutral-400'>{text}</p>
+}
+
 function SectionRenderer({ section, moduleSystem }: SectionRendererProps) {
   const [collapsed, setCollapsed] = useState(section.collapsed ?? false)
 
@@ -38,6 +42,7 @@ function SectionRenderer({ section, moduleSystem }: SectionRendererProps) {
         defaultOpen={!(section.collapsed ?? false)}
         collapsible={section.collapsible ?? false}
       >
+        {section.description && <SectionDescription text={section.description} />}
         {renderLayout()}
       </CollapsibleCard>
     )
@@ -66,6 +71,7 @@ function SectionRenderer({ section, moduleSystem }: SectionRendererProps) {
           </svg>
         )}
       </div>
+      {!collapsed && section.description && <SectionDescription text={section.description} />}
       {!collapsed && renderLayout()}
     </div>
   )

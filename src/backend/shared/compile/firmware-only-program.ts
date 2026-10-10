@@ -92,3 +92,69 @@ export function completeEmptyFirmwarePrograms(project: PLCProjectData): {
 
   return { project: completedPous.length > 0 ? { ...project, pous } : project, completedPous }
 }
+
+// ---------------------------------------------------------------------------
+// Firmware program template.
+//
+// A device that declares `capabilities.firmwareProgramTemplate: true` never
+// runs the project's IEC program: its HAL is the whole firmware (e.g. the
+// JWPLC Remote I/O slave). The technician often compiles it from the same
+// project as the Backplane master, whose `main` must not be deleted, edited
+// or uploaded to the slave. For these devices the compile pipeline replaces
+// the project's POUs, data types, tasks, instances and globals — in memory
+// only — with a fixed no-op template. The project on disk is untouched.
+// ---------------------------------------------------------------------------
+
+export const FIRMWARE_TEMPLATE_PROGRAM = 'JwplcFirmwareMain'
+export const FIRMWARE_TEMPLATE_TASK = 'JwplcFirmwareTask'
+export const FIRMWARE_TEMPLATE_INSTANCE = 'JwplcFirmwareInstance'
+
+/** True when the board compiles a generated firmware template instead of the project's program. */
+export function usesFirmwareProgramTemplate(boardEntry: unknown): boolean {
+  const capabilities = (boardEntry as { capabilities?: Record<string, unknown> } | null | undefined)?.capabilities
+  return capabilities?.firmwareProgramTemplate === true
+}
+
+/**
+ * Return the project to compile for a firmware-template device, plus the
+ * names of the project POUs left out (for the build log).
+ */
+export function buildFirmwareTemplateProject(project: PLCProjectData): {
+  project: PLCProjectData
+  ignoredPous: string[]
+} {
+  const ignoredPous = project.pous.map((pou) => pou.data.name)
+
+  const template: SchemaPou = {
+    type: 'program',
+    data: {
+      language: 'st',
+      name: FIRMWARE_TEMPLATE_PROGRAM,
+      variables: [placeholderVariable()],
+      body: { language: 'st', value: `${FIRMWARE_IDLE_VARIABLE} := FALSE;` },
+      documentation:
+        'Plantilla generada por el editor: el firmware de este dispositivo no usa el programa del proyecto.',
+    },
+  }
+
+  return {
+    project: {
+      ...project,
+      dataTypes: [],
+      pous: [template],
+      configuration: {
+        resource: {
+          tasks: [{ name: FIRMWARE_TEMPLATE_TASK, triggering: 'Cyclic', interval: 'T#20ms', priority: 1 }],
+          instances: [
+            { name: FIRMWARE_TEMPLATE_INSTANCE, task: FIRMWARE_TEMPLATE_TASK, program: FIRMWARE_TEMPLATE_PROGRAM },
+          ],
+          globalVariables: [],
+        },
+      },
+      servers: [],
+      remoteDevices: [],
+      libraries: [],
+    },
+    ignoredPous,
+  }
+}
