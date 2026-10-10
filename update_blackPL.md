@@ -286,6 +286,7 @@ Referencia: orden de trabajo `JWPLC_ALPHA12_OPENPLC_ENGINEERING_CLOSURE_WORK_ORD
 | `REMOTE_IO_MULTIBIT` — camino de salida (8 patrones) | PASS físico | Banco 2026-10-07: patrones forzados desde el debugger → Ladder → FC15 → salidas físicas del esclavo, 8/8 y 0 bits cruzados. El camino de entrada (FC02) sigue pendiente (§9.6) |
 | `REMOTE_IO_OFFLINE_SAFE_STATE` | PASS físico | Banco 2026-10-07: al desconectar el RS-485 se pierde la comunicación y al reconectar se recupera sola, sin reprogramar (§9.6) |
 | `RTU_ALTERNATE_PROFILE` (baudrate 38400, 8N1) | PASS físico | Banco 2026-10-07: con baudrates distintos el bus falla; con 38400 en ambos, BUS `---` y patrones PASS. El formato serie no se cambió: falta probar 8E1 (§9.6) |
+| `REMOTE_IO_MULTISLOT` | PASS físico | Banco 2026-10-10: 1 maestro y 2 esclavos funcionando a la vez, presentado al responsable (§9.6) |
 | Backports upstream #948, #949, #950, #1085, #1083, #1088, #1078 | Integrados | Rama de integración (ver `docs/jwplc/alpha12/SOURCE_FREEZE.md`) |
 | `JWPLC_EDITOR_ALPHA9_SOURCE_RECOVERED` | PASS | Vía `2faf717e4` |
 | Build limpio del editor | PASS | §9.3 |
@@ -335,7 +336,7 @@ JWPLC_EDITOR_REPRODUCIBLE=PARTIAL (payload idéntico; el .exe NSIS no es byte-de
 | Slot ausente | Con ese proyecto, el slot 2 sigue funcionando con el 3 fuera de línea. |
 | `BUS_CYCLE_TIME` | Caso A medido (§9.6). Faltan los casos B (slot 3 ausente) y C (slots 3 y 4 ausentes), la latencia entrada→salida (`in2out`) y el feedback FC01 con un patrón distinto de `0x00`. |
 
-**Requiere un tercer PLC:** `REMOTE_IO_MULTISLOT` con 2 esclavos reales a la vez.
+**Multi-slot real:** `REMOTE_IO_MULTISLOT` quedó en PASS con 1 maestro y 2 esclavos (§9.6). Para el registro formal falta anotar la configuración usada (Slave IDs, slots y perfil del bus).
 
 **Editor / release:**
 
@@ -354,7 +355,7 @@ JWPLC_EDITOR_REPRODUCIBLE=PARTIAL (payload idéntico; el .exe NSIS no es byte-de
 3. **Carpeta de documentos.** `docs/v2.1.0-alpha.12/` es ahora la carpeta del release de comunicaciones. ¿Dónde van `BACKPLANE_RTU_CONFIGURATION.md` y los documentos de §21?
 4. **Destino del PR.** La orden dice `release/v2.1.x`, pero la rama parte de `main` y ambas tienen historias distintas (squash). Hay que definir la base del PR.
 5. **Alcance de la orden de trabajo.** Qué partes de la orden del 2026-09-12 siguen vigentes en Alpha14.
-6. **Tercer PLC** para la prueba multi-slot con 2 esclavos reales.
+6. ~~**Tercer PLC** para la prueba multi-slot con 2 esclavos reales.~~ Resuelto: el banco ya tiene 3 PLC.
 7. **Semántica de `as: 'boolean'`** en `debug-spec`: confirmar si el cambio de `a7a541571` es el comportamiento deseado, para corregir el test.
 8. **Dónde generar los instaladores oficiales:** una PC sin Smart App Control o CI de GitHub. `release.yml` construye todas las plataformas y tiene un job `create-release`.
 
@@ -456,3 +457,200 @@ IN2OUT_LATENCY=PENDING (requiere entradas físicas)
 ```
 
 **Al terminar las mediciones:** volver a activar Modbus RTU (debugger por USB) en `PruebaMultibit` y subir desde el editor el firmware normal.
+
+#### `REMOTE_IO_MULTISLOT` — 2026-10-10
+
+**Montaje:** 1 maestro JWPLC Basic con Backplane y **2 esclavos** JWPLC Basic Remote IO en el mismo bus RS-485, VPP 2.1.0-alpha.26.
+
+**Resultado:** el maestro comanda los dos esclavos a la vez y ambos responden correctamente. Se presentó al responsable.
+
+```text
+REMOTE_IO_MULTISLOT=PASS_PHYSICAL (2026-10-10, 1 maestro + 2 esclavos)
+```
+
+Pendiente de anotar para el registro: slots y Slave IDs de cada esclavo, y perfil del bus usado (baudrate/formato).
+
+---
+
+## 10. Mejora: entradas forzadas visibles en la pantalla IDLE (2026-10-10)
+
+**Pedido del responsable:** al forzar una entrada desde el debugger, la pantalla IDLE del JWPLC no la mostraba. Las salidas sí se ven y funcionan bien, y **no se tocan**.
+
+**Causa:** el forzado vive en la variable IEC del runtime de OpenPLC (`IECVar::forced_`). La IDLE dibuja las entradas con la lectura física del TCA6424 (`di_logical_bank0`), que no cambia al forzar.
+
+**Diseño elegido (opción 2):** cada entrada forzada se dibuja con su **valor forzado** y una **"F"**. En ON va **rayada** en diagonal, con el color de entrada activa, para no confundirla con una entrada física activa (relleno liso).
+
+```text
+Celda de entrada (IN)
+Normal ON      [##########]   relleno liso
+Normal OFF     [          ]   negro
+Forzada ON     [/F/F/F/F//]   rayado + F
+Forzada OFF    [    F     ]   negro + F
+```
+
+| Repo / commit | Cambio |
+|---|---|
+| platform `43fd48db` | `JWPLC_Display`: nueva API C `jwplcDisplaySetInputForceOverlay(mask, values)` (bit i = I0_i) y dibujo de la celda forzada en la IDLE. `libJWPLC_Display.a` regenerada. |
+| platform `902780fd` | HAL del maestro (VPP **2.1.0-alpha.27**): tras el programa compara el valor crudo de cada entrada local (que ya trae el forzado re-impuesto por el runtime) con la lectura física y publica el overlay. |
+
+**Detección del forzado en el HAL:**
+
+- Exacta si el runtime del editor exporta `runtime_located_bool_is_forced()`. Hoy **no existe**: es una mejora pendiente en `resources/sources/arduino/arduino_runtime_glue.cpp`.
+- Mientras tanto, por diferencia con la lectura física. Cubre el caso habitual (forzar ON una entrada que físicamente está OFF, o al revés). Si se fuerza al mismo valor que tiene la entrada física, no se marca la "F", pero la IDLE muestra igual el valor correcto.
+- Los dos símbolos son `weak`: con el package Alpha12 publicado el HAL compila igual y la IDLE queda como antes.
+
+**Alcance:** entradas locales `I0_0..I0_7` del equipo que se depura. Una entrada **remota** forzada en el maestro no aparece en la IDLE del esclavo: el forzado vive en el maestro.
+
+**Verificación automática:**
+
+| Prueba | Resultado |
+|---|---|
+| `libJWPLC_Display.a` regenerada: los 5 objetos no tocados | Mismo tamaño text/data/bss que los publicados (mismo toolchain y flags) |
+| Símbolos globales de la `.a` | Los mismos que la publicada, más `jwplcDisplaySetInputForceOverlay` y `setInputForceOverlay` |
+| Maestro real (HAL alpha.27) + `JWPLC_Display` nuevo | Compila; el overlay queda enlazado en el ELF |
+| Maestro real (HAL alpha.27) + package Alpha12 publicado | Compila; overlay inactivo (símbolo weak sin resolver) |
+| Firma del VPP alpha.27 | `valid=true`; HAL alterado → `Tampered file detected` |
+
+```text
+VPP_VERSION=2.1.0-alpha.27
+VPP_SHA256=f3c8f4aeb9ad605c15a3c73a5af33f8f43b5da47fd3c65ab652b1c0e8b5b3750
+IDLE_FORCED_INPUTS_BUILD=PASS
+IDLE_FORCED_INPUTS_PHYSICAL=PENDING
+EXACT_FORCE_DETECTION=PENDING (runtime_located_bool_is_forced en el editor)
+```
+
+**Para publicar:** el cambio de `JWPLC_Display` va dentro del package del core, así que requiere un package nuevo. Lo decide el responsable (su Alpha13 es TFT/Display).
+
+### 10.1 Entradas de los esclavos forzadas desde el maestro (VPP 2.1.0-alpha.28)
+
+**Hallazgo en el banco (2026-10-10):** con alpha.27 no se veía ningún cambio porque el programa del maestro (`PruebaMultibit`) solo usa entradas **remotas** (`RI0..RI7`, `%IX1.x`), que son entradas de un esclavo. Alpha.27 cubría solo las entradas locales del maestro. El firmware compilado sí incluía la librería nueva y el HAL alpha.27.
+
+**Criterio pedido:** una entrada forzada se marca en la IDLE **del equipo al que pertenece**, sea el maestro o un esclavo.
+
+| Entrada forzada en el debugger del maestro | Se marca en |
+|---|---|
+| Local del maestro (`%IX0.x`) | IDLE del maestro (alpha.27) |
+| Remota de un esclavo (`RI...`, slots 2..8) | IDLE de ese esclavo (alpha.28) |
+
+El forzado ocurre dentro del programa del maestro: el esclavo no tiene forma de saberlo si el maestro no se lo dice. Por eso se amplió el protocolo Remote I/O:
+
+| Parte | Cambio |
+|---|---|
+| Protocolo | **Holding Register 0** del esclavo = entradas forzadas en el maestro (byte alto = máscara I0_0..I0_7, byte bajo = valores). Solo para la pantalla; no altera la I/O del esclavo. La zona de commissioning (224–239) no se toca. |
+| HAL del maestro | Tras el programa calcula por slot qué `%IX` remotas están forzadas y las envía con **FC06** al HR 0, solo cuando cambian y con un refresco cada 1 s mientras haya forzados (por si el esclavo se reinició). Si esa escritura falla, no cuenta para declarar el slot fuera de línea: un esclavo con firmware anterior responde excepción y se reintenta como máximo una vez por segundo. |
+| HAL del esclavo | Expone el HR 0 y lo pasa a `jwplcDisplaySetInputForceOverlay()`. Si el maestro deja de escribir durante el failsafe, borra la marca para no dejar una "F" vieja. |
+| Display | Sin cambios respecto a alpha.27 (mismo dibujo). |
+
+**Costo en el bus:** un FC06 (16 bytes ≈ 4 ms a 38400) por slot, solo cuando cambia un forzado, más uno por segundo mientras ese slot tenga entradas forzadas.
+
+**Verificación automática:** compilan el maestro (con y sin probe de timing) y el esclavo contra el package con el `JWPLC_Display` nuevo, y el overlay queda enlazado en ambos. Firma del VPP `valid=true`; HAL alterado → `Tampered file detected`.
+
+```text
+VPP_VERSION=2.1.0-alpha.28
+VPP_SHA256=311ab25e30046dd9639617cc7311baa500f1e742e7cd8907b3e3584f64b82483
+PLATFORM_COMMIT=ce7b1944
+IDLE_FORCED_REMOTE_INPUTS_BUILD=PASS
+IDLE_FORCED_REMOTE_INPUTS_PHYSICAL=PENDING
+```
+
+**Para probar:** importar el VPP alpha.28, compilar y subir el **maestro y cada esclavo** (los dos HAL cambiaron), y forzar `RI...` desde el debugger del maestro.
+
+### 10.2 Detección exacta del forzado (editor `f75366a6c`)
+
+**Observación del responsable (2026-10-10):** con una entrada forzada en ON desde el debugger, al conectar físicamente 24 V a esa entrada la IDLE pasaba a relleno liso (celeste) y, durante la conexión, parpadeaba brevemente a negro.
+
+**Causa:** sin ayuda del runtime, el HAL detectaba el forzado comparando el valor forzado con la lectura física. Con la entrada forzada en ON y 24 V presentes, los dos valores coinciden y se interpretaba como "no forzada". El rebote del cable producía el parpadeo.
+
+**Corrección:** el runtime del editor exporta `runtime_located_bool_is_forced(raw)` (`resources/sources/arduino/arduino_runtime_glue.cpp/.h`), que consulta `IECVar::is_forced()`. Solo interpreta punteros registrados en `locatedVars` como Bit, así un puntero ajeno nunca se lee como variable. El HAL (alpha.27+) ya usaba esta función cuando existe, así que **no hace falta un VPP nuevo**.
+
+| Situación | Antes | Ahora |
+|---|---|---|
+| Forzada ON, entrada física sin señal | Rayado + F | Rayado + F |
+| Forzada ON, llegan 24 V a la entrada | Relleno liso (y parpadeo al conectar) | **Rayado + F, sin cambios** |
+| Forzada OFF, llegan 24 V | Negra + F | Negra + F |
+| Sin forzar | Sigue la señal física | Sigue la señal física |
+
+**Verificación:** el glue compila con el toolchain del package (`gnu++17`). El firmware del maestro enlaza `runtime_located_bool_is_forced` y `jwplcDisplaySetInputForceOverlay`. Pasan los tests del editor relacionados con el glue y el bundle de firmware (4 suites, 148 tests).
+
+```text
+EDITOR_COMMIT=f75366a6c
+EXACT_FORCE_DETECTION=PASS (build)
+IDLE_FORCED_INPUT_WITH_PHYSICAL_SIGNAL=PENDING_PHYSICAL
+```
+
+**Para probar:** recompilar y subir desde el editor (el de desarrollo lee el glue del repo). Basta con el **maestro**: la detección ocurre en él, también para las entradas de los esclavos.
+
+### 10.3 Debugger: "Could not verify MD5" al volver a entrar (editor `52e8068f1`)
+
+**Síntoma (2026-10-10):** tras usar el debugger y salir, al volver a entrar aparece a veces `Could not verify MD5: Failed to get MD5 hash after retries`. En ese estado tampoco se puede subir firmware (`No serial data received`), aunque el maestro sigue funcionando (pantalla y reloj activos).
+
+**Diagnóstico en el banco:**
+
+- Con el maestro en ese estado, COM3 abre bien, pero el ESP32 no responde al MD5 en 10 intentos y **ni siquiera su ROM imprime el arranque** después de un pulso de reset por RTS o DTR. El enlace USB-serie (CH340) queda trabado; el firmware no puede causar eso. Se recupera desconectando y volviendo a conectar el USB.
+- En el log del editor, al salir del debugger hay una ráfaga de escrituras (liberación de forzados) seguida de `Request timeout` y `Serial port is not open`: **el puerto se cerraba con peticiones en vuelo**.
+
+**Corrección en el editor:** el cierre del puerto RTU es ahora controlado:
+
+- Las peticiones que llegan cuando ya empezó el cierre fallan de inmediato, sin escribir en el puerto.
+- La petición en curso puede terminar (máximo 1,5 s).
+- Después se hace `drain()` + `close()` y se espera la confirmación del sistema (máximo 1 s).
+- Antes de abrir de nuevo el mismo puerto, el editor espera a que termine ese cierre.
+
+5 tests nuevos del cierre controlado. `tsc` limpio. Siguen pasando los tests del cliente compartido y del simulador (45).
+
+**Limitación honesta:** la causa exacta del bloqueo del CH340 no se reprodujo de forma controlada. El arreglo quita el disparador de software más probable (cerrar en plena transferencia y reabrir antes de que el cierre termine). Otro posible disparador es eléctrico: conectar cables de 24 V a las entradas del maestro mientras está unido a la PC por USB. Si vuelve a pasar, anotar qué se estaba haciendo justo antes.
+
+```text
+EDITOR_COMMIT=52e8068f1
+DEBUGGER_RTU_GRACEFUL_CLOSE=PASS (tests)
+DEBUGGER_REENTRY_PHYSICAL=PENDING (salir y volver a entrar varias veces con forzados activos)
+```
+
+### 10.4 El esclavo compila una plantilla, no el `main` del proyecto (editor `30dbb7b9f`, VPP 2.1.0-alpha.29)
+
+**Pedido:** que el técnico no tenga que borrar ni dejar vacío el `main` para programar un esclavo. Borrarlo obliga a rehacer el programa del maestro, y tener el `main` del maestro presente al subir el esclavo confunde, aunque hoy no afecte.
+
+**Solución:** el dispositivo **JWPLC BASIC Remote IO [2.0.0]** declara `capabilities.firmwareProgramTemplate: true`. Al compilar para esa placa, el editor reemplaza **en memoria** todo el programa del proyecto (POUs, tipos, tareas, instancias y variables globales) por una plantilla fija:
+
+```text
+PROGRAM JwplcFirmwareMain
+  VAR JwplcFirmwareIdle : BOOL; END_VAR
+  JwplcFirmwareIdle := FALSE;
+END_PROGRAM
+TASK JwplcFirmwareTask (Cyclic, T#20ms) -> instancia JwplcFirmwareInstance
+```
+
+- El proyecto en disco **no se modifica**: el `main` del maestro queda intacto y nunca llega al esclavo.
+- La consola lo indica al compilar: `Firmware device: compiling the built-in firmware template. The project's program (main, ...) is not used on this device and is not modified.`
+- La pantalla **Remote I/O Slave** lo explica con un texto nuevo bajo el título. Las pantallas VPP ahora admiten un campo `description` por sección.
+- Tiene prioridad sobre `iecProgramOptional`, que se mantiene para editores anteriores (ahí sigue funcionando el `main` vacío).
+
+**Flujo para el técnico:** en el mismo proyecto del maestro, cambiar la placa a **JWPLC BASIC Remote IO [2.0.0]**, configurar la pantalla Remote I/O Slave, compilar y subir, y volver a la placa del maestro. El Backplane y el `main` se conservan porque se guardan por placa.
+
+**Verificación:**
+
+- 15 tests de `firmware-only-program`, con 100 % de líneas.
+- La plantilla pasa por el transpilador real a ST y compila con STruC++ 0.5.13 sin errores.
+- `tsc` y ESLint limpios.
+- Firma del VPP alpha.29 `valid=true`.
+
+```text
+EDITOR_COMMIT=30dbb7b9f
+PLATFORM_COMMIT=4e869985
+VPP_VERSION=2.1.0-alpha.29
+VPP_SHA256=6d96cd04e66fda71bb4d6c40448c28a0fde29a8ddda07c43ce0abdb6f5943346
+SLAVE_FIRMWARE_TEMPLATE_BUILD=PASS
+SLAVE_FIRMWARE_TEMPLATE_PHYSICAL=PENDING
+```
+
+---
+
+## 11. Recordatorio de pruebas pendientes en banco
+
+- [ ] **Debugger, reingreso (§10.3):** reconectar el USB-C del maestro, reiniciar el editor de desarrollo y repetir varias veces: entrar al debugger → forzar señales → salir → volver a entrar. Debe conectar siempre, sin `Could not verify MD5`. Si se traba, anotar qué se hacía justo antes (en especial si se conectaban cables de 24 V con el USB puesto).
+- [ ] **Forzado con señal física (§10.2):** entrada forzada en ON + 24 V físicos → debe seguir rayada con "F", sin pasar a celeste ni parpadear.
+- [ ] **Entradas remotas forzadas (§10.1):** `RI...` forzadas en el maestro marcadas en la IDLE de cada esclavo, y la marca se borra al desconectar el bus.
+- [ ] **Formato serie 8E1 (§9.6):** maestro y esclavos en 38400/8E1.
+- [ ] **Persistencia del perfil RS-485 y Slave ID** al cerrar y reabrir el editor.
+- [ ] **`BUS_CYCLE_TIME`** casos B y C (slots ausentes).
+- [ ] **Esclavo con plantilla (§10.4):** importar el VPP alpha.29, reiniciar el editor de desarrollo, abrir el proyecto del maestro **sin borrar su `main`**, cambiar la placa a JWPLC BASIC Remote IO, compilar y subir el esclavo. En la consola debe salir el mensaje de plantilla, el esclavo debe responder al maestro y, al volver a la placa del maestro, el `main` debe seguir igual.
