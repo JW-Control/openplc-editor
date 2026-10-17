@@ -92,10 +92,12 @@ motivo (P5 del plan: fallos visibles).
     `jwplcHMIBindingsSnapshot()`.
 - `jwplc_hmi.h` se escribe siempre (con `0` si no hay pantalla), para que un
   header viejo en `build/` no reactive la HMI.
-- El HAL del VPP alpha.30 lo incluye con `__has_include`:
+- El HAL del VPP lo incluye con `__has_include`:
   - `jwplcHMISetup()` al inicio de `hardwareInit()`;
-  - `jwplcHMIBindingsSnapshot()` + `jwplcUIUpdate()` en
-    `updateOutputBuffers()`, después de escribir las salidas.
+  - `jwplcHMIBindingsSnapshot()` en `updateOutputBuffers()`, después de
+    escribir las salidas. Hasta alpha.31 también llamaba `jwplcUIUpdate()`
+    (≈ 167 µs por scan, F0d-2). Desde alpha.32 esa función sólo la llama la
+    tarea del Display en cada refresco de USER.
 
 Ejemplo de `jwplc_hmi.h` generado:
 
@@ -139,6 +141,6 @@ static inline void jwplcHMIBindingsSnapshot()
 | --- | --- |
 | F0b | VALUE/BAR ← `%MW`/`%MD`: implementado; falta la prueba en placa (gate `A14_F0b_OpenPLC_Valores`). TEXT de estado pendiente |
 | F0c | Escritura HMI → PLC sobre `%MW`/`%MD`: PASS en placa (gate `A14_F0c_OpenPLC_Escritura`) |
-| F0d | Medir el costo de `jwplcUIUpdate()` por scan (< 50 µs) |
+| F0d | Costo de la HMI en el scan: PASS desde VPP alpha.32 (5–15 µs); abierto el retraso del scan al cambiar de página (≤ 65 ms), del runtime de pantalla del package |
 | — | Variables sin dirección por `openplc_debug_read()` + `debug-map.json` |
 | F3 | Abrir el Designer desde OpenPLC (ventana) y leer `plcBinding` del `.jwhmi` |
