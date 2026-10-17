@@ -101,6 +101,13 @@ import {
   isIecProgramOptional,
   usesFirmwareProgramTemplate,
 } from '@root/backend/shared/compile/firmware-only-program'
+import {
+  generateJwplcHmi,
+  hasHmiDisplay,
+  JWPLC_HMI_BINDINGS_FILE,
+  JWPLC_HMI_HEADER_FILE,
+  JWPLC_HMI_PROJECT_DIR,
+} from '@root/backend/shared/compile/jwplc-hmi'
 import { runCompilePipeline } from '@root/backend/shared/compile/pipeline'
 import { mergeStrucppRuntimeIntoSkeleton } from '@root/backend/shared/compile/steps/merge-strucpp-runtime-into-skeleton'
 import { readHalsFile } from '@root/backend/shared/firmware/hals-loader'
@@ -2704,6 +2711,32 @@ class CompilerModule {
       })
       _mainProcessPort.close()
       return
+    }
+
+    // JWPLC HMI: boards with an integrated screen get the project's
+    // Designer header plus the generated PLC -> HMI links next to the HAL
+    // (`src/`). See `shared/compile/jwplc-hmi.ts`.
+    if (!isRuntimeV4 && !isSimulator && hasHmiDisplay(boardEntry)) {
+      const readOptional = async (fileName: string): Promise<string | undefined> => {
+        try {
+          return await readFile(join(normalizedProjectPath, JWPLC_HMI_PROJECT_DIR, fileName), 'utf-8')
+        } catch {
+          return undefined
+        }
+      }
+      const hmi = generateJwplcHmi({
+        header: await readOptional(JWPLC_HMI_HEADER_FILE),
+        bindingsJson: await readOptional(JWPLC_HMI_BINDINGS_FILE),
+        projectData,
+      })
+      for (const message of hmi.errors) _mainProcessPort.postMessage({ logLevel: 'error', message })
+      if (hmi.errors.length > 0) {
+        _mainProcessPort.postMessage({ logLevel: 'error', message: 'Invalid HMI screen. Stopping compilation process.' })
+        _mainProcessPort.close()
+        return
+      }
+      for (const message of hmi.messages) _mainProcessPort.postMessage({ logLevel: 'info', message })
+      firmwareSkeleton = { ...firmwareSkeleton, ...hmi.files }
     }
 
     // --- Build the editor's CompilerPlatformPort implementation ---
