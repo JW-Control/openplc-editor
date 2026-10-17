@@ -22,6 +22,7 @@ import { logger, PouService, ProjectService, UserService } from '../backend/edit
 import { resolveHtmlPath } from '../backend/editor/utils'
 import { getErrorMessage } from '../frontend/utils/get-error-message'
 import MenuBuilder from './menu'
+import { hmiDesignerHost } from './modules/hmi-designer'
 import MainProcessBridge from './modules/ipc/main'
 import { store } from './modules/store'
 
@@ -308,6 +309,8 @@ const createMainWindow = async () => {
     hardwareModule,
   } as unknown as MainIpcModuleConstructor)
   mainIpcModule.setupMainIpcListener()
+  // JWPLC HMI Designer window (Alpha14 F3). Registers its channels once.
+  hmiDesignerHost.register(ipcMain)
 
   // Remove this if your app does not use auto updates;
   new AppUpdater()

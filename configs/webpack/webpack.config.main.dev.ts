@@ -52,6 +52,7 @@ const configuration: webpack.Configuration = {
   entry: {
     main: join(srcMainPath, 'main.ts'),
     preload: join(srcMainPath, 'modules/preload/preload.ts'),
+    'hmi-designer-preload': join(srcMainPath, 'modules/preload/hmi-designer-preload.ts'),
   },
 
   output: {

@@ -223,6 +223,97 @@ describe('generateJwplcHmi read/write links (F0c)', () => {
   })
 })
 
+describe('generateJwplcHmi with plcBinding in the .jwhmi (F3)', () => {
+  const memory = () =>
+    project({
+      globals: [variable('LIMITE', '%MW1', 'INT'), variable('RELE', '%QX0.0')],
+    })
+
+  const jwhmi = (fields: unknown) => JSON.stringify({ format: 'JWPLC_HMI_PROJECT', version: 1, fields })
+
+  it('links fields and MENU nodes from plcBinding', () => {
+    const result = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: undefined,
+      jwhmiJson: jwhmi([
+        { type: 'BOOL', name: 'Rele', variable: 'rele_q0_0', plcBinding: { var: 'RELE' } },
+        { type: 'RECT', name: 'Marco' },
+        null,
+        {
+          type: 'MENU',
+          name: 'Ajustes',
+          nodes: [
+            { type: 'SUBMENU', label: 'Avanzado' },
+            { type: 'EDIT_NUM', label: 'Limite', variable: 'limite', plcBinding: { var: 'LIMITE', access: 'rw' } },
+          ],
+        },
+        { type: 'MENU', name: 'Vacio' },
+      ]),
+      projectData: memory(),
+    })
+    expect(result.errors).toEqual([])
+    expect(result.messages).toContain('HMI: rele_q0_0 <- RELE (%QX0.0)')
+    expect(result.messages).toContain('HMI: limite <-> LIMITE (%MW1)')
+    expect(result.warnings).toEqual([])
+  })
+
+  it('merges bindings.json and rejects the same HMI variable twice', () => {
+    const merged = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: bindings([{ hmi: 'limite', plc: 'LIMITE' }]),
+      jwhmiJson: jwhmi([{ type: 'BOOL', variable: 'rele_q0_0', plcBinding: { var: 'RELE' } }]),
+      projectData: memory(),
+    })
+    expect(merged.errors).toEqual([])
+    expect(merged.messages).toHaveLength(3)
+
+    const repeated = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: bindings([{ hmi: 'rele_q0_0', plc: 'RELE' }]),
+      jwhmiJson: jwhmi([{ type: 'BOOL', variable: 'rele_q0_0', plcBinding: { var: 'RELE' } }]),
+      projectData: memory(),
+    })
+    expect(repeated.errors[0]).toContain('repetida en bindings.json')
+  })
+
+  it('warns when the project is newer than the header', () => {
+    const result = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: undefined,
+      jwhmiJson: jwhmi([]),
+      jwhmiNewerThanHeader: true,
+      projectData: memory(),
+    })
+    expect(result.warnings[0]).toContain('Actualizar HMI')
+    expect(result.messages[1]).toContain('sin enlaces')
+  })
+
+  it.each([
+    [undefined, jwhmi([]), 'falta hmi/JWPLC_HMI_Generated.h'],
+    [F0_HEADER, '{ roto', 'no es un JSON válido'],
+    [F0_HEADER, 'null', 'no tiene la lista "fields"'],
+    [
+      F0_HEADER,
+      jwhmi([{ type: 'BOOL', name: 'B', plcBinding: { var: 'RELE' } }]),
+      'tiene plcBinding pero no "variable"',
+    ],
+    [F0_HEADER, jwhmi([{ type: 'BOOL', id: 'F1', variable: ' ', plcBinding: { var: 'RELE' } }]), 'pero no "variable"'],
+    [F0_HEADER, jwhmi([{ type: 'BOOL', variable: 'rele_q0_0', plcBinding: null }]), 'necesita "var"'],
+    [F0_HEADER, jwhmi([{ type: 'BOOL', variable: 'rele_q0_0', plcBinding: { var: '' } }]), 'necesita "var"'],
+    [
+      F0_HEADER,
+      jwhmi([
+        { type: 'MENU', nodes: [{ label: 'L', variable: 'limite', plcBinding: { var: 'LIMITE', access: 'W' } }] },
+      ]),
+      '"access": "W"',
+    ],
+  ])('rejects an invalid project (%#)', (header, jwhmiJson, expected) => {
+    const result = generateJwplcHmi({ header, bindingsJson: undefined, jwhmiJson, projectData: memory() })
+    expect(result.files).toEqual({})
+    expect(result.errors[0]).toContain(expected)
+  })
+})
+
 describe('generateJwplcHmi', () => {
   it('writes a disabled glue when the project has no screen', () => {
     const result = generateJwplcHmi({ header: undefined, bindingsJson: undefined, projectData: f0Project() })

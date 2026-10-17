@@ -21,7 +21,20 @@
  *   - getDeviceStatus()
  */
 
+import type { HmiHostVariable } from '../../../backend/shared/compile/jwplc-hmi-host'
 import type { BoardInfo, CommunicationPort } from './types'
+
+/** Arguments to open JWPLC HMI Designer on the current project (Alpha14 F3). */
+export type OpenHmiDesignerArgs = {
+  /** Project folder (or its project.json). */
+  projectPath: string
+  projectName: string
+  device: string
+  /** `describeHmiVariables()` of the compile-ready project. */
+  variables: HmiHostVariable[]
+}
+
+export type OpenHmiDesignerResult = { ok: true } | { ok: false; error: string }
 
 export type JwplcDiscoveredDevice = {
   ipAddress: string
@@ -85,4 +98,10 @@ export interface DevicePort {
    * Web: returns URL to bundled image asset.
    */
   getPreviewImage(imageName: string, packagePath?: string): Promise<string>
+
+  /**
+   * Open JWPLC HMI Designer in its own window, linked to the project's `hmi/`
+   * folder (contract `jwplc-hmi-host/1`). Editor only; web leaves it undefined.
+   */
+  openHmiDesigner?(args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult>
 }

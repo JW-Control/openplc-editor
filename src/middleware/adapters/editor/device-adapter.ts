@@ -12,9 +12,15 @@
  *   hardware:refresh-available-boards           (invoke)
  *   hardware:refresh-communication-ports        (invoke)
  *   util:get-preview-image                      (invoke)
+ *   hmi-designer:open                           (invoke)
  */
 
-import type { DevicePort, JwplcDeviceDiscoveryResult } from '../../shared/ports/device-port'
+import type {
+  DevicePort,
+  JwplcDeviceDiscoveryResult,
+  OpenHmiDesignerArgs,
+  OpenHmiDesignerResult,
+} from '../../shared/ports/device-port'
 import type { BoardInfo, CommunicationPort } from '../../shared/ports/types'
 
 export function createEditorDeviceAdapter(): DevicePort {
@@ -41,6 +47,10 @@ export function createEditorDeviceAdapter(): DevicePort {
 
     getPreviewImage(imageName: string, packagePath?: string): Promise<string> {
       return window.bridge.getPreviewImage(imageName, packagePath)
+    },
+
+    openHmiDesigner(args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult> {
+      return window.bridge.openHmiDesigner(args)
     },
   }
 }

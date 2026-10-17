@@ -29,6 +29,8 @@ beforeEach(() => {
     refreshAvailableBoards: jest.fn().mockResolvedValue(mockRefreshResult),
     refreshCommunicationPorts: jest.fn().mockResolvedValue(mockPorts),
     getPreviewImage: jest.fn().mockResolvedValue('data:image/png;base64,abc123'),
+    openHmiDesigner: jest.fn().mockResolvedValue({ ok: true }),
+    discoverJwplcDevices: jest.fn().mockResolvedValue({ devices: [] }),
   } as unknown as typeof window.bridge
 })
 
@@ -72,5 +74,15 @@ describe('createEditorDeviceAdapter', () => {
   it('forwards vppPackagePath to window.bridge for VPP-shipped previews', async () => {
     await adapter.getPreviewImage('motor-shield.png', '/path/to/pkg')
     expect(window.bridge.getPreviewImage).toHaveBeenCalledWith('motor-shield.png', '/path/to/pkg')
+  })
+
+  it('discovers JWPLC devices through window.bridge', async () => {
+    await expect(adapter.discoverJwplcDevices()).resolves.toEqual({ devices: [] })
+  })
+
+  it('opens JWPLC HMI Designer through window.bridge', async () => {
+    const args = { projectPath: '/p', projectName: 'P', device: 'JWPLC', variables: [] }
+    await expect(adapter.openHmiDesigner?.(args)).resolves.toEqual({ ok: true })
+    expect(window.bridge.openHmiDesigner).toHaveBeenCalledWith(args)
   })
 })

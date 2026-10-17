@@ -15,6 +15,7 @@ import type {
   ListPublicLibrariesArgs,
   ListPublicLibrariesResponse,
 } from '@root/middleware/shared/ports/public-catalog-types'
+import type { OpenHmiDesignerArgs, OpenHmiDesignerResult } from '@root/middleware/shared/ports/device-port'
 import type { PLCProjectData } from '@root/middleware/shared/ports/types'
 import { CreatePouFileProps, PouServiceResponse } from '@root/types/IPC/pou-service'
 import { CreateProjectFileProps, IProjectServiceResponse } from '@root/types/IPC/project-service'
@@ -391,6 +392,9 @@ const rendererProcessBridge = {
   // ===================== UTILITY METHODS =====================
   getPreviewImage: (image: string, packagePath?: string): Promise<string> =>
     ipcRenderer.invoke('util:get-preview-image', image, packagePath),
+  // JWPLC HMI Designer window (Alpha14 F3)
+  openHmiDesigner: (args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult> =>
+    ipcRenderer.invoke('hmi-designer:open', args),
   log: (level: 'info' | 'error', message: string) => ipcRenderer.send('util:log', { level, message }),
   readDebugFile: (
     projectPath: string,

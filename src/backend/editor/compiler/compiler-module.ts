@@ -107,6 +107,7 @@ import {
   JWPLC_HMI_BINDINGS_FILE,
   JWPLC_HMI_HEADER_FILE,
   JWPLC_HMI_PROJECT_DIR,
+  JWPLC_HMI_PROJECT_FILE,
 } from '@root/backend/shared/compile/jwplc-hmi'
 import { runCompilePipeline } from '@root/backend/shared/compile/pipeline'
 import { mergeStrucppRuntimeIntoSkeleton } from '@root/backend/shared/compile/steps/merge-strucpp-runtime-into-skeleton'
@@ -2724,18 +2725,33 @@ class CompilerModule {
           return undefined
         }
       }
+      const modifiedMs = async (fileName: string): Promise<number | undefined> => {
+        try {
+          return (await stat(join(normalizedProjectPath, JWPLC_HMI_PROJECT_DIR, fileName))).mtimeMs
+        } catch {
+          return undefined
+        }
+      }
+      const headerMs = await modifiedMs(JWPLC_HMI_HEADER_FILE)
+      const projectMs = await modifiedMs(JWPLC_HMI_PROJECT_FILE)
       const hmi = generateJwplcHmi({
         header: await readOptional(JWPLC_HMI_HEADER_FILE),
         bindingsJson: await readOptional(JWPLC_HMI_BINDINGS_FILE),
+        jwhmiJson: await readOptional(JWPLC_HMI_PROJECT_FILE),
+        jwhmiNewerThanHeader: headerMs !== undefined && projectMs !== undefined && projectMs > headerMs + 1000,
         projectData,
       })
       for (const message of hmi.errors) _mainProcessPort.postMessage({ logLevel: 'error', message })
       if (hmi.errors.length > 0) {
-        _mainProcessPort.postMessage({ logLevel: 'error', message: 'Invalid HMI screen. Stopping compilation process.' })
+        _mainProcessPort.postMessage({
+          logLevel: 'error',
+          message: 'Invalid HMI screen. Stopping compilation process.',
+        })
         _mainProcessPort.close()
         return
       }
       for (const message of hmi.messages) _mainProcessPort.postMessage({ logLevel: 'info', message })
+      for (const message of hmi.warnings) _mainProcessPort.postMessage({ logLevel: 'warning', message })
       firmwareSkeleton = { ...firmwareSkeleton, ...hmi.files }
     }
 

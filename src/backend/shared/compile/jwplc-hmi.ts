@@ -5,8 +5,11 @@
  * platform-jwplc `tools/jwplc-hmi-designer`), which writes
  * `JWPLC_HMI_Generated.h`. An OpenPLC project carries it in `hmi/`:
  *
+ *   hmi/JWPLC_HMI.jwhmi         Designer project; `plcBinding` per object links it to the PLC
  *   hmi/JWPLC_HMI_Generated.h   header exported by the Designer (never edited by hand)
- *   hmi/bindings.json           HMI variable <-> PLC variable links (owned by OpenPLC)
+ *   hmi/bindings.json           extra HMI variable <-> PLC variable links (hand-written, v1)
+ *
+ * Contract: platform-jwplc docs/v2.1.0-alpha.14/A14_F3_CONTRATO_HMI_OPENPLC_20261017.md
  *
  * When the board declares `capabilities.hmiDisplay`, the compile adds two
  * files next to the HAL (`src/arduino.cpp`):
@@ -47,6 +50,7 @@ export const JWPLC_HMI_PROJECT_DIR = 'hmi'
 export const JWPLC_HMI_HEADER_FILE = 'JWPLC_HMI_Generated.h'
 export const JWPLC_HMI_BINDINGS_FILE = 'bindings.json'
 export const JWPLC_HMI_GLUE_FILE = 'jwplc_hmi.h'
+export const JWPLC_HMI_PROJECT_FILE = 'JWPLC_HMI.jwhmi'
 
 export const JWPLC_HMI_BINDINGS_FORMAT = 'JWPLC_HMI_BINDINGS'
 export const JWPLC_HMI_BINDINGS_VERSION = 1
@@ -63,6 +67,10 @@ export interface GenerateJwplcHmiInput {
   header: string | undefined
   /** Contents of `hmi/bindings.json`, or undefined when absent. */
   bindingsJson: string | undefined
+  /** Contents of `hmi/JWPLC_HMI.jwhmi`, or undefined when absent. */
+  jwhmiJson?: string
+  /** True when `hmi/JWPLC_HMI.jwhmi` is newer than the header. */
+  jwhmiNewerThanHeader?: boolean
   /** Compile-ready project (locations already resolved from aliases). */
   projectData: PLCProjectData
 }
@@ -74,6 +82,8 @@ export interface GenerateJwplcHmiResult {
   errors: string[]
   /** Build-log lines describing what was included. */
   messages: string[]
+  /** Build-log warnings (the compile goes on). */
+  warnings: string[]
 }
 
 type Access = 'R' | 'RW'
@@ -83,6 +93,8 @@ interface BindingLink {
   hmi: string
   plc: string
   access: Access
+  /** File the link came from. */
+  source: string
 }
 
 interface ResolvedLink {
@@ -98,7 +110,7 @@ interface ResolvedLink {
   limit: string
 }
 
-interface ImageSlot {
+export interface ImageSlot {
   /** `bool_output[0][1]`, `int_memory[3]`, ... */
   pointer: string
   index: number
@@ -153,8 +165,8 @@ function bindableVariables(projectData: PLCProjectData): PLCVariable[] {
 const WORD_TYPES = ['INT', 'UINT', 'WORD'] as const
 const DWORD_TYPES = ['DINT', 'UDINT', 'DWORD', 'REAL'] as const
 
-/** Map a located address to its runtime image-table slot. */
-function imageSlot(address: string): ImageSlot | string {
+/** Map a located address to its runtime image-table slot (or why it has none). */
+export function imageSlot(address: string): ImageSlot | string {
   const match = /^%([IQM])([XWDL])(\d+)(?:\.(\d+))?$/i.exec(address)
   if (!match) return `no es una dirección IEC válida`
   const area = match[1].toUpperCase()
@@ -340,11 +352,69 @@ function parseBindings(bindingsJson: string): BindingLink[] | string {
     if (typeof link?.hmi !== 'string' || typeof link.plc !== 'string' || !link.hmi.trim() || !link.plc.trim()) {
       return `HMI: el enlace #${index + 1} de ${JWPLC_HMI_BINDINGS_FILE} necesita "hmi" y "plc" (texto).`
     }
-    const access = link.access === undefined ? 'R' : typeof link.access === 'string' ? link.access.toUpperCase() : ''
-    if (access !== 'R' && access !== 'RW') {
+    const access = parseAccess(link.access)
+    if (access === undefined) {
       return `HMI: el enlace #${index + 1} de ${JWPLC_HMI_BINDINGS_FILE} tiene "access": ${JSON.stringify(link.access)}; usa "R" o "RW".`
     }
-    links.push({ hmi: link.hmi.trim(), plc: link.plc.trim(), access })
+    links.push({ hmi: link.hmi.trim(), plc: link.plc.trim(), access, source: JWPLC_HMI_BINDINGS_FILE })
+  }
+  return links
+}
+
+function parseAccess(value: unknown): Access | undefined {
+  const access = value === undefined ? 'R' : typeof value === 'string' ? value.toUpperCase() : ''
+  return access === 'R' || access === 'RW' ? access : undefined
+}
+
+interface JwhmiBindable {
+  type?: unknown
+  name?: unknown
+  label?: unknown
+  id?: unknown
+  variable?: unknown
+  plcBinding?: unknown
+  nodes?: unknown
+}
+
+/**
+ * Links declared in the Designer project: `plcBinding: { var, access }` on
+ * fields and on MENU nodes (contract section 2). Objects without `plcBinding`
+ * are skipped (static objects, or an Arduino-mode project).
+ */
+export function extractJwhmiBindings(jwhmiJson: string): BindingLink[] | string {
+  const file = `${JWPLC_HMI_PROJECT_DIR}/${JWPLC_HMI_PROJECT_FILE}`
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jwhmiJson)
+  } catch (error) {
+    return `HMI: ${file} no es un JSON válido (${(error as Error).message}).`
+  }
+  const fields = (parsed as { fields?: unknown } | null)?.fields
+  if (!Array.isArray(fields)) return `HMI: ${file} no tiene la lista "fields" de un proyecto del Designer.`
+
+  const objects: JwhmiBindable[] = []
+  for (const field of fields as Array<JwhmiBindable | null>) {
+    if (field === null || typeof field !== 'object') continue
+    objects.push(field)
+    if (field.type === 'MENU' && Array.isArray(field.nodes)) objects.push(...(field.nodes as JwhmiBindable[]))
+  }
+
+  const links: BindingLink[] = []
+  for (const object of objects) {
+    if (object === null || typeof object !== 'object' || object.plcBinding === undefined) continue
+    const where = String(object.name ?? object.label ?? object.id ?? object.type)
+    const binding = object.plcBinding as { var?: unknown; access?: unknown } | null
+    if (typeof object.variable !== 'string' || !object.variable.trim()) {
+      return `HMI: el objeto "${where}" de ${file} tiene plcBinding pero no "variable".`
+    }
+    if (typeof binding?.var !== 'string' || !binding.var.trim()) {
+      return `HMI: el plcBinding del objeto "${where}" de ${file} necesita "var" (texto).`
+    }
+    const access = parseAccess(binding.access)
+    if (access === undefined) {
+      return `HMI: el plcBinding del objeto "${where}" de ${file} tiene "access": ${JSON.stringify(binding.access)}; usa "R" o "RW".`
+    }
+    links.push({ hmi: object.variable.trim(), plc: binding.var.trim(), access, source: JWPLC_HMI_PROJECT_FILE })
   }
   return links
 }
@@ -438,38 +508,37 @@ function enabledGlue(links: ResolvedLink[]): string {
 
 /** Build the HMI files for a board that declares `hmiDisplay`. */
 export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmiResult {
-  const { header, bindingsJson, projectData } = input
+  const { header, bindingsJson, jwhmiJson, projectData } = input
   const headerPath = `${JWPLC_HMI_PROJECT_DIR}/${JWPLC_HMI_HEADER_FILE}`
+  const fail = (errors: string[]): GenerateJwplcHmiResult => ({ files: {}, errors, messages: [], warnings: [] })
 
   if (header === undefined) {
-    if (bindingsJson !== undefined) {
-      return {
-        files: {},
-        errors: [
-          `HMI: hay ${JWPLC_HMI_PROJECT_DIR}/${JWPLC_HMI_BINDINGS_FILE} pero falta ${headerPath}. Exporta el header desde JWPLC HMI Designer.`,
-        ],
-        messages: [],
-      }
+    const orphan =
+      jwhmiJson !== undefined ? JWPLC_HMI_PROJECT_FILE : bindingsJson !== undefined ? JWPLC_HMI_BINDINGS_FILE : null
+    if (orphan !== null) {
+      return fail([
+        `HMI: hay ${JWPLC_HMI_PROJECT_DIR}/${orphan} pero falta ${headerPath}. En JWPLC HMI Designer pulsa "Actualizar HMI".`,
+      ])
     }
     return {
       files: { [`src/${JWPLC_HMI_GLUE_FILE}`]: disabledGlue() },
       errors: [],
       messages: [`HMI: el proyecto no tiene pantalla (${headerPath}); la placa muestra sólo la IDLE.`],
+      warnings: [],
     }
   }
 
   if (!/\bvoid\s+jwplcHMISetup\s*\(/.test(header) || !/\bvoid\s+jwplcUIUpdate\s*\(/.test(header)) {
-    return {
-      files: {},
-      errors: [
-        `HMI: ${headerPath} no parece generado por JWPLC HMI Designer (faltan jwplcHMISetup() o jwplcUIUpdate()).`,
-      ],
-      messages: [],
-    }
+    return fail([
+      `HMI: ${headerPath} no parece generado por JWPLC HMI Designer (faltan jwplcHMISetup() o jwplcUIUpdate()).`,
+    ])
   }
 
-  const links = bindingsJson === undefined ? [] : parseBindings(bindingsJson)
-  if (typeof links === 'string') return { files: {}, errors: [links], messages: [] }
+  const projectLinks = jwhmiJson === undefined ? [] : extractJwhmiBindings(jwhmiJson)
+  if (typeof projectLinks === 'string') return fail([projectLinks])
+  const fileLinks = bindingsJson === undefined ? [] : parseBindings(bindingsJson)
+  if (typeof fileLinks === 'string') return fail([fileLinks])
+  const links = [...projectLinks, ...fileLinks]
 
   const hmiVariables = parseHmiVariables(header)
   const plcVariables = bindableVariables(projectData)
@@ -478,7 +547,7 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
   const seen = new Set<string>()
   for (const link of links) {
     if (seen.has(link.hmi)) {
-      errors.push(`HMI: "${link.hmi}" está enlazada más de una vez en ${JWPLC_HMI_BINDINGS_FILE}.`)
+      errors.push(`HMI: "${link.hmi}" está enlazada más de una vez (repetida en ${link.source}).`)
       continue
     }
     seen.add(link.hmi)
@@ -486,12 +555,12 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
     if (typeof result === 'string') errors.push(result)
     else resolved.push(result)
   }
-  if (errors.length > 0) return { files: {}, errors, messages: [] }
+  if (errors.length > 0) return fail(errors)
 
   const messages = [`HMI: pantalla del proyecto incluida (${headerPath}).`]
   if (resolved.length === 0) {
     messages.push(
-      `HMI: sin enlaces a variables PLC (${JWPLC_HMI_PROJECT_DIR}/${JWPLC_HMI_BINDINGS_FILE}); la pantalla mostrará los valores iniciales.`,
+      `HMI: sin enlaces a variables PLC (plcBinding en ${JWPLC_HMI_PROJECT_FILE} o ${JWPLC_HMI_BINDINGS_FILE}); la pantalla mostrará los valores iniciales.`,
     )
   }
   for (const link of resolved) {
@@ -505,5 +574,10 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
     },
     errors: [],
     messages,
+    warnings: input.jwhmiNewerThanHeader
+      ? [
+          `HMI: ${JWPLC_HMI_PROJECT_FILE} es más nuevo que ${JWPLC_HMI_HEADER_FILE}; si cambiaste la pantalla, pulsa "Actualizar HMI" en el Designer.`,
+        ]
+      : [],
   }
 }

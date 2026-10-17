@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
+import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
 import type { TimingStats } from '@root/middleware/shared/ports/types'
 import { useCapabilities, useDevice, useRuntime } from '@root/middleware/shared/providers/platform-context'
 import { resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
@@ -22,6 +23,7 @@ import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '../..
 import { PluginStatsPanel } from '../../../../../_molecules/plugin-stats-panel'
 import { ScanCycleStats } from '../../../../../_molecules/scan-cycle-stats'
 import { DeviceEditorSlot } from '../../../../../_templates/[editors]/device-editor-slot'
+import { HmiDesignerLauncher } from './components/hmi-designer-launcher'
 import { PinMappingTable } from './components/pin-mapping-table'
 
 const Board = memo(function () {
@@ -568,10 +570,7 @@ const Board = memo(function () {
                 className='flex w-full items-center justify-start gap-1 pr-5'
               >
                 <Label className='whitespace-pre text-xs text-neutral-950 dark:text-white'>{option.label}</Label>
-                <Select
-                  value={selectedValue}
-                  onValueChange={(value) => setSelectedPlatformOption(option.key, value)}
-                >
+                <Select value={selectedValue} onValueChange={(value) => setSelectedPlatformOption(option.key, value)}>
                   <SelectTrigger
                     aria-label={`${option.label} selection`}
                     placeholder={option.label}
@@ -743,6 +742,7 @@ const Board = memo(function () {
               </div>
             </div>
           )}
+          {hasHmiDisplay(currentBoardInfo) && <HmiDesignerLauncher deviceName={deviceBoard} />}
         </div>
         <div id='board-preview-container' className='flex flex-shrink-0 items-start'>
           <div className='h-[16rem] w-[20rem]'>
@@ -775,7 +775,7 @@ const Board = memo(function () {
                 <button
                   type='button'
                   onClick={loadDefaultPinMapping}
-                  className='rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand hover:bg-brand/10'
+                  className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand'
                   title='Replace this board pin mapping with the defaults declared by its package'
                 >
                   Load defaults
