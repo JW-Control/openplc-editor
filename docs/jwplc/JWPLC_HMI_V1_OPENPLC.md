@@ -143,4 +143,49 @@ static inline void jwplcHMIBindingsSnapshot()
 | F0c | Escritura HMI → PLC sobre `%MW`/`%MD`: PASS en placa (gate `A14_F0c_OpenPLC_Escritura`) |
 | F0d | Costo de la HMI en el scan: PASS desde VPP alpha.32 (5–15 µs); abierto el retraso del scan al cambiar de página (≤ 65 ms), del runtime de pantalla del package |
 | — | Variables sin dirección por `openplc_debug_read()` + `debug-map.json` |
-| F3 | Abrir el Designer desde OpenPLC (ventana) y leer `plcBinding` del `.jwhmi` |
+| F3 | Abrir el Designer desde OpenPLC y enlazar eligiendo la variable PLC: implementado (ver abajo); prueba completa en la app pendiente |
+
+## F3: el Designer dentro de OpenPLC (2026-10-17)
+
+Contrato: `platform-jwplc/docs/v2.1.0-alpha.14/A14_F3_CONTRATO_HMI_OPENPLC_20261017.md`.
+
+Uso:
+
+1. Dispositivo **JWPLC BASIC [2.0.0]** → sección **Pantalla HMI** → **Abrir HMI
+   Designer**. Se abre en su propia ventana, ya vinculado a la carpeta `hmi/`
+   del proyecto ("Sketch: <proyecto>"), y carga `hmi/JWPLC_HMI.jwhmi` (o el
+   único `.jwhmi` que haya en `hmi/`).
+2. Pestaña **Datos** de cada objeto (BOOL, VALUE, BAR y nodos del MENU): el
+   selector **Variable PLC** muestra las variables del programa. Las que no se
+   pueden enlazar aparecen deshabilitadas con el motivo (sin dirección, tipo
+   de usuario, sólo lectura, tipo no compatible). Al elegir una:
+   - el nombre C++ se genera solo (ya no se escribe);
+   - se guarda `plcBinding` en el objeto;
+   - en el MENU, `EDIT_NUM` sólo ofrece variables con escritura (`%MW`/`%MD`)
+     y ajusta el tipo (`int32` para enteros, `float` para REAL).
+3. **Actualizar HMI** escribe `hmi/JWPLC_HMI_Generated.h` **y** guarda
+   `hmi/JWPLC_HMI.jwhmi`. Al cerrar la ventana también se guarda el `.jwhmi`.
+4. Compilar: los enlaces salen de `plcBinding`; `hmi/bindings.json` ya no hace
+   falta. **Si se re-enlaza un proyecto viejo desde el Designer, borrar
+   `hmi/bindings.json`**: los nombres C++ cambian (p. ej. `rele_q0_0` → `rele`)
+   y el archivo viejo daría error.
+
+Dónde está el Designer: variable de entorno `JWPLC_HMI_DESIGNER_DIR`, o el
+checkout vecino `../platform-jwplc/tools/jwplc-hmi-designer/poc` (rama
+`v2.1.0-alpha.14-OpenPLC-HMI`, que trae `designer-openplc-host.js`).
+
+Implementación:
+
+| Pieza | Archivo |
+| --- | --- |
+| Ventana, servidor local de sólo lectura, IPC del contrato, guardado | `src/main/modules/hmi-designer/index.ts` |
+| Preload (`JWPLCHMINative`, `JWPLCHMIHost`) | `src/main/modules/preload/hmi-designer-preload.ts` |
+| Lista de variables (`collectHmiCandidates`, `describeHmiVariables`) | `src/backend/shared/compile/jwplc-hmi-host.ts` |
+| `plcBinding` al compilar | `src/backend/shared/compile/jwplc-hmi.ts` (`extractJwhmiBindings`) |
+| Botón | `.../device/configuration/components/hmi-designer-launcher.tsx` |
+| Selector "Variable PLC" en el Designer | platform-jwplc `tools/jwplc-hmi-designer/poc/designer-openplc-host.js` |
+
+Verificación: 88 tests (100 % en `jwplc-hmi.ts`, `jwplc-hmi-host.ts` y
+`device-adapter.ts`), `tsc` sin errores. Selector probado en el Designer real
+con un anfitrión simulado (Chromium sin interfaz): BOOL ← RELE y MENU Limite
+<-> LIMITE quedan con `plcBinding` en el proyecto guardado.
