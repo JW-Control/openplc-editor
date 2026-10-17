@@ -1,7 +1,8 @@
 # JWPLC Basic — Plan industrial: HMI de la pantalla integrada desde OpenPLC
 
 Fecha: 2026-10-10 (rev. 2)
-Estado: **plan aprobado en dirección**; implementación no iniciada
+Estado: **plan adoptado** por Alpha15 (`platform-jwplc/docs/v2.1.0-alpha.15/A15_OPENPLC_INTEGRATION_DECISION_20261016.md`).
+Implementación v1 en curso: [JWPLC_HMI_V1_OPENPLC.md](JWPLC_HMI_V1_OPENPLC.md)
 Antecedente: [JWPLC_HMI_PANTALLA_OPENPLC_PROPUESTA.md](JWPLC_HMI_PANTALLA_OPENPLC_PROPUESTA.md)
 Repos: `openplc-editor`, `platform-jwplc`
 
@@ -13,9 +14,21 @@ Repos: `openplc-editor`, `platform-jwplc`
 
 ---
 
+> **Correcciones del 2026-10-17** (revisión del jefe, verificadas en código):
+>
+> - **C1.** El runtime compila con STruC++ y **no implementa `get_var_addr()`**.
+>   El enlace por nombre usa `openplc_debug_read()` / `openplc_debug_set()` con
+>   direcciones `(arrayIdx, elemIdx)` de `debug-map.json`. Para E/S y memoria
+>   ubicada se usan los punteros `bool_input`/`bool_output`/`int_memory`/...
+> - **C3.** La botonera tiene **6 teclas** (`LEFT, UP, RIGHT, ESC, OK, DOWN`); no
+>   existe F1.
+> - **C4.** Numeración vigente: Alpha13 = robustez del package (jefe),
+>   Alpha14 = OpenPLC (Kenyi), Alpha15 = HMI Designer (André).
+> - **C5.** El codegen puro del Designer se adelanta (A15-5).
+
 ## 1. Decisión
 
-- La pantalla TFT del JWPLC Basic (ST7789, 320 × 170, 7 teclas) se diseña con
+- La pantalla TFT del JWPLC Basic (ST7789, 320 × 170, 6 teclas) se diseña con
   **JWPLC HMI Designer** y se programa desde **OpenPLC**.
 - El Designer es **un solo producto con tres anfitriones**:
 
@@ -65,7 +78,7 @@ Repos: `openplc-editor`, `platform-jwplc`
   primera etapa con OpenPLC.
 - **OpenPLC Editor** (fork JWPLC 4.2.8, Electron 35): pantallas VPP
   declarativas, camino `vendorScreenData` → `vpp_config.h` → HAL, tabla del
-  debugger (`get_var_addr`), buffers ubicados (`%IX/%QX/%MW/%MD`), VPP con firma
+  debugger (`openplc_debug_read`/`openplc_debug_set`, ver C1), buffers ubicados (`%IX/%QX/%MW/%MD`), VPP con firma
   ed25519 por archivo (`signature.json`).
 
 ---
@@ -230,8 +243,9 @@ de `listVariables`, filtrada por tipo compatible), que se guarda en el campo:
 // jwplc_hmi_bindings.cpp (generado por OpenPLC)
 void jwplcHMIBindingsSnapshot()          // llamado desde updateOutputBuffers()
 {
-    estado2 = (*(IEC_BOOL *)get_var_addr(HMI_IDX_BOMBA1_MARCHA)) != 0;
-    temperatura = (float)(*(IEC_REAL *)get_var_addr(HMI_IDX_TEMP));
+    // v1 (ubicadas): punteros del runtime
+    if (bool_output[0][0] != NULL) estado2 = (*bool_output[0][0] != 0);
+    // por nombre (C1): openplc_debug_read(arr, elem, &dest) con (arr, elem) de debug-map.json
 }
 ```
 
@@ -271,7 +285,7 @@ de ejemplos y prueba en banco, documentados en `docs/` y en la bitácora.
 ### F0 — Prueba de concepto en el HAL (riesgo técnico)
 
 - HAL de prueba con 3 fields: VALUE ← `%MW0`, BOOL ← `%QX0.0`, BAR ← `%MW1`,
-  y un enlace **por nombre** con `get_var_addr(índice)`.
+  y un enlace **por nombre** con `openplc_debug_read()` (ver C1).
 - Usar un header generado por el Designer actual (el BOOL ya compila).
 - Medir el tiempo de scan con y sin HMI y la latencia variable → pantalla.
 

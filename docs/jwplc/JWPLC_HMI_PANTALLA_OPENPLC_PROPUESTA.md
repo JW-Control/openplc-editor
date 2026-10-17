@@ -3,7 +3,9 @@
 Fecha: 2026-10-10
 Estado: **análisis y propuesta** (sin código todavía). Decisión: opción C con
 **una sola herramienta** (OpenPLC aloja el JWPLC HMI Designer); plan en
-[JWPLC_HMI_PLAN_INDUSTRIAL.md](JWPLC_HMI_PLAN_INDUSTRIAL.md)
+[JWPLC_HMI_PLAN_INDUSTRIAL.md](JWPLC_HMI_PLAN_INDUSTRIAL.md). Ver ahí las
+correcciones del 2026-10-17: 6 teclas (no hay F1) y `get_var_addr()` no existe
+en el runtime STruC++.
 Repos: `openplc-editor` (rama `develop/alpha12-backplane-closure`) y `platform-jwplc`
 
 ---
