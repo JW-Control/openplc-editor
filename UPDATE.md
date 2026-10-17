@@ -1010,3 +1010,123 @@ BOOL (`tickAmount: 2`, sin tocar), sin `grid.padding`, sin
   dando ~100%, y considerar si hace falta una `key` para forzar un remount
   limpio cuando el panel se agrega/quita en caliente en vez de solo al
   montar la app.
+
+---
+
+## Ronda 6: causa en la propia librería — refs inline de Radix (Toast, DismissableLayer, Popper, Slot)
+
+**Fecha:** 2026-10-17
+**Rama:** `develop/alpha14-openplc-hmi-v1`
+
+### Resumen
+
+El usuario volvió a ver `Maximum update depth exceeded` editando un ladder
+(agregando un bloque `CTU` y variables). Esta vez se pudo identificar el
+componente exacto sin adivinar: se levantó `npm run start:renderer`, se
+descargó `renderer.dev.js` del servidor de desarrollo y se buscaron las líneas
+del stack del overlay.
+
+```text
+dispatchSetState
+setRef        renderer.dev.js:516705  -> @radix-ui/react-toast/node_modules/@radix-ui/react-compose-refs
+(Array.map)   renderer.dev.js:516714
+setRef        renderer.dev.js:503570  -> @radix-ui/react-collection/node_modules/@radix-ui/react-compose-refs
+(Array.map)   renderer.dev.js:503579
+```
+
+Es decir: el `setState` lo hace un ref interno de **Radix Toast**
+(`ToastImpl`), compuesto dentro del `Collection.ItemSlot` de la lista de
+toasts.
+
+### Causa raíz
+
+En las versiones instaladas, varios componentes de Radix componían su ref con
+una función **inline**:
+
+```js
+// @radix-ui/react-toast 1.2.14 (ToastImpl)
+const [node, setNode] = React.useState(null)
+const composedRefs = useComposedRefs(forwardedRef, (node2) => setNode(node2))
+```
+
+La flecha es nueva en cada render, así que `useComposedRefs` devuelve otro ref
+en cada render. React entonces llama al ref viejo con `null` y al nuevo con el
+nodo, y eso hace dos `setState`. Con algo que vuelva a renderizar el toast en
+la misma cadena (por ejemplo `DismissableLayer`, que tiene el mismo patrón y
+además hace `force({})` en todas las capas en cada actualización), se arma el
+bucle y React corta en 50 actualizaciones anidadas.
+
+El mismo patrón estaba en `DismissableLayer` 1.1.10, `PopperContent` (popper
+1.2.7, más `PopperAnchor` llamando a `setAnchor` en un efecto sin
+dependencias) y `Slot` 1.1.0 (`composeRefs` sin memoizar). Por eso el error
+"saltaba" entre Select, Popover, Toaster y celdas de tabla en las rondas
+anteriores: los arreglos de nuestro lado (selectores, `React.memo`, sacar
+Tooltips) reducían los re-renders que lo disparan, pero la causa seguía dentro
+de la librería.
+
+Radix lo corrigió upstream: en las versiones nuevas el ref usa el setter
+estable (`useComposedRefs(forwardedRef, setNode)`), `PopperAnchor` sólo llama
+a `onAnchorChange` desde un callback ref, y `Slot` memoiza el ref compuesto.
+
+### Cambio realizado
+
+Actualización de todas las dependencias `@radix-ui/*` directas a la última
+versión de la misma mayor publicada hasta el 2026-07-31 (tanda del
+2026-07-24), con `npm install --ignore-scripts --before=2026-08-01` para no
+traer versiones de menos de dos semanas (la tanda de octubre salió el
+2026-10-12):
+
+| Paquete                                                                 | Antes  | Después         |
+| ----------------------------------------------------------------------- | ------ | --------------- |
+| react-toast                                                             | 1.2.14 | 1.2.23          |
+| react-select                                                            | 2.2.5  | 2.3.7           |
+| react-dropdown-menu                                                     | 2.1.15 | 2.1.24          |
+| react-popover                                                           | 1.1.14 | 1.1.23          |
+| react-tooltip                                                           | 1.2.7  | 1.2.16          |
+| react-dialog                                                            | 1.1.14 | 1.1.23          |
+| react-scroll-area                                                       | 1.1.0  | 1.2.18          |
+| resto (accordion, checkbox, menubar, portal, radio-group, switch, tabs) | —      | última de julio |
+
+Transitivas que quedan (una sola copia de cada una): compose-refs 1.1.5,
+slot 1.3.3, dismissable-layer 1.1.19, popper 1.3.7, presence 1.1.10. Ya no
+queda ningún `useComposedRefs(forwardedRef, (node) => ...)` en
+`node_modules/@radix-ui/*/dist`.
+
+Efectos colaterales de `npm install` que hubo que reparar:
+
+- Borró `node_modules/strucpp` (no está en `package.json`, lo instala
+  `scripts/download-binaries.ts`). Se restauró con `npm run setup:strucpp`
+  (v0.5.13).
+- El DLL de desarrollo (`configs/dll/renderer.dev.dll.js`) precompila las
+  dependencias de `package.json`: se regeneró con `npm run build:dll`.
+
+Regresión encontrada por las pruebas y corregida: el `Slot` nuevo (1.3.x)
+lanza `X failed to slot onto its children` cuando un componente `asChild`
+recibe un único hijo de **texto** (el 1.1.0 lo ignoraba y devolvía `null`).
+`DialogPortal` envuelve cada hijo en un `Portal asChild`, y `ModalContent`
+(`_molecules/modal/index.tsx`) tenía `<PrimitiveDialog.Title /> {/* ... */}`:
+el espacio antes del comentario es un hijo de texto `" "`, así que **todo
+modal** habría fallado. Se movió el comentario a su propia línea. Un análisis
+del AST de TypeScript sobre los 435 `.tsx` de `src/frontend` (elementos con
+`asChild` o `*Portal` con hijos de texto, varios hijos o expresiones) no
+encontró ningún otro caso.
+
+### Verificación
+
+- `npx tsc --noEmit`: 0 errores.
+- `npm run build:dll`: OK, el manifiesto apunta a `react-toast` 1.2.23.
+- Jest `src/frontend`: 145/145 suites y 3535/3535 tests pasan. Antes del arreglo de
+  `ModalContent` fallaban 14 tests de `AcuExhaustionModal` (la regresión de
+  arriba); después, esa suite y `_molecules` pasan (35/35).
+- Pendiente: repetir en `npm run dev` el flujo que lo disparó (agregar CTU y
+  variables en un ladder, con toasts apareciendo) y abrir algún modal.
+
+### Nota para el futuro
+
+- Si vuelve a aparecer, **no adivinar desde el stack minificado**: levantar
+  `npm run start:renderer`, descargar `http://localhost:1313/renderer.dev.js`
+  y mirar a qué módulo pertenecen las líneas del stack (cada módulo empieza
+  con `/***/ "./node_modules/..."`). Así se encontró en minutos.
+- Después de cualquier `npm install`, correr `npm run setup:strucpp` si
+  `node_modules/strucpp` desaparece, y `npm run build:dll` si cambió una
+  dependencia del renderer.

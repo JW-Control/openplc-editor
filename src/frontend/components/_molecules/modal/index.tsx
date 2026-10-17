@@ -31,7 +31,10 @@ const ModalContent = forwardRef<
   ComponentPropsWithoutRef<typeof PrimitiveDialog.Content> & { onClose?: () => void }
 >(({ className, onClose, ...props }, ref) => (
   <ModalPortal>
-    <PrimitiveDialog.Title /> {/* This is to ensure the title is rendered correctly */}
+    {/* This is to ensure the title is rendered correctly. Keep this comment
+        on its own line: a space after the element would be a text child, and
+        DialogPortal slots every child (Radix Slot throws on text children). */}
+    <PrimitiveDialog.Title />
     <ModalOverlay />
     <PrimitiveDialog.Content
       ref={ref}
