@@ -73,7 +73,10 @@ bits cruzados, recuperación automática al desconectar y reconectar el RS-485, 
 
 ### Origen
 
-- Editor: `JW-Control/openplc-editor`, commit `d3ed3335f` (`develop/alpha12-backplane-closure`),
-  publicado como `09378f606` en `claude/awesome-goldberg-7sj2vx` (solo cambia la versión).
+- Editor: `JW-Control/openplc-editor`. El tag apunta al commit de corte `d3ed3335f`
+  (`develop/alpha12-backplane-closure`). El instalador se construyó en el
+  [run 39501464185](https://github.com/JW-Control/openplc-editor/actions/runs/39501464185) desde `09378f606`,
+  que es `d3ed3335f` más el cambio de versión a `4.2.8-jwplc.3` (`package.json` y lockfiles) y el workflow
+  de build; no cambia código fuente.
 - VPP: `JW-Control/platform-jwplc`, commit `1b54c7f9`
   (`v2.1.0-alpha.12/feature/openplc-engineering-closure`), versión 2.1.0-alpha.26.

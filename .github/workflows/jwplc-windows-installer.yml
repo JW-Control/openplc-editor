@@ -8,10 +8,9 @@ on:
   push:
     branches:
       - claude/awesome-goldberg-7sj2vx
-    paths-ignore:
-      - .github/workflows/jwplc-publish-prerelease.yml
-      - .github/workflows/jwplc-windows-installer.yml
-      - docs/jwplc/releases/**
+    # Rebuild only when the package version changes.
+    paths:
+      - package.json
   workflow_dispatch:
 
 env:

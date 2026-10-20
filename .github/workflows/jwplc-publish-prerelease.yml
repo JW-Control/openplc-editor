@@ -1,6 +1,8 @@
 name: JWPLC Edition - Publish pre-release
 
-# Publishes the JWPLC Edition 4.2.8-jwplc.3 pre-release:
+# Publishes the JWPLC Edition 4.2.8-jwplc.3 pre-release, tagged on the source
+# cut d3ed3335f (GITHUB_TOKEN cannot create a tag on 09378f606 because that
+# commit adds a workflow file relative to the default branch):
 #   - the Windows x64 installer already built by "JWPLC Edition - Windows x64
 #     installer" (run 39501464185, commit 09378f606), reused as-is;
 #   - the signed VPP 2.1.0-alpha.26, packed deterministically from
@@ -19,7 +21,7 @@ on:
 env:
   TAG: jwplc-editor-v4.2.8-jwplc.3
   TITLE: OpenPLC Editor - JWPLC Edition 4.2.8-jwplc.3
-  TARGET_SHA: 09378f60626966cc43e0acc751be983a75ad0f0c
+  TARGET_SHA: d3ed3335f1689504a2d83b94200956eb011dc386
   INSTALLER_RUN_ID: '39501464185'
   INSTALLER_ARTIFACT: jwplc-edition-4.2.8-jwplc.3-windows-x64
   PLATFORM_COMMIT: 1b54c7f9b8118f5e7334ab2f041f45077f6fc23f
