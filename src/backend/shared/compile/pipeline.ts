@@ -211,6 +211,14 @@ export interface RunCompilePipelineArgs {
    *  addresses without re-reading the file.  Called once per
    *  successful strucpp compile. */
   cacheDebugData?: (md5: string, debugMapJson: string) => void
+  /** Optional last pass over the firmware skeleton once STruC++ produced
+   *  `debug-map.json` (Arduino path only).  JWPLC: resolves the HMI links
+   *  to unlocated variables (`finalizeJwplcHmiSkeleton`).  Errors stop the
+   *  build before arduino-cli. */
+  finalizeFirmwareSkeleton?: (
+    skeleton: Record<string, string>,
+    debugMapJson: string,
+  ) => { files: Record<string, string>; errors: string[] }
   /** Persisted VPP Modbus screen state for the target device,
    *  sourced from `DeviceConfiguration.vendorScreenData` under
    *  the `modbus_rtu` / `modbus_tcp` keys.  Threaded straight
@@ -345,6 +353,7 @@ async function runCompilePipelineInner(
     libraryArchives,
     missingLibraries,
     firmwareSkeleton,
+    finalizeFirmwareSkeleton,
     strucppRuntimeHeaders,
     avrLibStdCppInclude,
     arduinoCliParallel,
@@ -723,13 +732,22 @@ async function runCompilePipelineInner(
   // c_blocks header/code + defines.h + optional vpp_config.h).
   // Pure function.
   emit({ stage: 'firmware-bundle', message: 'Composing firmware bundle...', level: 'info' })
+  let skeleton = firmwareSkeleton
+  if (finalizeFirmwareSkeleton) {
+    const finalized = finalizeFirmwareSkeleton(firmwareSkeleton, debugMapJson)
+    if (finalized.errors.length > 0) {
+      for (const message of finalized.errors) emit({ stage: 'firmware-bundle', message, level: 'error' })
+      return bailError(emit, 'firmware-bundle', 'Invalid HMI screen.')
+    }
+    skeleton = finalized.files
+  }
   const cBlocks = buildCBlocksFromPous(originalCppPous as never)
   const firmwareFiles = composeFirmwareBundle({
     strucppFiles: strucppFilesMap,
     cBlocks,
     definesH,
     vppConfigH,
-    firmwareSkeleton,
+    firmwareSkeleton: skeleton,
   })
 
   // Build arduino-cli argv via the shared helper.  Same input/output

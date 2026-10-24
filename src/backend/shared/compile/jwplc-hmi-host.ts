@@ -17,7 +17,7 @@
  *   serial port picker (Live Preview and Live Bridge flashing).
  */
 
-import { imageSlot, JWPLC_HMI_HEADER_FILE, JWPLC_HMI_PROJECT_FILE } from './jwplc-hmi'
+import { imageSlot, JWPLC_HMI_HEADER_FILE, JWPLC_HMI_PROJECT_FILE, programVarKind } from './jwplc-hmi'
 
 export type HmiHostType = 'bool' | 'float' | 'int32_t'
 
@@ -27,6 +27,7 @@ export interface HmiCandidateVariable {
   pou?: string
   type: { definition: string; value: string }
   location: string
+  class?: string
 }
 
 export interface HmiHostVariable {
@@ -40,7 +41,7 @@ export interface HmiHostVariable {
   reason?: string
 }
 
-type StoreVariable = { name: string; type: { definition: string; value: string }; location?: string }
+type StoreVariable = { name: string; class?: string; type: { definition: string; value: string }; location?: string }
 
 /** Minimal slice of the editor store's project data that this module reads. */
 export interface HmiStoreProject {
@@ -62,12 +63,16 @@ export function collectHmiCandidates(project: HmiStoreProject): HmiCandidateVari
     ...(pou ? { pou } : {}),
     type: variable.type,
     location: variable.location ?? '',
+    ...(variable.class ? { class: variable.class } : {}),
   })
   const candidates = (resource?.globalVariables ?? []).map((variable) => toCandidate(variable, 'global'))
   const instantiated = new Set((resource?.instances ?? []).map((instance) => instance.program.toLowerCase()))
   for (const pou of project.pous ?? []) {
     if (pou.pouType !== 'program' || !instantiated.has(pou.name.toLowerCase())) continue
-    for (const variable of pou.interface?.variables ?? []) candidates.push(toCandidate(variable, 'program', pou.name))
+    for (const variable of pou.interface?.variables ?? []) {
+      // VAR_EXTERNAL is the global itself (already listed).
+      if (variable.class !== 'external') candidates.push(toCandidate(variable, 'program', pou.name))
+    }
   }
   return candidates
 }
@@ -87,7 +92,12 @@ export function describeHmiVariables(candidates: HmiCandidateVariable[]): HmiHos
 
     if (candidate.type.definition !== 'base-type')
       return notBindable('tipo de usuario; sólo se enlazan tipos elementales')
-    if (!candidate.location) return notBindable('sin dirección; asígnale una %MW/%MD (o %IX/%QX si es E/S)')
+    if (!candidate.location) {
+      // Unlocated: read and written through the STruC++ debug table (jwplc-hmi.ts).
+      const kind = programVarKind(iecType, candidate.class)
+      if (kind !== 'bool' && kind !== 'number') return notBindable(kind)
+      return { ...base, hmiTypes: kind === 'bool' ? ['bool'] : ['float', 'int32_t'], access: 'RW' }
+    }
     const slot = imageSlot(candidate.location)
     if (typeof slot === 'string') return notBindable(slot)
     if (!slot.types.includes(iecType)) return notBindable(`${candidate.location} admite ${slot.types.join(', ')}`)

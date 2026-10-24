@@ -43,6 +43,40 @@ describe('collectHmiCandidates', () => {
   })
 })
 
+describe('unlocated variables', () => {
+  it('lists program and global variables without address as read-write, skipping VAR_EXTERNAL', () => {
+    const project: HmiStoreProject = {
+      pous: [
+        {
+          name: 'main',
+          pouType: 'program',
+          interface: {
+            variables: [
+              { name: 'MARCHA', class: 'local', type: { definition: 'base-type', value: 'BOOL' } },
+              { name: 'ALARMA', class: 'external', type: { definition: 'base-type', value: 'BOOL' } },
+              { name: 'CUENTA', type: { definition: 'base-type', value: 'INT' }, location: '' },
+            ],
+          },
+        },
+      ],
+      configurations: {
+        resource: {
+          instances: [{ program: 'main' }],
+          globalVariables: [{ name: 'ALARMA', type: { definition: 'base-type', value: 'BOOL' } }],
+        },
+      },
+    }
+    const described = describeHmiVariables(collectHmiCandidates(project))
+    expect(described.map((variable) => [variable.name, variable.scope, variable.hmiTypes, variable.access])).toEqual([
+      ['ALARMA', 'global', ['bool'], 'RW'],
+      ['MARCHA', 'program', ['bool'], 'RW'],
+      ['CUENTA', 'program', ['float', 'int32_t'], 'RW'],
+    ])
+    expect(described[1]).toMatchObject({ address: null })
+    expect(described[1]).not.toHaveProperty('reason')
+  })
+})
+
 describe('describeHmiVariables', () => {
   const candidate = (name: string, value: string, location: string, definition = 'base-type') => ({
     name,
@@ -74,7 +108,8 @@ describe('describeHmiVariables', () => {
 
   it.each([
     [candidate('T', 'TON', '', 'derived'), 'tipo de usuario'],
-    [candidate('S', 'BOOL', ''), 'sin dirección'],
+    [candidate('S', 'TIME', ''), 'TIME sin dirección'],
+    [{ ...candidate('TMP', 'INT', ''), class: 'temp' }, 'VAR_TEMP'],
     [candidate('M', 'BOOL', '%MX0.0'), 'marcas %MX'],
     [candidate('W', 'BOOL', '%MW0'), 'admite INT, UINT, WORD'],
   ])('explains why %j is not bindable', (input, reason) => {

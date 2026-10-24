@@ -439,16 +439,27 @@ class HmiDesignerHost {
     return { ok: true, path: target }
   }
 
-  /** Save the Designer's current project to hmi/JWPLC_HMI.jwhmi (switching project or closing OpenPLC). */
+  /**
+   * Save the Designer's current design to hmi/ without asking (switching
+   * project or closing OpenPLC): the header first, then JWPLC_HMI.jwhmi, so the
+   * next compile never finds a design without its header.
+   */
   private async saveOpenProject(session: Session): Promise<boolean> {
     if (!this.window || this.window.isDestroyed()) return false
     try {
-      const text = (await this.window.webContents.executeJavaScript(
-        'window.JWPLCHMIProject && window.JWPLCHMIProject.serialize ? JSON.stringify(window.JWPLCHMIProject.serialize(), null, 2) + "\\n" : ""',
+      const { header, project } = (await this.window.webContents.executeJavaScript(
+        `(async () => {
+          const api = window.JWPLCHMIProject;
+          if (!api || !api.serialize) return { header: '', project: '' };
+          let header = '';
+          try { header = await window.JWPLCHMIProjectIntegrationFix.buildHeader(); } catch (_) { header = ''; }
+          return { header: header || '', project: JSON.stringify(api.serialize(), null, 2) + '\\n' };
+        })()`,
         true,
-      )) as string
-      if (!text) return false
-      const result = await this.writeProject(session, { text })
+      )) as { header: string; project: string }
+      if (!project) return false
+      if (header) await this.writeHeader(session, { text: header })
+      const result = await this.writeProject(session, { text: project })
       return result.ok
     } catch {
       return false

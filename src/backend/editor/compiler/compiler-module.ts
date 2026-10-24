@@ -102,6 +102,7 @@ import {
   usesFirmwareProgramTemplate,
 } from '@root/backend/shared/compile/firmware-only-program'
 import {
+  finalizeJwplcHmiSkeleton,
   generateJwplcHmi,
   hasHmiDisplay,
   JWPLC_HMI_BINDINGS_FILE,
@@ -2885,6 +2886,8 @@ class CompilerModule {
         libraryArchives,
         missingLibraries,
         firmwareSkeleton,
+        // JWPLC HMI: links to unlocated variables need STruC++'s debug map.
+        finalizeFirmwareSkeleton: finalizeJwplcHmiSkeleton,
         strucppRuntimeHeaders,
         avrLibStdCppInclude,
         // Editor saturates every core on local arduino-cli (matches

@@ -307,3 +307,8 @@ extern "C" uint8_t openplc_debug_set(uint8_t arr, uint16_t elem, uint8_t forcing
 {
     return strucpp::debug::handle_set(arr, elem, forcing != 0, bytes, len);
 }
+
+extern "C" uint8_t openplc_debug_write(uint8_t arr, uint16_t elem, const uint8_t* bytes, uint16_t len)
+{
+    return strucpp::debug::handle_write(arr, elem, bytes, len);
+}
