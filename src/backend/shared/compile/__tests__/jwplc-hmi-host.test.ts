@@ -1,4 +1,11 @@
-import { collectHmiCandidates, describeHmiVariables, type HmiStoreProject, pickJwhmiToLoad } from '../jwplc-hmi-host'
+import {
+  collectHmiCandidates,
+  describeHmiFolder,
+  describeHmiSerialPort,
+  describeHmiVariables,
+  type HmiStoreProject,
+  pickJwhmiToLoad,
+} from '../jwplc-hmi-host'
 
 const v = (name: string, value: string, location?: string, definition = 'base-type') => ({
   name,
@@ -84,5 +91,52 @@ describe('pickJwhmiToLoad', () => {
     expect(pickJwhmiToLoad(['bindings.json', 'Old.JWHMI'])).toBe('Old.JWHMI')
     expect(pickJwhmiToLoad(['A.jwhmi', 'B.jwhmi'])).toBeNull()
     expect(pickJwhmiToLoad([])).toBeNull()
+  })
+})
+
+describe('describeHmiFolder', () => {
+  it('reports the hmi/ folder as the linked sketch, saving under the canonical name', () => {
+    expect(describeHmiFolder('HMIProbe', '/p/hmi', ['JWPLC_HMI_Generated.h', 'Old.jwhmi'])).toEqual({
+      ok: true,
+      name: 'HMIProbe',
+      path: '/p/hmi',
+      headerExists: true,
+      projectFile: 'JWPLC_HMI.jwhmi',
+      projectExists: true,
+    })
+    expect(describeHmiFolder('P', '/p/hmi', ['A.jwhmi', 'B.jwhmi'])).toMatchObject({
+      headerExists: false,
+      projectExists: false,
+    })
+  })
+})
+
+describe('describeHmiSerialPort', () => {
+  it('shows USB ids in hex and names the usual ESP32 chips', () => {
+    expect(
+      describeHmiSerialPort({
+        portId: '1',
+        portName: 'COM6',
+        displayName: 'USB-SERIAL',
+        vendorId: '6790',
+        productId: '29987',
+      }),
+    ).toEqual({
+      portId: '1',
+      portName: 'COM6',
+      displayName: 'USB-SERIAL',
+      vendorId: '1a86',
+      productId: '7523',
+      chip: 'CH340 / CH343',
+    })
+    expect(describeHmiSerialPort({ portId: '2', vendorId: 'x', productId: '' })).toEqual({
+      portId: '2',
+      portName: '',
+      displayName: '',
+      vendorId: 'x',
+      productId: '',
+      chip: '',
+    })
+    expect(describeHmiSerialPort({ portId: '3', vendorId: 4292 }).chip).toBe('CP210x')
   })
 })

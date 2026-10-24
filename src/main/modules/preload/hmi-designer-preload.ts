@@ -1,20 +1,45 @@
 /**
- * Preload of the JWPLC HMI Designer window (Alpha14 F3, `jwplc-hmi-host/1`).
+ * Preload of the JWPLC HMI Designer window (`jwplc-hmi-host/1`, bridge 1.1).
  * See `src/main/modules/hmi-designer/index.ts` and the contract in
  * platform-jwplc docs/v2.1.0-alpha.14/A14_F3_CONTRATO_HMI_OPENPLC_20261017.md.
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
 
-// Same bridge the Designer uses with its stand-alone .exe.
+type SerialPickerHandlers = {
+  onRequest: (request: unknown) => void
+  onList: (update: unknown) => void
+}
+
+// Same bridge the Designer uses with its stand-alone .exe (electron/preload.cjs),
+// without the sketch-only calls: the "linked sketch" is the project's hmi/.
 contextBridge.exposeInMainWorld('JWPLCHMINative', {
   isNative: true,
   selectSketchDirectory: () => ipcRenderer.invoke('jwplc-hmi:select-sketch-directory'),
   getLinkedSketch: () => ipcRenderer.invoke('jwplc-hmi:get-linked-sketch'),
+  readProject: () => ipcRenderer.invoke('jwplc-hmi:read-project'),
   writeGeneratedHeader: (text: string, overwrite = false) =>
     ipcRenderer.invoke('jwplc-hmi:write-generated-header', { text, overwrite }),
   writeProject: (fileName: string, text: string, overwrite = false) =>
     ipcRenderer.invoke('jwplc-hmi:write-project', { fileName, text, overwrite }),
+  openSketchFolder: () => ipcRenderer.invoke('jwplc-hmi:open-sketch-folder'),
+  // Closing with unsaved changes (designer-save-flow.js).
+  registerCloseGuard: (onCloseRequested: () => void) => {
+    ipcRenderer.on('jwplc-hmi:close-requested', () => {
+      ipcRenderer.send('jwplc-hmi:close-guard-ack')
+      onCloseRequested()
+    })
+    ipcRenderer.send('jwplc-hmi:close-guard-ready')
+  },
+  confirmClose: () => ipcRenderer.send('jwplc-hmi:close-confirmed'),
+  // Serial port picker (designer-port-picker.js) for Live Preview and flashing.
+  registerSerialPortPicker: ({ onRequest, onList }: SerialPickerHandlers) => {
+    ipcRenderer.on('jwplc-hmi:serial-port-request', (_event, request: unknown) => onRequest(request))
+    ipcRenderer.on('jwplc-hmi:serial-port-list', (_event, update: unknown) => onList(update))
+    ipcRenderer.send('jwplc-hmi:serial-picker-ready')
+  },
+  chooseSerialPort: (requestId: number, portId?: string) =>
+    ipcRenderer.send('jwplc-hmi:serial-port-chosen', { requestId, portId: portId || '' }),
 })
 
 // OpenPLC host: project context, PLC variables and the saved project.
