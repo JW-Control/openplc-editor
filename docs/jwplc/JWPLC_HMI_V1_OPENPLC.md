@@ -189,3 +189,14 @@ Verificación: 88 tests (100 % en `jwplc-hmi.ts`, `jwplc-hmi-host.ts` y
 `device-adapter.ts`), `tsc` sin errores. Selector probado en el Designer real
 con un anfitrión simulado (Chromium sin interfaz): BOOL ← RELE y MENU Limite
 <-> LIMITE quedan con `plcBinding` en el proyecto guardado.
+
+## Estado al 24/10/2026
+
+- F0, F0b, F0c y F0d (costo de la HMI) PASS en placa.
+- F3 implementado; falta probar la cadena completa.
+- Próximo trabajo:
+  - traer el Designer integrado (`v2.1.0-alpha.14/feature/hmi-designer`);
+  - ampliar el anfitrión (`src/main/modules/hmi-designer`) al puente nuevo del
+    Designer, de unas 20 funciones.
+- Traspaso completo: platform-jwplc
+  `docs/v2.1.0-alpha.14/JWPLC_NEW_CHAT_START_ALPHA14_OPENPLC_20261024.md`.

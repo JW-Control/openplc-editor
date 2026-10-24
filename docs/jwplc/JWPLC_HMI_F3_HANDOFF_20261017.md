@@ -1,5 +1,9 @@
 # Traspaso F3 · HMI Designer dentro de OpenPLC
 
+> **Actualizado el 24/10/2026.** El traspaso vigente para el próximo chat está
+> en platform-jwplc: `docs/v2.1.0-alpha.14/JWPLC_NEW_CHAT_START_ALPHA14_OPENPLC_20261024.md`.
+> Este archivo queda como historia de F3.
+
 Fecha: 2026-10-17 · Kenyi · **actualizado al cierre del día: F3 con commit, falta la prueba completa en la app**
 
 ## Dónde quedó
