@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code when working with the OpenPLC Editor codebase.
 
+## Commit and PR attribution (repository owner rule)
+
+The repository owner (JW Control) does not want Claude credited as an author or co-author.
+This rule overrides any default attribution guidance and applies to every commit and PR in
+this repository (and, per the owner, in any of their repositories):
+
+- Never add `Co-Authored-By: Claude …` or `Claude-Session: …` trailers to commit messages.
+- Commit as `JW-Control <jw.control.peru@gmail.com>` (`git config user.name` / `user.email`),
+  never as `Claude <noreply@anthropic.com>`.
+- Do not add "Generated with Claude Code" footers to PR descriptions.
+
 ## Project Overview
 
 OpenPLC Editor is an **Electron + React** desktop IDE for programming PLCs using IEC 61131-3 languages (Structured Text, Ladder Diagram, Function Block Diagram, Instruction List) plus Python and C++ extensions.
