@@ -34,6 +34,8 @@ export type OpenHmiDesignerArgs = {
   variables: HmiHostVariable[]
 }
 
+export type OpenHmiDesignerResult = { ok: true } | { ok: false; error: string }
+
 /** The HMI Designer tab loads `url` in its `<webview>`. */
 export type PrepareHmiDesignerResult = { ok: true; url: string } | { ok: false; error: string }
 
@@ -102,10 +104,13 @@ export interface DevicePort {
 
   /**
    * Link JWPLC HMI Designer to the project's `hmi/` folder (contract
-   * `jwplc-hmi-host/1`) and get the page the HMI Designer tab shows.
+   * `jwplc-hmi-host/1`) and get the binding view the HMI Designer tab shows.
    * Editor only; web leaves the HMI Designer calls undefined.
    */
   prepareHmiDesigner?(args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult>
+
+  /** Open (or focus) the full Designer in its own window, linked to the same project. */
+  openHmiDesignerWindow?(args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult>
 
   /** The project's PLC variables changed: the Designer lists them again. */
   updateHmiDesignerVariables?(variables: HmiHostVariable[]): Promise<{ ok: boolean }>

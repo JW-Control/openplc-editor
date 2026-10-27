@@ -62,6 +62,20 @@ export function hasHmiDisplay(boardEntry: unknown): boolean {
   return value === true || (typeof value === 'object' && value !== null)
 }
 
+/**
+ * True for the VPP screen of the HMI itself (its sections persist under
+ * `hmi_*`, e.g. `hmi_diagnostics`): OpenPLC shows it inside "Pantalla HMI"
+ * of Configuration instead of as a second HMI entry of the project tree.
+ */
+export function isHmiVendorScreen(screenDefinition: unknown): boolean {
+  const sections = (screenDefinition as { sections?: Array<{ persistence?: unknown }> } | null | undefined)?.sections
+  return (
+    Array.isArray(sections) &&
+    sections.length > 0 &&
+    sections.every((section) => typeof section?.persistence === 'string' && section.persistence.startsWith('hmi_'))
+  )
+}
+
 export interface GenerateJwplcHmiInput {
   /** Contents of `hmi/JWPLC_HMI_Generated.h`, or undefined when absent. */
   header: string | undefined

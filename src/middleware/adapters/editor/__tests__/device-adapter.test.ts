@@ -30,6 +30,7 @@ beforeEach(() => {
     refreshCommunicationPorts: jest.fn().mockResolvedValue(mockPorts),
     getPreviewImage: jest.fn().mockResolvedValue('data:image/png;base64,abc123'),
     prepareHmiDesigner: jest.fn().mockResolvedValue({ ok: true, url: 'http://127.0.0.1:1/desktop.html?host=openplc' }),
+    openHmiDesignerWindow: jest.fn().mockResolvedValue({ ok: true }),
     updateHmiDesignerVariables: jest.fn().mockResolvedValue({ ok: true }),
     saveHmiDesigner: jest.fn().mockResolvedValue({ ok: true }),
     onHmiDesignerDirty: jest.fn().mockReturnValue(() => undefined),
@@ -90,6 +91,8 @@ describe('createEditorDeviceAdapter', () => {
       url: 'http://127.0.0.1:1/desktop.html?host=openplc',
     })
     expect(window.bridge.prepareHmiDesigner).toHaveBeenCalledWith(args)
+    await expect(adapter.openHmiDesignerWindow?.(args)).resolves.toEqual({ ok: true })
+    expect(window.bridge.openHmiDesignerWindow).toHaveBeenCalledWith(args)
   })
 
   it('sends the PLC variables and saves the design through window.bridge', async () => {

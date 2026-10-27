@@ -1,10 +1,11 @@
 import { collectHmiCandidates, describeHmiVariables } from '@root/backend/shared/compile/jwplc-hmi-host'
+import type { DevicePort, OpenHmiDesignerArgs } from '@root/middleware/shared/ports/device-port'
 import { useDevice } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { registerHmiDesignerSaver } from '../../../../../services/hmi-designer-save'
 import { openPLCStoreBase, useOpenPLCStore } from '../../../../../store'
-import { HMI_DESIGNER_TAB_NAME } from '../../../../../store/slices/tabs/utils'
+import { CreateEditorObjectFromTab, HMI_DESIGNER_TAB_NAME } from '../../../../../store/slices/tabs/utils'
 
 /** Variables the Designer may bind, from the compile-ready project (aliases resolved). */
 function currentHmiVariables() {
@@ -12,17 +13,54 @@ function currentHmiVariables() {
   return describeHmiVariables(collectHmiCandidates(projectData))
 }
 
+/** What the Designer needs to link to the open project. */
+function hmiDesignerArgs(): OpenHmiDesignerArgs {
+  const state = openPLCStoreBase.getState()
+  return {
+    projectPath: state.project.meta.path,
+    projectName: state.project.meta.name,
+    device: state.deviceDefinitions.configuration.deviceBoard,
+    variables: currentHmiVariables(),
+  }
+}
+
+/** Show the binding view in the "HMI Designer" tab (opening the tab if needed). */
+export function openHmiDesignerTab(): void {
+  const { tabsActions, editorActions, workspaceActions } = openPLCStoreBase.getState()
+  const tab = { name: HMI_DESIGNER_TAB_NAME, path: '/hmi-designer', elementType: { type: 'hmi-designer' as const } }
+  tabsActions.updateTabs(tab)
+  const model = editorActions.getEditorFromEditors(tab.name) ?? CreateEditorObjectFromTab(tab)
+  editorActions.addModel(model)
+  editorActions.setEditor(model)
+  workspaceActions.setSelectedProjectTreeLeaf({ label: tab.name, type: 'hmi-designer' })
+}
+
+/**
+ * "HMI Designer" of the project tree and of Configuration: the full Designer
+ * opens in its own window, and back in OpenPLC the tab shows the binding view.
+ */
+export async function openHmiDesigner(device: DevicePort): Promise<{ ok: boolean; error?: string }> {
+  openHmiDesignerTab()
+  if (!device.openHmiDesignerWindow) return { ok: true }
+  const result = await device.openHmiDesignerWindow(hmiDesignerArgs())
+  return result.ok ? { ok: true } : { ok: false, error: result.error }
+}
+
 const VARIABLES_DEBOUNCE_MS = 400
 
 /**
- * JWPLC HMI Designer tab (Alpha14 F3): the Designer itself in a `<webview>`,
- * linked to the project's `hmi/` folder. The main process serves the page
+ * JWPLC HMI Designer tab (Alpha14 F3, bridge 1.4): the Designer's binding view
+ * in a `<webview>` (preview, page tabs, object tree and "Variable PLC"),
+ * linked to the project's `hmi/` folder. The screen is drawn in the full
+ * Designer window ("Editar diseño…"); while it is open this view is read-only
+ * and reloads each time the window saves. The main process serves the page
  * and forces its preload (`jwplc-hmi-host/1`). The tab stays mounted while it
- * is open, so switching tabs keeps the design and its undo history.
+ * is open, so switching tabs keeps the view as it was.
  *
- * - Unsaved changes of the design mark the tab like any project file; OpenPLC's
- *   Save (Ctrl+S, Save project, compile) writes the design to `hmi/`.
- * - Editing the project's variables updates "Variable PLC" in the Designer.
+ * - Unsaved changes of the design (window or view) mark the tab like any
+ *   project file; OpenPLC's Save (Ctrl+S, Save project, compile) writes them
+ *   to `hmi/`.
+ * - Editing the project's variables updates "Variable PLC" without reopening.
  */
 export const HmiDesignerEditor = () => {
   const device = useDevice()
@@ -39,16 +77,10 @@ export const HmiDesignerEditor = () => {
       setTarget({ error: 'El HMI Designer sólo está disponible en OpenPLC Editor de escritorio.' })
       return
     }
-    const state = openPLCStoreBase.getState()
-    const variables = currentHmiVariables()
-    lastVariables.current = JSON.stringify(variables)
+    const args = hmiDesignerArgs()
+    lastVariables.current = JSON.stringify(args.variables)
     device
-      .prepareHmiDesigner({
-        projectPath,
-        projectName: state.project.meta.name,
-        device: state.deviceDefinitions.configuration.deviceBoard,
-        variables,
-      })
+      .prepareHmiDesigner(args)
       .then((result) => {
         if (!cancelled) setTarget(result.ok ? { url: result.url } : { error: result.error })
       })

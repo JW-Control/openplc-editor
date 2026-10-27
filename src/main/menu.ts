@@ -162,31 +162,29 @@ export default class MenuBuilder {
     this.mainWindow.webContents.on('context-menu', this.handleDevelopmentContextMenu)
   }
 
-  /** Theme order for the Display ▸ Change Theme cycle: Light → Dark → 90's. */
-  private static readonly THEME_ORDER = ['light', 'dark', 'nineties'] as const
+  /** Theme order for the Display ▸ Change Theme cycle: Light ↔ Dark (JWPLC Edition: no 90's skin). */
+  private static readonly THEME_ORDER = ['light', 'dark'] as const
 
-  /** Current persisted theme, falling back to the OS preference. */
-  private currentTheme(): 'light' | 'dark' | 'nineties' {
+  /** Current persisted theme, falling back to the OS preference. A stored 90's skin reads as light. */
+  private currentTheme(): 'light' | 'dark' {
     const stored = store.get('theme')
-    if (stored === 'dark' || stored === 'light' || stored === 'nineties') return stored
+    if (stored === 'dark' || stored === 'light') return stored
+    if (stored === 'nineties') return 'light'
     return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
   }
 
   /** Sublabel shown next to the Change Theme menu item. */
   private themeSublabel(): string {
-    const t = this.currentTheme()
-    return t === 'nineties' ? "90's" : t === 'dark' ? 'Dark' : 'Light'
+    return this.currentTheme() === 'dark' ? 'Dark' : 'Light'
   }
 
   updateAppTheme() {
     const order = MenuBuilder.THEME_ORDER
     const newTheme = order[(order.indexOf(this.currentTheme()) + 1) % order.length] ?? 'light'
-    // nativeTheme only models light/dark; the 90's skin is UI-only and rides on
-    // a light base, so don't drive a dark OS theme for it.
-    nativeTheme.themeSource = newTheme === 'dark' ? 'dark' : 'light'
+    nativeTheme.themeSource = newTheme
     store.set('theme', newTheme)
     if (this.hasLiveWindow()) {
-      // Send the explicit theme name so the renderer applies light / dark / 90's
+      // Send the explicit theme name so the renderer applies light / dark
       // (the legacy no-payload signal just toggled light<->dark).
       this.mainWindow.webContents.send('system:update-theme', newTheme)
     }

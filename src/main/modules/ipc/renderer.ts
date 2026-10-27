@@ -1,6 +1,10 @@
 import type { HmiHostVariable } from '@root/backend/shared/compile/jwplc-hmi-host'
 import type { DiscoveredRuntimeDevice, RuntimeLogEntry } from '@root/middleware/shared/ports'
-import type { OpenHmiDesignerArgs, PrepareHmiDesignerResult } from '@root/middleware/shared/ports/device-port'
+import type {
+  OpenHmiDesignerArgs,
+  OpenHmiDesignerResult,
+  PrepareHmiDesignerResult,
+} from '@root/middleware/shared/ports/device-port'
 import type { ESIDevice, ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 import type {
   EtherCATRuntimeStatusResponse,
@@ -396,6 +400,8 @@ const rendererProcessBridge = {
   // JWPLC HMI Designer tab (Alpha14 F3)
   prepareHmiDesigner: (args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult> =>
     ipcRenderer.invoke('hmi-designer:prepare', args),
+  openHmiDesignerWindow: (args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult> =>
+    ipcRenderer.invoke('hmi-designer:open-window', args),
   updateHmiDesignerVariables: (variables: HmiHostVariable[]): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('hmi-designer:update-variables', variables),
   saveHmiDesigner: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('hmi-designer:save'),

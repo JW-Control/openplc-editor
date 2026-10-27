@@ -1,8 +1,8 @@
-import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
+import { hasHmiDisplay, isHmiVendorScreen } from '@root/backend/shared/compile/jwplc-hmi'
 import { useEffect, useState } from 'react'
 
 import { projectCapabilities } from '../../../../middleware/shared/ports/types'
-import { useCapabilities, useProject } from '../../../../middleware/shared/providers'
+import { useCapabilities, useDevice, useProject } from '../../../../middleware/shared/providers'
 import { FolderIcon } from '../../../assets/icons/interface/Folder'
 import { useOpenPLCStore } from '../../../store'
 import { extractSearchQuery } from '../../../store/slices/search/utils'
@@ -14,6 +14,7 @@ import {
 } from '../../../store/slices/tabs/utils'
 import { useToast } from '../../_features/[app]/toast/use-toast'
 import { CreatePLCElement } from '../../_features/[workspace]/create-element'
+import { openHmiDesigner } from '../../_features/[workspace]/editor/hmi-designer'
 import {
   ProjectTreeBranch,
   ProjectTreeExpandableLeaf,
@@ -43,6 +44,7 @@ function validateProjectName(value: string): string | null {
 
 const Project = () => {
   const capabilities = useCapabilities()
+  const device = useDevice()
   const projectPort = useProject()
   const { toast } = useToast()
   const {
@@ -72,7 +74,13 @@ const Project = () => {
   const deviceBoard = useOpenPLCStore((s) => s.deviceDefinitions.configuration.deviceBoard)
   const availableBoards = useOpenPLCStore((s) => s.deviceAvailableOptions.availableBoards)
   const currentBoardInfo = availableBoards.get(deviceBoard)
-  const vendorScreens = currentBoardInfo?.vpp?.screens ? Object.keys(currentBoardInfo.vpp.screens) : []
+  const showHmiDesigner = hasHmiDisplay(currentBoardInfo)
+  // The HMI's own VPP screen lives in Configuration: one HMI entry in the tree.
+  const vendorScreens = currentBoardInfo?.vpp?.screens
+    ? Object.entries(currentBoardInfo.vpp.screens)
+        .filter(([, definition]) => !(showHmiDesigner && isHmiVendorScreen(definition)))
+        .map(([screenName]) => screenName)
+    : []
 
   const handleCreateTab = ({ elementType, name, path, configuration: tabConfig }: TabsProps) => {
     const tabToBeCreated = { name, path, elementType, configuration: tabConfig }
@@ -401,19 +409,17 @@ const Project = () => {
             ))}
 
           {/* JWPLC HMI Designer — boards with an HMI display (JWPLC Basic). */}
-          {projectCaps.hasVendorScreens && capabilities.hasLocalSerialPorts && hasHmiDisplay(currentBoardInfo) && (
+          {projectCaps.hasVendorScreens && capabilities.hasLocalSerialPorts && showHmiDesigner && (
             <ProjectTreeLeaf
               key='hmi-designer'
               leafLang='hmiDesigner'
               leafType='hmi-designer'
               label={HMI_DESIGNER_TAB_NAME}
-              onClick={() =>
-                handleCreateTab({
-                  name: HMI_DESIGNER_TAB_NAME,
-                  path: '/hmi-designer',
-                  elementType: { type: 'hmi-designer' },
+              onClick={() => {
+                void openHmiDesigner(device).then((result) => {
+                  if (!result.ok) toast({ title: 'HMI Designer', description: result.error, variant: 'fail' })
                 })
-              }
+              }}
             />
           )}
 

@@ -742,7 +742,7 @@ const Board = memo(function () {
               </div>
             </div>
           )}
-          {hasHmiDisplay(currentBoardInfo) && <HmiDesignerLauncher />}
+          {hasHmiDisplay(currentBoardInfo) && <HmiDesignerLauncher boardInfo={currentBoardInfo} />}
         </div>
         <div id='board-preview-container' className='flex flex-shrink-0 items-start'>
           <div className='h-[16rem] w-[20rem]'>

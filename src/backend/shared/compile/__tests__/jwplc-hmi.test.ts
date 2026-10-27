@@ -2,6 +2,7 @@ import {
   finalizeJwplcHmiSkeleton,
   generateJwplcHmi,
   hasHmiDisplay,
+  isHmiVendorScreen,
   JWPLC_HMI_BINDINGS_FORMAT,
   parseHmiVariables,
   programVarKind,
@@ -82,6 +83,21 @@ const f0Project = () =>
     programs: [{ name: 'main', variables: [variable('PULSADOR', '%IX0.0'), variable('RELE', '%QX0.0')] }],
     instances: ['main'],
   })
+
+describe('isHmiVendorScreen', () => {
+  it('recognises the HMI screen of the VPP (every section persists under hmi_*)', () => {
+    expect(isHmiVendorScreen({ sections: [{ id: 'hmi_diagnostics', persistence: 'hmi_diagnostics' }] })).toBe(true)
+  })
+
+  it('leaves other screens, mixed screens and malformed definitions alone', () => {
+    expect(isHmiVendorScreen({ sections: [{ persistence: 'modbus' }] })).toBe(false)
+    expect(isHmiVendorScreen({ sections: [{ persistence: 'hmi_x' }, { persistence: 'backplane' }] })).toBe(false)
+    expect(isHmiVendorScreen({ sections: [{}] })).toBe(false)
+    expect(isHmiVendorScreen({ sections: [] })).toBe(false)
+    expect(isHmiVendorScreen({})).toBe(false)
+    expect(isHmiVendorScreen(null)).toBe(false)
+  })
+})
 
 describe('hasHmiDisplay', () => {
   it('accepts true or a descriptor object', () => {

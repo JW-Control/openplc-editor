@@ -13,9 +13,10 @@ interface FullscreenElement extends HTMLElement {
 
 type ThemeChoice = 'light' | 'dark' | 'nineties'
 
-// Cycle order for the Display ▸ Theme menu: Light → Dark → 90's → Light.
-const THEME_ORDER: readonly ThemeChoice[] = ['light', 'dark', 'nineties']
-const THEME_LABEL: Record<ThemeChoice, string> = { light: 'light', dark: 'dark', nineties: "90's" }
+// Cycle order for the Display ▸ Theme menu: Light ↔ Dark. The JWPLC Edition
+// has no 90's skin; a stored one is switched to light on start.
+const THEME_ORDER: readonly ThemeChoice[] = ['light', 'dark']
+const THEME_LABEL: Record<ThemeChoice, string> = { light: 'light', dark: 'dark', nineties: 'light' }
 
 export const DisplayMenu = () => {
   const {
@@ -31,6 +32,11 @@ export const DisplayMenu = () => {
   const [theme, setTheme] = useState<ThemeChoice>(themePort.getCurrentTheme())
 
   useEffect(() => themePort.onThemeChanged(setTheme), [themePort])
+
+  // A 90's skin saved by an earlier version becomes light.
+  useEffect(() => {
+    if (theme === 'nineties') themePort.setTheme('light')
+  }, [theme, themePort])
 
   useEffect(() => {
     setSystemConfigs({ shouldUseDarkMode: theme === 'dark' })

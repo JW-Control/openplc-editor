@@ -13,6 +13,7 @@
  *   hardware:refresh-communication-ports        (invoke)
  *   util:get-preview-image                      (invoke)
  *   hmi-designer:prepare                        (invoke)
+ *   hmi-designer:open-window                    (invoke)
  *   hmi-designer:update-variables               (invoke)
  *   hmi-designer:save                           (invoke)
  *   hmi-designer:dirty                          (on)
@@ -23,6 +24,7 @@ import type {
   DevicePort,
   JwplcDeviceDiscoveryResult,
   OpenHmiDesignerArgs,
+  OpenHmiDesignerResult,
   PrepareHmiDesignerResult,
 } from '../../shared/ports/device-port'
 import type { BoardInfo, CommunicationPort } from '../../shared/ports/types'
@@ -55,6 +57,10 @@ export function createEditorDeviceAdapter(): DevicePort {
 
     prepareHmiDesigner(args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult> {
       return window.bridge.prepareHmiDesigner(args)
+    },
+
+    openHmiDesignerWindow(args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult> {
+      return window.bridge.openHmiDesignerWindow(args)
     },
 
     updateHmiDesignerVariables(variables: HmiHostVariable[]): Promise<{ ok: boolean }> {
