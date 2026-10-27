@@ -24,9 +24,13 @@ trabajo: español en respuestas, docs JWPLC, commits y PR.
   (`knowledge/projects/platform-jwplc/`) y el estado vivo de la línea en
   `platform-jwplc` (`docs/v2.1.0-alpha.N/ALPHA<N>_STATUS.md`, sección «Para
   retomar»). El estado de la línea vive allí, no en este repo ni aquí.
-- **Ramas:** la misma que en `platform-jwplc`: `v2.1.0-alpha.N/<Línea>/main` y
-  `v2.1.0-alpha.N/<Línea>/feature/<tema>`, PR hacia `…/main`. `development` y
-  `main` siguen al upstream (Autonomy) y no se usan como base de una línea.
+- **Ramas:** igual que en `platform-jwplc`. `release/v2.1.x` guarda la JWPLC
+  Edition publicada (creada en `jwplc-editor-v4.2.8-jwplc.8`); cada línea sale
+  de ella como `v2.1.0-alpha.N/<Línea>/main`, con features
+  `v2.1.0-alpha.N/<Línea>/feature/<tema>` y PR hacia `…/main`. Al cerrar la línea,
+  `…/main` entra a `release/v2.1.x` (merge commit, nunca squash) y se borra.
+  `development` y `main` siguen al upstream (Autonomy) y no se usan como base
+  de una línea.
 - **Integración:** el Designer y el VPP se empaquetan desde `platform-jwplc`
   en `PLATFORM_DESIGNER_SHA` y `PLATFORM_VPP_SHA`
   (`.github/workflows/jwplc-edition-prerelease.yml`). Si cambian, se actualizan
