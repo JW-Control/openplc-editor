@@ -22,7 +22,7 @@ env:
   NODE_VERSION: '22.x'
   PLATFORM_REPO: https://github.com/JW-Control/platform-jwplc.git
   # v2.1.0-alpha.15/OpenPLC-HMI/feature/designer-alpha14-en-openplc (Designer 2.1.0-alpha.15, window + binding view 1.4)
-  PLATFORM_DESIGNER_SHA: d556feb683f44ecf97013fce9f80f18a8c600d1c
+  PLATFORM_DESIGNER_SHA: fbb61e6abe6f0e8f9aac5cc3676be4fc53688f4f
   # v2.1.0-alpha.15/OpenPLC-HMI/feature/vpp-version-alpha15 (VPP 2.1.0-alpha.15, signature 3b46176)
   PLATFORM_VPP_SHA: a8458dcd6551ce213ca0d1897ddbc8617ab8eaa3
   VPP_NAME: jwplc-basic-openplc-2.1.0-alpha.15.jwcontrol-signed.vpp

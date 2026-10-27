@@ -778,7 +778,8 @@ const ProjectTreeLeaf = ({
       )}
       onClick={(e) => {
         handleLeafSelection()
-        if (label === name) return
+        // HMI Designer opens its window on every click (e.g. after closing it).
+        if (label === name && leafLang !== 'hmiDesigner') return
         if (handleLeafClick) handleLeafClick(e)
       }}
       {...res}
