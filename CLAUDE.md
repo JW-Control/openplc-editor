@@ -13,6 +13,33 @@ this repository (and, per the owner, in any of their repositories):
   never as `Claude <noreply@anthropic.com>`.
 - Do not add "Generated with Claude Code" footers to PR descriptions.
 
+## JWPLC Edition (reglas del fork, en español)
+
+Este fork es uno de los tres componentes del **JWPLC Basic** junto con
+`JW-Control/platform-jwplc` (package, HMI Designer, VPP) y
+`JW-Control/jwplc-dev-mcp` (conocimiento privado y MCP local). Idioma de
+trabajo: español en respuestas, docs JWPLC, commits y PR.
+
+- **Antes de trabajar:** leer `RAMAS_Y_TAGS.md` en `jwplc-dev-mcp`
+  (`knowledge/projects/platform-jwplc/`) y el estado vivo de la línea en
+  `platform-jwplc` (`docs/v2.1.0-alpha.N/ALPHA<N>_STATUS.md`, sección «Para
+  retomar»). El estado de la línea vive allí, no en este repo ni aquí.
+- **Ramas:** la misma que en `platform-jwplc`: `v2.1.0-alpha.N/<Línea>/main` y
+  `v2.1.0-alpha.N/<Línea>/feature/<tema>`, PR hacia `…/main`. `development` y
+  `main` siguen al upstream (Autonomy) y no se usan como base de una línea.
+- **Integración:** el Designer y el VPP se empaquetan desde `platform-jwplc`
+  en `PLATFORM_DESIGNER_SHA` y `PLATFORM_VPP_SHA`
+  (`.github/workflows/jwplc-edition-prerelease.yml`). Si cambian, se actualizan
+  en el mismo hito, con un SHA alcanzable desde `…/main` de la línea en
+  `platform-jwplc`, y se anotan en la matriz de versiones del estado vivo.
+- **Versiones y tags:** `4.2.8-jwplc.N`; nota en `docs/jwplc/releases/`. El tag
+  `jwplc-editor-v4.2.8-jwplc.N` publica el pre-release y solo se crea con
+  autorización explícita del propietario. Docs propios del fork en `docs/jwplc/`.
+- **Validación sin hardware:** `npm run lint`, `npm run test`,
+  `npm run validate:arch` y `npm run build`. La prueba en Windows real
+  (instalador, VPP, subir a la placa) la hace el operador con un checklist único
+  por hito.
+
 ## Project Overview
 
 OpenPLC Editor is an **Electron + React** desktop IDE for programming PLCs using IEC 61131-3 languages (Structured Text, Ladder Diagram, Function Block Diagram, Instruction List) plus Python and C++ extensions.
