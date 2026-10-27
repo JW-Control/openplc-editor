@@ -1,0 +1,173 @@
+name: JWPLC Edition - Pre-release
+
+# Builds the Windows x64 installer of the JWPLC Edition and publishes it as a
+# GitHub pre-release together with the signed VPP.
+#
+# Trigger: pushing a tag jwplc-editor-v<package.json version> (created by hand:
+# GITHUB_TOKEN cannot create a tag on a commit that adds workflow files).
+# Release notes: docs/jwplc/releases/<tag>.md (__EXE_NAME__ is replaced).
+#
+# The installer bundles the JWPLC HMI Designer (tools/jwplc-hmi-designer/poc of
+# platform-jwplc @ PLATFORM_DESIGNER_SHA) in resources/jwplc-hmi-designer/poc,
+# so "Abrir HMI Designer" works without a platform-jwplc checkout. The VPP is
+# packed deterministically from platform-jwplc @ PLATFORM_VPP_SHA and verified
+# with the editor's own verifyPackageSignature before upload.
+
+on:
+  push:
+    tags:
+      - 'jwplc-editor-v*'
+
+env:
+  NODE_VERSION: '22.x'
+  PLATFORM_REPO: https://github.com/JW-Control/platform-jwplc.git
+  # v2.1.0-alpha.15/OpenPLC-HMI/feature/designer-alpha14-en-openplc (Designer 2.1.0-alpha.15)
+  PLATFORM_DESIGNER_SHA: c368f40a8f9fe3514db961dfd8a3d989bd70c6ea
+  # v2.1.0-alpha.15/OpenPLC-HMI/feature/vpp-version-alpha15 (VPP 2.1.0-alpha.15, signature 3b46176)
+  PLATFORM_VPP_SHA: a8458dcd6551ce213ca0d1897ddbc8617ab8eaa3
+  VPP_NAME: jwplc-basic-openplc-2.1.0-alpha.15.jwcontrol-signed.vpp
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check tag against package.json
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "jwplc-editor-v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $VERSION"
+            exit 1
+          fi
+          if [ ! -f "docs/jwplc/releases/$GITHUB_REF_NAME.md" ]; then
+            echo "::error::Missing release notes docs/jwplc/releases/$GITHUB_REF_NAME.md"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+      - name: Bundle the JWPLC HMI Designer
+        shell: bash
+        run: |
+          git init -q platform
+          git -C platform fetch -q --depth 1 "$PLATFORM_REPO" "$PLATFORM_DESIGNER_SHA"
+          git -C platform archive "$PLATFORM_DESIGNER_SHA" tools/jwplc-hmi-designer/poc | tar -x -C platform
+          rm -rf resources/jwplc-hmi-designer/poc
+          mv platform/tools/jwplc-hmi-designer/poc resources/jwplc-hmi-designer/poc
+          for f in desktop.html designer-save-flow.js designer-openplc-host.js; do
+            test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
+          done
+          grep -q '2.1.0-alpha.15' resources/jwplc-hmi-designer/poc/desktop.html
+          rm -rf platform
+          echo "Designer files: $(find resources/jwplc-hmi-designer/poc -type f | wc -l)"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download binaries for x64
+        run: npx ts-node scripts/download-binaries.ts --arch x64
+
+      - name: Build and package
+        env:
+          BUILD_DATE: ${{ steps.version.outputs.build_date }}
+        run: npm run package
+
+      - name: Check the Designer inside the package
+        shell: bash
+        run: test -f release/build/win-unpacked/resources/jwplc-hmi-designer/poc/designer-openplc-host.js
+
+      - name: Upload Windows x64 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: jwplc-edition-${{ steps.version.outputs.version }}-windows-x64
+          path: release/build/*.exe
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    needs: build-windows-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: jwplc-edition-${{ needs.build-windows-x64.outputs.version }}-windows-x64
+          path: dist
+
+      - name: Pack VPP from platform-jwplc
+        run: |
+          git init -q platform
+          git -C platform fetch -q --depth 1 "$PLATFORM_REPO" "$PLATFORM_VPP_SHA"
+          mkdir vpp-src
+          git -C platform archive "$PLATFORM_VPP_SHA" openplc-editor-installers/v4.2.7/vpp | tar -x -C vpp-src
+          cd vpp-src/openplc-editor-installers/v4.2.7/vpp
+          find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort | TZ=UTC zip -q -X -D "$GITHUB_WORKSPACE/dist/$VPP_NAME" -@
+
+      - name: Verify VPP signature with the editor verifier
+        run: |
+          mkdir -p verify/pkg
+          cp src/backend/shared/utils/vpp/verify-package-signature.ts src/backend/shared/utils/vpp/trusted-keys.ts verify/
+          unzip -q "dist/$VPP_NAME" -d verify/pkg
+          cat > verify/run.ts <<'EOF'
+          import { TRUSTED_PACKAGE_KEYS } from './trusted-keys.ts'
+          import { verifyPackageSignature } from './verify-package-signature.ts'
+          const result = verifyPackageSignature(process.argv[2], TRUSTED_PACKAGE_KEYS)
+          console.log(JSON.stringify(result))
+          if (!result.valid) process.exit(1)
+          EOF
+          node --experimental-strip-types --no-warnings verify/run.ts verify/pkg
+
+      - name: Checksums and release notes
+        id: files
+        working-directory: dist
+        run: |
+          EXE=$(ls *.exe | head -n 1)
+          sha256sum *.exe *.vpp | tee SHA256SUMS.txt
+          echo "exe=$EXE" >> "$GITHUB_OUTPUT"
+          sed "s|__EXE_NAME__|$EXE|g" "$GITHUB_WORKSPACE/docs/jwplc/releases/$GITHUB_REF_NAME.md" > "$RUNNER_TEMP/notes.md"
+          {
+            echo
+            echo '### SHA256'
+            echo
+            echo '```text'
+            cat SHA256SUMS.txt
+            echo '```'
+          } >> "$RUNNER_TEMP/notes.md"
+
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build-windows-x64.outputs.version }}
+        working-directory: dist
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "OpenPLC Editor - JWPLC Edition $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease \
+            "${{ steps.files.outputs.exe }}" \
+            "$VPP_NAME" \
+            SHA256SUMS.txt

@@ -16,11 +16,12 @@
  *
  * Contract: platform-jwplc docs/v2.1.0-alpha.14/A14_F3_CONTRATO_HMI_OPENPLC_20261017.md
  *
- * Where the Designer files come from (development): the
- * `JWPLC_HMI_DESIGNER_DIR` environment variable, or the sibling checkout
+ * Where the Designer files come from, in order: the `JWPLC_HMI_DESIGNER_DIR`
+ * environment variable; the copy bundled into the installer
+ * (`resources/jwplc-hmi-designer/poc`, filled by the JWPLC Edition pre-release
+ * workflow from platform-jwplc); in development, the sibling checkout
  * `../platform-jwplc/tools/jwplc-hmi-designer/poc`. It must be the Designer of
- * 2.1.0-alpha.14 or later with the OpenPLC mode. Shipping it inside the
- * signed VPP comes later.
+ * 2.1.0-alpha.14 or later with the OpenPLC mode.
  */
 
 import { createReadStream, existsSync, statSync } from 'node:fs'
@@ -83,6 +84,7 @@ type DesignerRoot = { root: string } | { error: string }
 const designerCandidates = () =>
   [
     process.env.JWPLC_HMI_DESIGNER_DIR,
+    app.isPackaged ? join(process.resourcesPath, 'jwplc-hmi-designer', 'poc') : undefined,
     join(app.getAppPath(), '..', 'platform-jwplc', 'tools', 'jwplc-hmi-designer', 'poc'),
     join(process.cwd(), '..', 'platform-jwplc', 'tools', 'jwplc-hmi-designer', 'poc'),
   ].filter((candidate): candidate is string => Boolean(candidate))
