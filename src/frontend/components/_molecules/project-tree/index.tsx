@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { Monitor } from 'lucide-react'
 import { ComponentPropsWithoutRef, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useCapabilities, useProject } from '../../../../middleware/shared/providers'
@@ -459,6 +460,7 @@ type IProjectTreeLeafProps = ComponentPropsWithoutRef<'li'> & {
     | 'server'
     | 'remoteDevice'
     | 'vendorScreen'
+    | 'hmiDesigner'
     | 'ethercatDevice'
     | 'libraryManifest'
   leafType: WorkspaceProjectTreeLeafType
@@ -485,6 +487,11 @@ const LeafSources = {
   server: { LeafIcon: ServerIcon },
   remoteDevice: { LeafIcon: RemoteDeviceIcon },
   vendorScreen: { LeafIcon: ConfigIcon },
+  hmiDesigner: {
+    LeafIcon: ({ className }: { className?: string }) => (
+      <Monitor className={`h-5 w-5 text-[#0464FB] ${className ?? ''}`} />
+    ),
+  },
   ethercatDevice: { LeafIcon: DeviceTransferIcon },
   // Library manifest gets its own document-with-bookmark icon so
   // the explorer leaf, the workspace tab, and the breadcrumb all
@@ -771,7 +778,8 @@ const ProjectTreeLeaf = ({
       )}
       onClick={(e) => {
         handleLeafSelection()
-        if (label === name) return
+        // HMI Designer opens its window on every click (e.g. after closing it).
+        if (label === name && leafLang !== 'hmiDesigner') return
         if (handleLeafClick) handleLeafClick(e)
       }}
       {...res}

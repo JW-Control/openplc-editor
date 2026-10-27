@@ -1,4 +1,13 @@
-import { generateJwplcHmi, hasHmiDisplay, JWPLC_HMI_BINDINGS_FORMAT, parseHmiVariables } from '../jwplc-hmi'
+import {
+  finalizeJwplcHmiSkeleton,
+  generateJwplcHmi,
+  hasHmiDisplay,
+  isHmiVendorScreen,
+  JWPLC_HMI_BINDINGS_FORMAT,
+  parseHmiVariables,
+  programVarKind,
+  resolveJwplcHmiProgramVars,
+} from '../jwplc-hmi'
 import type { PLCProjectData, PLCVariable } from '../../types/PLC/open-plc'
 
 // Header exported by JWPLC HMI Designer for gate A15 F0 (BOOL <- relay Q0_0),
@@ -74,6 +83,21 @@ const f0Project = () =>
     programs: [{ name: 'main', variables: [variable('PULSADOR', '%IX0.0'), variable('RELE', '%QX0.0')] }],
     instances: ['main'],
   })
+
+describe('isHmiVendorScreen', () => {
+  it('recognises the HMI screen of the VPP (every section persists under hmi_*)', () => {
+    expect(isHmiVendorScreen({ sections: [{ id: 'hmi_diagnostics', persistence: 'hmi_diagnostics' }] })).toBe(true)
+  })
+
+  it('leaves other screens, mixed screens and malformed definitions alone', () => {
+    expect(isHmiVendorScreen({ sections: [{ persistence: 'modbus' }] })).toBe(false)
+    expect(isHmiVendorScreen({ sections: [{ persistence: 'hmi_x' }, { persistence: 'backplane' }] })).toBe(false)
+    expect(isHmiVendorScreen({ sections: [{}] })).toBe(false)
+    expect(isHmiVendorScreen({ sections: [] })).toBe(false)
+    expect(isHmiVendorScreen({})).toBe(false)
+    expect(isHmiVendorScreen(null)).toBe(false)
+  })
+})
 
 describe('hasHmiDisplay', () => {
   it('accepts true or a descriptor object', () => {
@@ -289,7 +313,6 @@ describe('generateJwplcHmi with plcBinding in the .jwhmi (F3)', () => {
   })
 
   it.each([
-    [undefined, jwhmi([]), 'falta hmi/JWPLC_HMI_Generated.h'],
     [F0_HEADER, '{ roto', 'no es un JSON válido'],
     [F0_HEADER, 'null', 'no tiene la lista "fields"'],
     [
@@ -388,7 +411,6 @@ describe('generateJwplcHmi', () => {
   })
 
   it.each([
-    [undefined, '{}', 'falta hmi/JWPLC_HMI_Generated.h'],
     ['// otro header\nbool x = false;\n', undefined, 'no parece generado por JWPLC HMI Designer'],
     [F0_HEADER, '{ roto', 'no es un JSON válido'],
     [F0_HEADER, 'null', '"format": "JWPLC_HMI_BINDINGS"'],
@@ -417,10 +439,14 @@ describe('generateJwplcHmi', () => {
     [{ hmi: 'rele_q0_0', plc: 'OTRA' }, 'no existe'],
     [{ hmi: 'rele_q0_0', plc: 'CONTADOR' }, 'necesita una variable HMI float'],
     [{ hmi: 'rele_q0_0', plc: 'TIPO_USUARIO' }, 'tipo de usuario'],
-    [{ hmi: 'rele_q0_0', plc: 'SUELTA' }, 'no tiene dirección'],
+    [{ hmi: 'rele_q0_0', plc: 'SUELTA' }, 'TIME sin dirección todavía no se enlaza'],
+    [{ hmi: 'nivel', plc: 'TEMPORAL' }, 'variable temporal'],
+    [{ hmi: 'nivel', plc: 'MARCHA' }, 'necesita una variable HMI bool'],
+    [{ hmi: 'rele_q0_0', plc: 'CUENTA_SD' }, 'necesita una variable HMI float o int32_t'],
     [{ hmi: 'rele_q0_0', plc: 'MEMORIA' }, 'marcas %MX'],
     [{ hmi: 'rele_q0_0', plc: '%QX0.8' }, 'bit debe ser 0..7'],
-    [{ hmi: 'rele_q0_0', plc: 'DOBLE' }, 'varias veces'],
+    [{ hmi: 'rele_q0_0', plc: 'DOBLE' }, 'varios lugares'],
+    [{ hmi: 'rele_q0_0', plc: 'SIN_DIR' }, 'varios lugares (SIN_DIR, INSTANCE0.SIN_DIR)'],
   ])('rejects link %j', (link, expected) => {
     const projectData = project({
       globals: [
@@ -428,13 +454,25 @@ describe('generateJwplcHmi', () => {
         variable('CONTADOR_MAL', '%MD0', 'INT'),
         variable('RARA', '%Q', 'INT'),
         variable('TIPO_USUARIO', '%QX0.2', 'MI_TIPO', 'user-data-type'),
-        variable('SUELTA', ''),
+        variable('SUELTA', '', 'TIME'),
+        variable('MARCHA', ''),
+        variable('CUENTA_SD', '', 'INT'),
         variable('MEMORIA', '%MX0.0'),
         variable('DOBLE', '%QX0.3'),
       ],
-      programs: [{ name: 'main', variables: [variable('DOBLE', '%QX0.4')] }],
+      programs: [
+        {
+          name: 'main',
+          variables: [
+            variable('DOBLE', '%QX0.4'),
+            variable('SIN_DIR', ''),
+            { ...variable('TEMPORAL', '', 'INT'), class: 'temp' } as PLCVariable,
+          ],
+        },
+      ],
       instances: ['main'],
     })
+    projectData.configuration.resource.globalVariables.push(variable('SIN_DIR', ''))
     const result = generateJwplcHmi({ header: F0_HEADER, bindingsJson: bindings([link]), projectData })
     expect(result.files).toEqual({})
     expect(result.errors).toHaveLength(1)
@@ -467,5 +505,145 @@ describe('generateJwplcHmi', () => {
       }),
     })
     expect(result.errors).toEqual([])
+  })
+})
+
+describe('missing header', () => {
+  it.each([
+    [undefined, '{}', 'hmi/bindings.json'],
+    ['{"fields":[]}', undefined, 'hmi/JWPLC_HMI.jwhmi'],
+  ])('compiles without the screen and warns (%#)', (jwhmiJson, bindingsJson, orphan) => {
+    const result = generateJwplcHmi({ header: undefined, bindingsJson, jwhmiJson, projectData: f0Project() })
+    expect(result.errors).toEqual([])
+    expect(result.messages).toEqual([])
+    expect(result.files['src/jwplc_hmi.h']).toContain('#define JWPLC_HMI_ENABLED 0')
+    expect(result.warnings[0]).toContain(`hay ${orphan} pero falta hmi/JWPLC_HMI_Generated.h`)
+    expect(result.warnings[0]).toContain('Actualizar HMI')
+  })
+})
+
+describe('unlocated variables (STruC++ debug table)', () => {
+  const jwhmi = (fields: unknown) => JSON.stringify({ format: 'JWPLC_HMI_PROJECT', version: 1, fields })
+  const header = `${F0_HEADER}uint8_t pequeno = 0;\n`
+  const programProject = () =>
+    project({
+      globals: [variable('ALARMA', ''), variable('LIMITE_G', '', 'UDINT')],
+      programs: [
+        {
+          name: 'main',
+          variables: [
+            variable('MARCHA', ''),
+            variable('CUENTA', '', 'INT'),
+            variable('TEMP', '', 'REAL'),
+            { ...variable('ALARMA', ''), class: 'external' } as PLCVariable,
+          ],
+        },
+      ],
+      instances: ['main', 'main'],
+    })
+  const withFunctionBlock = () => {
+    const data = programProject()
+    data.pous.push({ type: 'function-block', data: { name: 'FB1', variables: [variable('X', '')] } } as never)
+    return data
+  }
+
+  it('links them with placeholders, read-only and read-write, for every kind', () => {
+    const result = generateJwplcHmi({
+      header,
+      bindingsJson: bindings([{ hmi: 'nivel', plc: 'TEMP', access: 'RW' }]),
+      jwhmiJson: jwhmi([{ type: 'BOOL', variable: 'rele_q0_0', plcBinding: { var: 'alarma' } }]),
+      projectData: programProject(),
+    })
+    expect(result.errors).toEqual([])
+    const glue = result.files['src/jwplc_hmi.h']
+    expect(glue).toContain('extern "C" uint8_t openplc_debug_write(')
+    expect(glue).toContain('static inline bool jwplcHmiReadVar(')
+    expect(glue).toContain('if (jwplcHmiReadVar(@@JWPLC_HMI_VAR(ALARMA,BOOL)@@, raw)) rele_q0_0 = (raw != 0);')
+    expect(glue).not.toContain('static_assert')
+    expect(result.messages).toContain('HMI: rele_q0_0 <- alarma (ALARMA, sin dirección)')
+  })
+
+  it('writes HMI changes back with the right C type and range', () => {
+    const result = generateJwplcHmi({
+      header,
+      bindingsJson: bindings([
+        { hmi: 'rele_q0_0', plc: 'MARCHA', access: 'RW' },
+        { hmi: 'nivel', plc: 'TEMP', access: 'RW' },
+        { hmi: 'limite', plc: 'CUENTA', access: 'RW' },
+      ]),
+      projectData: withFunctionBlock(),
+    })
+    const glue = result.files['src/jwplc_hmi.h']
+    expect(glue).toContain('jwplcHmiWriteVar(@@JWPLC_HMI_VAR(INSTANCE0.MARCHA,BOOL)@@, (uint8_t)(rele_q0_0 ? 1 : 0));')
+    expect(glue).toContain('jwplcHmiWriteVar(@@JWPLC_HMI_VAR(INSTANCE0.TEMP,REAL)@@, (float)nivel);')
+    expect(glue).toContain(
+      'jwplcHmiWriteVar(@@JWPLC_HMI_VAR(INSTANCE0.CUENTA,INT)@@, (int16_t)jwplcHmiClampRound((double)limite, -32768.0, 32767.0));',
+    )
+    expect(glue).toContain('if (jwplcHmiSynced && limite != jwplcHmiShadow_limite)')
+    expect(glue).toContain('const int32_t plc = (int32_t)raw;')
+    expect(glue).toContain('const float plc = (float)raw;')
+  })
+
+  it('reads a REAL into an int32_t rounding it', () => {
+    const result = generateJwplcHmi({
+      header,
+      bindingsJson: bindings([
+        { hmi: 'limite', plc: 'TEMP' },
+        { hmi: 'nivel', plc: 'LIMITE_G' },
+      ]),
+      projectData: programProject(),
+    })
+    expect(result.files['src/jwplc_hmi.h']).toContain('limite = (int32_t)llroundf(raw);')
+    expect(result.files['src/jwplc_hmi.h']).toContain('uint32_t raw;')
+  })
+
+  it('classifies the IEC types it can link', () => {
+    expect(programVarKind('bool')).toBe('bool')
+    expect(programVarKind('DWORD', 'local')).toBe('number')
+    expect(programVarKind('LREAL')).toContain('LREAL sin dirección')
+    expect(programVarKind('INT', 'temp')).toContain('VAR_TEMP')
+  })
+})
+
+describe('resolveJwplcHmiProgramVars', () => {
+  const map = JSON.stringify({
+    leaves: [
+      { arrayIdx: 0, elemIdx: 0, path: 'ALARMA', type: 'BOOL', size: 1 },
+      { arrayIdx: 1, elemIdx: 3, path: 'INSTANCE0.CUENTA', type: 'INT', size: 2 },
+    ],
+  })
+  const glue = 'a(@@JWPLC_HMI_VAR(ALARMA,BOOL)@@); b(@@JWPLC_HMI_VAR(instance0.cuenta,INT)@@);'
+
+  it('replaces the placeholders with the debug-map indexes', () => {
+    expect(resolveJwplcHmiProgramVars(glue, map)).toEqual({ text: 'a(0, 0); b(1, 3);', errors: [] })
+    expect(resolveJwplcHmiProgramVars('sin marcas', 'no es json')).toEqual({ text: 'sin marcas', errors: [] })
+  })
+
+  it('names the variables the map lacks or types differently', () => {
+    const result = resolveJwplcHmiProgramVars(
+      'x(@@JWPLC_HMI_VAR(NO_ESTA,BOOL)@@) y(@@JWPLC_HMI_VAR(INSTANCE0.CUENTA,REAL)@@)',
+      map,
+    )
+    expect(result.errors).toEqual([
+      'HMI: NO_ESTA no está en el mapa de depuración del programa compilado; no se puede enlazar a la pantalla.',
+      'HMI: INSTANCE0.CUENTA es INT en el programa compilado y el enlace esperaba REAL.',
+    ])
+  })
+
+  it('reports an unreadable map', () => {
+    expect(resolveJwplcHmiProgramVars(glue, '{ roto').errors[0]).toContain('debug-map.json')
+    expect(resolveJwplcHmiProgramVars(glue, '{}').errors[0]).toContain('sin "leaves"')
+  })
+
+  it('finalizes only the HMI glue of the firmware skeleton', () => {
+    const skeleton = { 'src/jwplc_hmi.h': glue, 'src/otro.h': '@@JWPLC_HMI_VAR(ALARMA,BOOL)@@' }
+    expect(finalizeJwplcHmiSkeleton(skeleton, map)).toEqual({
+      files: { 'src/jwplc_hmi.h': 'a(0, 0); b(1, 3);', 'src/otro.h': '@@JWPLC_HMI_VAR(ALARMA,BOOL)@@' },
+      errors: [],
+    })
+    expect(finalizeJwplcHmiSkeleton({ 'src/otro.h': 'x' }, map)).toEqual({ files: { 'src/otro.h': 'x' }, errors: [] })
+    const failed = finalizeJwplcHmiSkeleton({ 'src/jwplc_hmi.h': glue }, '{}')
+    expect(failed.files).toEqual({ 'src/jwplc_hmi.h': glue })
+    expect(failed.errors).toHaveLength(1)
   })
 })

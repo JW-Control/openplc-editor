@@ -117,6 +117,14 @@ const CreateVendorScreenEditor = (name: string, screenName: string): EditorModel
   meta: { name, screenName },
 })
 
+/** Canonical tab name of the JWPLC HMI Designer tab (also its file-slice key). */
+const HMI_DESIGNER_TAB_NAME = 'HMI Designer'
+
+const CreateHmiDesignerEditor = (name = HMI_DESIGNER_TAB_NAME): EditorModel => ({
+  type: 'plc-hmi-designer',
+  meta: { name },
+})
+
 const CreatePackageManagerEditor = (name = 'Package Manager'): EditorModel => ({
   type: 'plc-package-manager',
   meta: { name },
@@ -171,6 +179,8 @@ const CreateEditorObjectFromTab = (tab: TabsProps): EditorModel => {
       return CreateServerEditor(name, elementType.protocol)
     case 'vendor-screen':
       return CreateVendorScreenEditor(name, elementType.screenName)
+    case 'hmi-designer':
+      return CreateHmiDesignerEditor(name)
     case 'package-manager':
       return CreatePackageManagerEditor(name)
     case 'library-manager':
@@ -188,6 +198,7 @@ export {
   CreateEditorModelObject,
   CreateEditorObjectFromTab,
   CreateEtherCATDeviceEditor,
+  CreateHmiDesignerEditor,
   CreateLibraryManagerEditor,
   CreateLibraryManifestEditor,
   CreatePackageManagerEditor,
@@ -197,5 +208,6 @@ export {
   CreateResourceEditor,
   CreateServerEditor,
   CreateVendorScreenEditor,
+  HMI_DESIGNER_TAB_NAME,
   LIBRARY_MANIFEST_TAB_NAME,
 }

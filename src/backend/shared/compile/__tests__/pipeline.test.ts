@@ -917,6 +917,32 @@ describe('runCompilePipeline — failure propagation', () => {
 // Side effects
 // ---------------------------------------------------------------------------
 
+describe('runCompilePipeline — finalizeFirmwareSkeleton (JWPLC HMI)', () => {
+  it('passes the skeleton and debug map, and compiles the finalized files', async () => {
+    const finalizeFirmwareSkeleton = jest.fn((skeleton: Record<string, string>) => ({
+      files: { ...skeleton, 'src/jwplc_hmi.h': '// resuelto' },
+      errors: [],
+    }))
+    const port = makePort()
+    const { emit } = captureEvents()
+    const result = await runCompilePipeline(makeArgs({ finalizeFirmwareSkeleton }), port, emit)
+    expect(result.success).toBe(true)
+    expect(finalizeFirmwareSkeleton).toHaveBeenCalledWith(makeArgs().firmwareSkeleton, '{}')
+    expect(port.compileArduino.mock.calls[0][0].files['src/jwplc_hmi.h']).toBe('// resuelto')
+  })
+
+  it('stops before arduino-cli with every error it reports', async () => {
+    const finalizeFirmwareSkeleton = jest.fn(() => ({ files: {}, errors: ['HMI: X no está', 'HMI: Y es INT'] }))
+    const port = makePort()
+    const { events, emit } = captureEvents()
+    const result = await runCompilePipeline(makeArgs({ finalizeFirmwareSkeleton }), port, emit)
+    expect(result.success).toBe(false)
+    expect(port.compileArduino).not.toHaveBeenCalled()
+    const errors = events.filter((e) => e.level === 'error').map((e) => e.message)
+    expect(errors).toEqual(['HMI: X no está', 'HMI: Y es INT', 'Invalid HMI screen.', 'Stopping compilation process.'])
+  })
+})
+
 describe('runCompilePipeline — side effects', () => {
   it('calls cacheDebugData with the strucpp MD5 + debug-map.json content', async () => {
     const cacheDebugData = jest.fn()

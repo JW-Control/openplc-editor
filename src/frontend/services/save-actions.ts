@@ -28,6 +28,7 @@ import { collectDebugVariables, sanitizePou } from '../utils/save-project'
 import { toast } from '../utils/toast'
 import { pickContentForSave } from '../utils/version-control-content'
 import { collectScreenPersistenceKeys } from '../utils/vpp/persistence-keys'
+import { saveHmiDesignerDesign } from './hmi-designer-save'
 
 /** Join path segments with forward slashes (platform-agnostic, works with Node's fs on all OSes). */
 const joinPath = (...parts: string[]): string => parts.join('/').replace(/\/+/g, '/')
@@ -419,6 +420,12 @@ export async function executeSaveProject(
     }
 
     const res = await projectPort.saveProject(files)
+    // The HMI Designer tab's design goes to hmi/ with the rest of the project.
+    if (res.success && !(await saveHmiDesignerDesign())) {
+      setEditingState('unsaved')
+      toast({ title: 'Error saving the HMI', description: 'No se pudo guardar el diseño del HMI.', variant: 'fail' })
+      return { success: false }
+    }
     if (res.success) {
       // Tell the version-control slice exactly which paths were just sent +
       // their content. The slice compares against baseline to add or remove
@@ -522,6 +529,13 @@ export async function executeSaveFile(
     setEditingState('unsaved')
     toast({ title: 'Error saving file', description, variant: 'fail' })
     return { success: false }
+  }
+
+  if (file.type === 'hmi-designer') {
+    if (!(await saveHmiDesignerDesign())) return fail('No se pudo guardar el diseño del HMI.')
+    updateFile({ name: fileName, saved: true, isNew: false })
+    setEditingState(checkIfAllFilesAreSaved() ? 'saved' : 'unsaved')
+    return { success: true }
   }
 
   try {
@@ -1049,6 +1063,10 @@ export async function reloadFileFromDisk(fileName: string, projectPort: ProjectP
   }
   if (file.type === 'library-manifest') {
     return reloadLibraryManifestFromCleanState(fileName)
+  }
+  if (file.type === 'hmi-designer') {
+    // "Don't save": the tab closes and the Designer page with it.
+    return { success: true }
   }
   // Everything else routes through the POU-specific reload.  Non-POU
   // file types that need a revert path should add a branch above

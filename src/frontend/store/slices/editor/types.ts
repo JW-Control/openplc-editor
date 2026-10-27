@@ -169,6 +169,12 @@ export type EditorModel = EditorModelBase &
         }
       }
     | {
+        type: 'plc-hmi-designer'
+        meta: {
+          name: string
+        }
+      }
+    | {
         type: 'plc-package-manager'
         meta: {
           name: string

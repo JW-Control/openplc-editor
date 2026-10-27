@@ -71,8 +71,15 @@ const AppLayout = ({ children, ...rest }: AppLayoutProps): ReactNode => {
     void initSystem()
   }, [system, projectPort, setSystemConfigs, setRecent])
 
-  // Resolution check (web: hides UI below minimum size; harmless on editor)
+  // Resolution check (web only: hides the UI below the minimum size). The
+  // desktop editor never hides it: a laptop with 125-150 % display scaling,
+  // a half-screen window or docked DevTools drop below 1024 CSS px and got
+  // the "mobile devices" screen.
   useEffect(() => {
+    if (caps.isNativeApplication) {
+      setShowComponent(true)
+      return
+    }
     const handleResize = () => {
       const { innerWidth: width, innerHeight: height } = window
       setShowComponent(width >= 1024 && height >= 300)
@@ -80,7 +87,7 @@ const AppLayout = ({ children, ...rest }: AppLayoutProps): ReactNode => {
     window.addEventListener('resize', handleResize)
     handleResize()
     return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  }, [caps.isNativeApplication])
 
   const showTitleBar = !caps.isNativeApplication || OS !== 'linux'
 
@@ -147,7 +154,7 @@ const AppLayout = ({ children, ...rest }: AppLayoutProps): ReactNode => {
           <AcceleratorHandler />
         </main>
       </div>
-      <ResolutionWarning />
+      {!showComponent && <ResolutionWarning />}
     </>
   )
 }

@@ -168,8 +168,11 @@ const createMainWindow = async () => {
     webPreferences: {
       sandbox: true,
       preload: app.isPackaged ? join(__dirname, 'preload.js') : join(__dirname, '../../configs/dll/preload.js'),
+      // Only for the JWPLC HMI Designer tab: hmiDesignerHost lets no other page attach.
+      webviewTag: true,
     },
   })
+  hmiDesignerHost.attachTo(mainWindow)
 
   // Load the Url or index.html file;
   void mainWindow.loadURL(resolveHtmlPath('index.html'))

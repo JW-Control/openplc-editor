@@ -24,6 +24,10 @@
     {
       "from": "./node_modules/strucpp/libs",
       "to": "./strucpp/libs"
+    },
+    {
+      "from": "./resources/jwplc-hmi-designer",
+      "to": "./jwplc-hmi-designer"
     }
   ],
   "mac": {

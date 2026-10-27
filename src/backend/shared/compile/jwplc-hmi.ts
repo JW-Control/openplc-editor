@@ -62,6 +62,20 @@ export function hasHmiDisplay(boardEntry: unknown): boolean {
   return value === true || (typeof value === 'object' && value !== null)
 }
 
+/**
+ * True for the VPP screen of the HMI itself (its sections persist under
+ * `hmi_*`, e.g. `hmi_diagnostics`): OpenPLC shows it inside "Pantalla HMI"
+ * of Configuration instead of as a second HMI entry of the project tree.
+ */
+export function isHmiVendorScreen(screenDefinition: unknown): boolean {
+  const sections = (screenDefinition as { sections?: Array<{ persistence?: unknown }> } | null | undefined)?.sections
+  return (
+    Array.isArray(sections) &&
+    sections.length > 0 &&
+    sections.every((section) => typeof section?.persistence === 'string' && section.persistence.startsWith('hmi_'))
+  )
+}
+
 export interface GenerateJwplcHmiInput {
   /** Contents of `hmi/JWPLC_HMI_Generated.h`, or undefined when absent. */
   header: string | undefined
@@ -102,12 +116,21 @@ interface ResolvedLink {
   hmiType: HmiType
   plc: string
   access: Access
+  /** `%MW1`, or the debug path (`INSTANCE0.MARCHA`) of an unlocated variable. */
   address: string
   plcType: string
+  /** `image`: runtime buffer (`int_memory[1]`); `program`: STruC++ debug table (unlocated variable). */
+  via: 'image' | 'program'
   pointer: string
-  /** Bound check emitted as `static_assert(index < limit)`. */
+  /** Bound check emitted as `static_assert(index < limit)` (image links only). */
   index: number
   limit: string
+}
+
+/** A PLC variable an HMI link may name, with its debug-table path. */
+interface PlcEntry {
+  variable: PLCVariable
+  path: string
 }
 
 export interface ImageSlot {
@@ -150,16 +173,60 @@ export function parseHmiVariables(header: string): Map<string, string> {
 }
 
 /** Every variable an HMI link may name: globals plus instantiated programs. */
-function bindableVariables(projectData: PLCProjectData): PLCVariable[] {
+function bindableEntries(projectData: PLCProjectData): PlcEntry[] {
   const resource = projectData.configuration?.resource
-  const variables: PLCVariable[] = [...(resource?.globalVariables ?? [])]
-  const programs = new Set((resource?.instances ?? []).map((instance) => instance.program.toLowerCase()))
+  // Debug-map paths (STruC++): globals by name, program variables as <INSTANCE>.<NAME>.
+  const entries: PlcEntry[] = (resource?.globalVariables ?? []).map((variable) => ({
+    variable,
+    path: variable.name.toUpperCase(),
+  }))
+  const instances = resource?.instances ?? []
   for (const pou of projectData.pous ?? []) {
-    if (pou.type === 'program' && programs.has(pou.data.name.toLowerCase())) {
-      variables.push(...pou.data.variables)
+    if (pou.type !== 'program') continue
+    // A program instantiated twice is reached through its first instance.
+    const instance = instances.find((candidate) => candidate.program.toLowerCase() === pou.data.name.toLowerCase())
+    if (!instance) continue
+    for (const variable of pou.data.variables) {
+      // VAR_EXTERNAL is the global itself (already listed).
+      if (variable.class === 'external') continue
+      entries.push({ variable, path: `${instance.name.toUpperCase()}.${variable.name.toUpperCase()}` })
     }
   }
-  return variables
+  return entries
+}
+
+/**
+ * Unlocated variables reached through the STruC++ debug table: the C type
+ * that holds the value and the clamp range for HMI writes.
+ */
+const PROGRAM_VAR_TYPES: Record<string, { cType: string; kind: 'bool' | 'number'; bounds?: string }> = {
+  BOOL: { cType: 'uint8_t', kind: 'bool' },
+  SINT: { cType: 'int8_t', kind: 'number', bounds: '-128.0, 127.0' },
+  USINT: { cType: 'uint8_t', kind: 'number', bounds: '0.0, 255.0' },
+  BYTE: { cType: 'uint8_t', kind: 'number', bounds: '0.0, 255.0' },
+  INT: { cType: 'int16_t', kind: 'number', bounds: '-32768.0, 32767.0' },
+  UINT: { cType: 'uint16_t', kind: 'number', bounds: '0.0, 65535.0' },
+  WORD: { cType: 'uint16_t', kind: 'number', bounds: '0.0, 65535.0' },
+  DINT: { cType: 'int32_t', kind: 'number', bounds: '-2147483648.0, 2147483647.0' },
+  UDINT: { cType: 'uint32_t', kind: 'number', bounds: '0.0, 4294967295.0' },
+  DWORD: { cType: 'uint32_t', kind: 'number', bounds: '0.0, 4294967295.0' },
+  REAL: { cType: 'float', kind: 'number' },
+}
+
+/** `'bool'` or `'number'` when an unlocated variable of this IEC type can be linked; otherwise why not. */
+export function programVarKind(iecType: string, variableClass?: string): string {
+  if (variableClass === 'temp') return 'variable temporal (VAR_TEMP): no existe entre scans'
+  const support = PROGRAM_VAR_TYPES[iecType.toUpperCase()]
+  if (!support)
+    return `${iecType.toUpperCase()} sin dirección todavía no se enlaza (BOOL, enteros hasta 32 bits y REAL)`
+  return support.kind
+}
+
+const PROGRAM_VAR_MARK = /@@JWPLC_HMI_VAR\(([^,()@]+),([A-Z]+)\)@@/g
+
+/** Placeholder for the debug-table indexes of an unlocated variable, resolved after STruC++. */
+function programVarMark(link: ResolvedLink): string {
+  return `@@JWPLC_HMI_VAR(${link.address},${link.plcType})@@`
 }
 
 const WORD_TYPES = ['INT', 'UINT', 'WORD'] as const
@@ -234,6 +301,7 @@ export function imageSlot(address: string): ImageSlot | string {
 
 /** C++ expression of the PLC value (its natural numeric type). */
 function plcValue(link: ResolvedLink): string {
+  if (link.via === 'program') return link.hmiType === 'bool' ? '(raw != 0)' : 'raw'
   const pointer = link.pointer
   if (link.hmiType === 'bool') return `(*${pointer} != 0)`
   if (pointer.startsWith('real_')) return `(*${pointer})`
@@ -253,6 +321,16 @@ function toHmi(link: ResolvedLink): string {
 
 /** C++ statement storing the HMI variable into PLC memory (RW links). */
 function toPlc(link: ResolvedLink): string {
+  if (link.via === 'program') {
+    const { cType, bounds } = PROGRAM_VAR_TYPES[link.plcType]
+    const value =
+      link.plcType === 'BOOL'
+        ? `(${cType})(${link.hmi} ? 1 : 0)`
+        : bounds === undefined
+          ? `(${cType})${link.hmi}`
+          : `(${cType})jwplcHmiClampRound((double)${link.hmi}, ${bounds})`
+    return `jwplcHmiWriteVar(${programVarMark(link)}, ${value});`
+  }
   const pointer = link.pointer
   if (link.plcType === 'REAL') return `jwplcHmiWriteReal(${pointer}, (float)${link.hmi});`
   const range: Record<string, [string, string, string]> = {
@@ -270,7 +348,7 @@ function toPlc(link: ResolvedLink): string {
 function resolveLink(
   link: BindingLink,
   hmiVariables: Map<string, string>,
-  plcVariables: PLCVariable[],
+  plcEntries: PlcEntry[],
 ): ResolvedLink | string {
   const hmiType = hmiVariables.get(link.hmi)
   if (hmiType === undefined) {
@@ -283,23 +361,21 @@ function resolveLink(
   let address = link.plc
   let plcType: string | undefined
   if (!link.plc.startsWith('%')) {
-    const matches = plcVariables.filter((variable) => variable.name.toLowerCase() === link.plc.toLowerCase())
+    const matches = plcEntries.filter((entry) => entry.variable.name.toLowerCase() === link.plc.toLowerCase())
     if (matches.length === 0) {
       return `HMI: la variable PLC "${link.plc}" (enlazada a "${link.hmi}") no existe en las variables globales ni en un programa instanciado.`
     }
-    const locations = new Set(matches.map((variable) => variable.location))
-    if (locations.size > 1) {
-      return `HMI: la variable PLC "${link.plc}" está declarada varias veces con direcciones distintas; renómbrala o usa la dirección directa.`
+    const places = new Set(matches.map((entry) => entry.variable.location || entry.path))
+    if (places.size > 1) {
+      return `HMI: la variable PLC "${link.plc}" está declarada en varios lugares (${[...places].join(', ')}); renómbrala o usa la dirección directa.`
     }
-    const variable = matches[0]
+    const { variable, path } = matches[0]
     if (variable.type.definition !== 'base-type') {
       return `HMI: la variable PLC "${link.plc}" es de un tipo de usuario; sólo se enlazan tipos elementales.`
     }
-    if (!variable.location) {
-      return `HMI: la variable PLC "${link.plc}" no tiene dirección (AT %I/%Q/%M); en esta versión sólo se enlazan variables ubicadas.`
-    }
-    address = variable.location
     plcType = variable.type.value.toUpperCase()
+    if (!variable.location) return resolveProgramLink(link, hmiType, plcType, path, variable.class)
+    address = variable.location
   }
 
   const slot = imageSlot(address)
@@ -325,9 +401,39 @@ function resolveLink(
     access: link.access,
     address: address.toUpperCase(),
     plcType,
+    via: 'image',
     pointer: slot.pointer,
     index: slot.index,
     limit: slot.limit,
+  }
+}
+
+/** Unlocated variable: read and written through the STruC++ debug table (any access). */
+function resolveProgramLink(
+  link: BindingLink,
+  hmiType: HmiType,
+  plcType: string,
+  path: string,
+  variableClass: string | undefined,
+): ResolvedLink | string {
+  const kind = programVarKind(plcType, variableClass)
+  if (kind !== 'bool' && kind !== 'number') return `HMI: la variable PLC "${link.plc}" es ${kind}.`
+  const hmiKind = hmiType === 'bool' ? 'bool' : 'number'
+  if (kind !== hmiKind) {
+    const expected = kind === 'bool' ? 'bool' : 'float o int32_t'
+    return `HMI: "${link.hmi}" es ${hmiType} y "${link.plc}" (${plcType}) necesita una variable HMI ${expected}.`
+  }
+  return {
+    hmi: link.hmi,
+    hmiType,
+    plc: link.plc,
+    access: link.access,
+    address: path,
+    plcType,
+    via: 'program',
+    pointer: '',
+    index: 0,
+    limit: '',
   }
 }
 
@@ -421,15 +527,20 @@ export function extractJwhmiBindings(jwhmiJson: string): BindingLink[] | string 
 
 function enabledGlue(links: ResolvedLink[]): string {
   const rw = links.filter((link) => link.access === 'RW')
-  const asserts = links.map(
-    (link) =>
-      `static_assert(${link.index} < ${link.limit}, "HMI: ${link.address} (${link.plc}) fuera del buffer del runtime");`,
-  )
+  const viaProgram = links.some((link) => link.via === 'program')
+  const asserts = links
+    .filter((link) => link.via === 'image')
+    .map(
+      (link) =>
+        `static_assert(${link.index} < ${link.limit}, "HMI: ${link.address} (${link.plc}) fuera del buffer del runtime");`,
+    )
   const shadows = rw.map((link) => `static ${link.hmiType} jwplcHmiShadow_${link.hmi};`)
   const writes = rw.map((link) =>
     [
       `    // ${link.hmi} -> ${link.plc} (${link.address}, ${link.plcType}): sólo si la pantalla cambió el valor`,
-      `    if (jwplcHmiSynced && ${link.pointer} != NULL && ${link.hmi} != jwplcHmiShadow_${link.hmi})`,
+      link.via === 'program'
+        ? `    if (jwplcHmiSynced && ${link.hmi} != jwplcHmiShadow_${link.hmi})`
+        : `    if (jwplcHmiSynced && ${link.pointer} != NULL && ${link.hmi} != jwplcHmiShadow_${link.hmi})`,
       '    {',
       `        ${toPlc(link)}`,
       `        jwplcHmiShadow_${link.hmi} = ${link.hmi};`,
@@ -438,6 +549,7 @@ function enabledGlue(links: ResolvedLink[]): string {
   )
   const reads = links.map((link) => {
     const comment = `    // ${link.hmi} ${link.access === 'RW' ? '<->' : '<-'} ${link.plc} (${link.address}, ${link.plcType})`
+    if (link.via === 'program') return programRead(link, comment)
     if (link.access === 'R') return `${comment}\n    if (${link.pointer} != NULL) ${link.hmi} = ${toHmi(link)};`
     return [
       comment,
@@ -476,6 +588,7 @@ function enabledGlue(links: ResolvedLink[]): string {
     '    memcpy(slot, &value, sizeof value);',
     '}',
     '',
+    ...(viaProgram ? PROGRAM_VAR_HELPERS : []),
     '// Redondea y limita al rango del tipo IEC destino.',
     'static inline long long jwplcHmiClampRound(double value, double low, double high)',
     '{',
@@ -506,6 +619,121 @@ function enabledGlue(links: ResolvedLink[]): string {
   ].join('\n')
 }
 
+const PROGRAM_VAR_HELPERS = [
+  '// Variables sin dirección: se leen y escriben por la tabla de depuración de STruC++',
+  '// (índices de debug-map.json, resueltos al compilar). La escritura no fuerza: si el',
+  '// depurador fuerza la variable, manda el forzado.',
+  'extern "C" uint16_t openplc_debug_read(uint8_t arr, uint16_t elem, uint8_t *dest);',
+  'extern "C" uint8_t openplc_debug_write(uint8_t arr, uint16_t elem, const uint8_t *bytes, uint16_t len);',
+  '',
+  'template <typename T>',
+  'static inline bool jwplcHmiReadVar(uint8_t arr, uint16_t elem, T &value)',
+  '{',
+  '    uint8_t bytes[sizeof(T)];',
+  '    if (openplc_debug_read(arr, elem, bytes) != sizeof(T)) return false;',
+  '    memcpy(&value, bytes, sizeof(T));',
+  '    return true;',
+  '}',
+  '',
+  'template <typename T>',
+  'static inline void jwplcHmiWriteVar(uint8_t arr, uint16_t elem, T value)',
+  '{',
+  '    uint8_t bytes[sizeof(T)];',
+  '    memcpy(bytes, &value, sizeof(T));',
+  '    openplc_debug_write(arr, elem, bytes, sizeof(T));',
+  '}',
+  '',
+]
+
+/** PLC -> HMI copy of an unlocated variable (debug table). */
+function programRead(link: ResolvedLink, comment: string): string {
+  const { cType } = PROGRAM_VAR_TYPES[link.plcType]
+  const read = `jwplcHmiReadVar(${programVarMark(link)}, raw)`
+  if (link.access === 'R') {
+    return [
+      comment,
+      '    {',
+      `        ${cType} raw;`,
+      `        if (${read}) ${link.hmi} = ${toHmi(link)};`,
+      '    }',
+    ].join('\n')
+  }
+  return [
+    comment,
+    '    {',
+    `        ${cType} raw;`,
+    `        if (${read})`,
+    '        {',
+    `            const ${link.hmiType} plc = ${toHmi(link)};`,
+    `            if (!jwplcHmiSynced || plc != jwplcHmiShadow_${link.hmi})`,
+    '            {',
+    `                ${link.hmi} = plc;`,
+    `                jwplcHmiShadow_${link.hmi} = plc;`,
+    '            }',
+    '        }',
+    '    }',
+  ].join('\n')
+}
+
+interface DebugMapLeaf {
+  arrayIdx: number
+  elemIdx: number
+  path: string
+  type: string
+}
+
+/**
+ * Replace the debug-table placeholders of `jwplc_hmi.h` with the indexes of
+ * STruC++'s `debug-map.json` (known only after the ST compile). Errors name
+ * the variable when the map lacks it or gives it another type.
+ */
+export function resolveJwplcHmiProgramVars(glue: string, debugMapJson: string): { text: string; errors: string[] } {
+  const marks = [...glue.matchAll(PROGRAM_VAR_MARK)]
+  if (marks.length === 0) return { text: glue, errors: [] }
+  let leaves: DebugMapLeaf[]
+  try {
+    const parsed = JSON.parse(debugMapJson) as { leaves?: unknown }
+    if (!Array.isArray(parsed.leaves)) throw new Error('sin "leaves"')
+    leaves = parsed.leaves as DebugMapLeaf[]
+  } catch (error) {
+    return {
+      text: glue,
+      errors: [
+        `HMI: no se pudo leer el mapa de depuración del programa (debug-map.json: ${(error as Error).message}); las variables sin dirección no se pueden enlazar.`,
+      ],
+    }
+  }
+  const byPath = new Map(leaves.map((leaf) => [String(leaf.path).toUpperCase(), leaf]))
+  const errors = new Set<string>()
+  const text = glue.replace(PROGRAM_VAR_MARK, (_mark, path: string, type: string) => {
+    const leaf = byPath.get(path.toUpperCase())
+    if (!leaf) {
+      errors.add(
+        `HMI: ${path} no está en el mapa de depuración del programa compilado; no se puede enlazar a la pantalla.`,
+      )
+      return '0, 0'
+    }
+    if (String(leaf.type).toUpperCase() !== type) {
+      errors.add(`HMI: ${path} es ${leaf.type} en el programa compilado y el enlace esperaba ${type}.`)
+    }
+    return `${leaf.arrayIdx}, ${leaf.elemIdx}`
+  })
+  return { text, errors: [...errors] }
+}
+
+/** Pipeline hook: resolve the HMI placeholders of the firmware skeleton with the debug map. */
+export function finalizeJwplcHmiSkeleton(
+  skeleton: Record<string, string>,
+  debugMapJson: string,
+): { files: Record<string, string>; errors: string[] } {
+  const key = `src/${JWPLC_HMI_GLUE_FILE}`
+  const glue = skeleton[key]
+  if (glue === undefined) return { files: skeleton, errors: [] }
+  const { text, errors } = resolveJwplcHmiProgramVars(glue, debugMapJson)
+  if (errors.length > 0) return { files: skeleton, errors }
+  return { files: { ...skeleton, [key]: text }, errors: [] }
+}
+
 /** Build the HMI files for a board that declares `hmiDisplay`. */
 export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmiResult {
   const { header, bindingsJson, jwhmiJson, projectData } = input
@@ -515,16 +743,18 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
   if (header === undefined) {
     const orphan =
       jwhmiJson !== undefined ? JWPLC_HMI_PROJECT_FILE : bindingsJson !== undefined ? JWPLC_HMI_BINDINGS_FILE : null
-    if (orphan !== null) {
-      return fail([
-        `HMI: hay ${JWPLC_HMI_PROJECT_DIR}/${orphan} pero falta ${headerPath}. En JWPLC HMI Designer pulsa "Actualizar HMI".`,
-      ])
-    }
+    // A design without its header (never "Actualizar HMI") does not stop the build: the board shows the IDLE.
     return {
       files: { [`src/${JWPLC_HMI_GLUE_FILE}`]: disabledGlue() },
       errors: [],
-      messages: [`HMI: el proyecto no tiene pantalla (${headerPath}); la placa muestra sólo la IDLE.`],
-      warnings: [],
+      messages:
+        orphan === null ? [`HMI: el proyecto no tiene pantalla (${headerPath}); la placa muestra sólo la IDLE.`] : [],
+      warnings:
+        orphan === null
+          ? []
+          : [
+              `HMI: hay ${JWPLC_HMI_PROJECT_DIR}/${orphan} pero falta ${headerPath}; se compila sin la pantalla del proyecto (la placa muestra la IDLE). En JWPLC HMI Designer pulsa "Actualizar HMI".`,
+            ],
     }
   }
 
@@ -541,7 +771,7 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
   const links = [...projectLinks, ...fileLinks]
 
   const hmiVariables = parseHmiVariables(header)
-  const plcVariables = bindableVariables(projectData)
+  const plcEntries = bindableEntries(projectData)
   const errors: string[] = []
   const resolved: ResolvedLink[] = []
   const seen = new Set<string>()
@@ -551,7 +781,7 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
       continue
     }
     seen.add(link.hmi)
-    const result = resolveLink(link, hmiVariables, plcVariables)
+    const result = resolveLink(link, hmiVariables, plcEntries)
     if (typeof result === 'string') errors.push(result)
     else resolved.push(result)
   }
@@ -564,7 +794,8 @@ export function generateJwplcHmi(input: GenerateJwplcHmiInput): GenerateJwplcHmi
     )
   }
   for (const link of resolved) {
-    messages.push(`HMI: ${link.hmi} ${link.access === 'RW' ? '<->' : '<-'} ${link.plc} (${link.address})`)
+    const where = link.via === 'program' ? `${link.address}, sin dirección` : link.address
+    messages.push(`HMI: ${link.hmi} ${link.access === 'RW' ? '<->' : '<-'} ${link.plc} (${where})`)
   }
 
   return {

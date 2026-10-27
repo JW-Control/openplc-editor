@@ -74,6 +74,9 @@ uint16_t openplc_debug_elem_count(uint8_t arr);
 uint16_t openplc_debug_size(uint8_t arr, uint16_t elem);
 uint16_t openplc_debug_read(uint8_t arr, uint16_t elem, uint8_t* dest);
 uint8_t  openplc_debug_set(uint8_t arr, uint16_t elem, uint8_t forcing, const uint8_t* bytes, uint16_t len);
+// Soft write (no forcing): like a write from the program. Ignored while the
+// variable is forced. Used by the JWPLC HMI screen for unlocated variables.
+uint8_t  openplc_debug_write(uint8_t arr, uint16_t elem, const uint8_t* bytes, uint16_t len);
 
 #ifdef __cplusplus
 }

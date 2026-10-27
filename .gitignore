@@ -79,3 +79,6 @@ logs_*/
 
 # JWPLC local release exports
 /release/jwplc-final/
+
+# JWPLC HMI Designer copied from platform-jwplc by the pre-release workflow (bundled into the installer)
+resources/jwplc-hmi-designer/poc/
