@@ -36,6 +36,7 @@ export type WorkspaceProjectTreeLeafType =
   | 'server'
   | 'remote-device'
   | 'vendor-screen'
+  | 'hmi-designer'
   | 'package-manager'
   | 'library-manager'
   | 'library-manifest'

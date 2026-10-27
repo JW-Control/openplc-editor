@@ -4,11 +4,13 @@ import {
   CreateDiffViewerEditor,
   CreateEditorModelObject,
   CreateEditorObjectFromTab,
+  CreateHmiDesignerEditor,
   CreatePLCGraphicalObject,
   CreatePLCTextualObject,
   CreateRemoteDeviceEditor,
   CreateResourceEditor,
   CreateServerEditor,
+  HMI_DESIGNER_TAB_NAME,
 } from '../slices/tabs/utils'
 
 describe('tabs/utils', () => {
@@ -302,6 +304,17 @@ describe('tabs/utils', () => {
         expect(result.meta.filePath).toBe('devices/configuration.json')
         expect(result.meta.name).toBe('Diff: devices/configuration.json')
       }
+    })
+
+    it('creates editor from hmi-designer tab', () => {
+      const tab: TabsProps = { name: HMI_DESIGNER_TAB_NAME, elementType: { type: 'hmi-designer' } }
+      expect(CreateEditorObjectFromTab(tab)).toEqual({ type: 'plc-hmi-designer', meta: { name: 'HMI Designer' } })
+    })
+  })
+
+  describe('CreateHmiDesignerEditor', () => {
+    it('defaults to the canonical tab name', () => {
+      expect(CreateHmiDesignerEditor()).toEqual({ type: 'plc-hmi-designer', meta: { name: HMI_DESIGNER_TAB_NAME } })
     })
   })
 })

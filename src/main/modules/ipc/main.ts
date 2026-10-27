@@ -47,6 +47,7 @@ import { getOpenProjectPath, getProjectPath } from '../../../backend/editor/util
 import { WebSocketDebugTransport } from '../../../backend/shared/debug/websocket-debug-transport'
 import { SimulatorModule } from '../../../backend/shared/simulator/simulator-module'
 import { VirtualSerialPort } from '../../../backend/shared/simulator/virtual-serial-port'
+import { hmiDesignerHost } from '../hmi-designer'
 
 class MainProcessBridge implements MainIpcModule {
   ipcMain
@@ -1268,10 +1269,13 @@ class MainProcessBridge implements MainIpcModule {
   }
   handleAppQuit = () => {
     this.simulatorModule.stop()
-    if (this.mainWindow) {
-      this.mainWindow.destroy()
-    }
-    app.quit()
+    // The design open in the HMI Designer tab is kept, like the project files.
+    void hmiDesignerHost.flush().finally(() => {
+      if (this.mainWindow) {
+        this.mainWindow.destroy()
+      }
+      app.quit()
+    })
   }
 
   // Compiler service handlers
@@ -1348,7 +1352,9 @@ class MainProcessBridge implements MainIpcModule {
 
   // Window controls handlers
   handleWindowControlsClose = () => this.mainWindow?.close()
-  handleWindowControlsClosed = () => this.mainWindow?.destroy()
+  handleWindowControlsClosed = () => {
+    void hmiDesignerHost.flush().finally(() => this.mainWindow?.destroy())
+  }
   handleWindowControlsHide = () => this.mainWindow?.hide()
   handleWindowControlsMinimize = () => this.mainWindow?.minimize()
   handleWindowControlsMaximize = () => {

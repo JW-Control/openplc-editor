@@ -1,4 +1,4 @@
-import { GitCompare } from 'lucide-react'
+import { GitCompare, Monitor } from 'lucide-react'
 import type React from 'react'
 import { ComponentPropsWithoutRef, useCallback } from 'react'
 
@@ -52,6 +52,7 @@ const TabIcons: Record<string, React.ReactNode> = {
   'remote-device': <RemoteDeviceIcon className='h-4 w-4 flex-shrink-0' />,
   server: <ServerIcon className='h-4 w-4 flex-shrink-0' />,
   'vendor-screen': <ConfigIcon className='h-4 w-4 flex-shrink-0' />,
+  'hmi-designer': <Monitor className='h-4 w-4 flex-shrink-0 text-[#0464FB]' />,
   'package-manager': <ConfigIcon className='h-4 w-4 flex-shrink-0' />,
   'ethercat-device': <DeviceTransferIcon className='h-4 w-4 flex-shrink-0' />,
   'library-manager': <LibraryIcon className='h-4 w-4 flex-shrink-0' />,
@@ -83,6 +84,7 @@ const Tab = (props: ITabProps) => {
     | 'remote-device'
     | 'server'
     | 'vendor-screen'
+    | 'hmi-designer'
     | 'package-manager'
     | 'ethercat-device'
     | 'library-manager'
@@ -110,6 +112,9 @@ const Tab = (props: ITabProps) => {
   }
   if (fileDerivation?.type === 'vendor-screen') {
     languageOrDerivation = 'vendor-screen'
+  }
+  if (fileDerivation?.type === 'hmi-designer') {
+    languageOrDerivation = 'hmi-designer'
   }
   if (fileDerivation?.type === 'package-manager') {
     languageOrDerivation = 'package-manager'

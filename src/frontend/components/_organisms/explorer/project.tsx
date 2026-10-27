@@ -1,3 +1,4 @@
+import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
 import { useEffect, useState } from 'react'
 
 import { projectCapabilities } from '../../../../middleware/shared/ports/types'
@@ -6,7 +7,11 @@ import { FolderIcon } from '../../../assets/icons/interface/Folder'
 import { useOpenPLCStore } from '../../../store'
 import { extractSearchQuery } from '../../../store/slices/search/utils'
 import type { TabsProps } from '../../../store/slices/tabs'
-import { CreateEditorObjectFromTab, LIBRARY_MANIFEST_TAB_NAME } from '../../../store/slices/tabs/utils'
+import {
+  CreateEditorObjectFromTab,
+  HMI_DESIGNER_TAB_NAME,
+  LIBRARY_MANIFEST_TAB_NAME,
+} from '../../../store/slices/tabs/utils'
 import { useToast } from '../../_features/[app]/toast/use-toast'
 import { CreatePLCElement } from '../../_features/[workspace]/create-element'
 import {
@@ -394,6 +399,23 @@ const Project = () => {
                 }
               />
             ))}
+
+          {/* JWPLC HMI Designer — boards with an HMI display (JWPLC Basic). */}
+          {projectCaps.hasVendorScreens && capabilities.hasLocalSerialPorts && hasHmiDisplay(currentBoardInfo) && (
+            <ProjectTreeLeaf
+              key='hmi-designer'
+              leafLang='hmiDesigner'
+              leafType='hmi-designer'
+              label={HMI_DESIGNER_TAB_NAME}
+              onClick={() =>
+                handleCreateTab({
+                  name: HMI_DESIGNER_TAB_NAME,
+                  path: '/hmi-designer',
+                  elementType: { type: 'hmi-designer' },
+                })
+              }
+            />
+          )}
 
           {/* Project Servers tree branch — gated by project type only.
            *  The Servers branch must remain visible on platforms that

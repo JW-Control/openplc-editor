@@ -22,6 +22,7 @@ import { EtherCATDeviceEditor, EtherCATEditor } from '../components/_features/[w
 import { RemoteDeviceEditor } from '../components/_features/[workspace]/editor/device/remote-device'
 import { DiffViewerEditor } from '../components/_features/[workspace]/editor/diff-viewer'
 import { GraphicalEditor } from '../components/_features/[workspace]/editor/graphical'
+import { HmiDesignerEditor } from '../components/_features/[workspace]/editor/hmi-designer'
 import { LibraryManagerEditor } from '../components/_features/[workspace]/editor/library-manager'
 import { LibraryManifestEditor } from '../components/_features/[workspace]/editor/library-manifest'
 import { MonacoEditor } from '../components/_features/[workspace]/editor/monaco'
@@ -707,6 +708,21 @@ const WorkspaceScreen = () => {
                         {editor['type'] === 'plc-library-manager' && <LibraryManagerEditor />}
                         {editor['type'] === 'plc-library-manifest' && <LibraryManifestEditor />}
                         {editor['type'] === 'diff-viewer' && <DiffViewerEditor />}
+
+                        {/* JWPLC HMI Designer — kept mounted while its tab is
+                            open: the Designer page (webview) holds the design
+                            and its undo history, so a tab switch only hides it. */}
+                        {editors.some((m) => m.type === 'plc-hmi-designer') && (
+                          <div
+                            className={cn(
+                              'h-full w-full',
+                              editor.type !== 'plc-hmi-designer' &&
+                                'pointer-events-none invisible absolute inset-0 -z-10',
+                            )}
+                          >
+                            <HmiDesignerEditor />
+                          </div>
+                        )}
 
                         {/* EtherCAT device editors — multi-instance (one tab
                             per `deviceId`).  Kept mounted across tab switches

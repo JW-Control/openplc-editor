@@ -24,7 +24,7 @@
 import type { HmiHostVariable } from '../../../backend/shared/compile/jwplc-hmi-host'
 import type { BoardInfo, CommunicationPort } from './types'
 
-/** Arguments to open JWPLC HMI Designer on the current project (Alpha14 F3). */
+/** Arguments to link JWPLC HMI Designer to the current project (Alpha14 F3). */
 export type OpenHmiDesignerArgs = {
   /** Project folder (or its project.json). */
   projectPath: string
@@ -34,7 +34,8 @@ export type OpenHmiDesignerArgs = {
   variables: HmiHostVariable[]
 }
 
-export type OpenHmiDesignerResult = { ok: true } | { ok: false; error: string }
+/** The HMI Designer tab loads `url` in its `<webview>`. */
+export type PrepareHmiDesignerResult = { ok: true; url: string } | { ok: false; error: string }
 
 export type JwplcDiscoveredDevice = {
   ipAddress: string
@@ -100,8 +101,18 @@ export interface DevicePort {
   getPreviewImage(imageName: string, packagePath?: string): Promise<string>
 
   /**
-   * Open JWPLC HMI Designer in its own window, linked to the project's `hmi/`
-   * folder (contract `jwplc-hmi-host/1`). Editor only; web leaves it undefined.
+   * Link JWPLC HMI Designer to the project's `hmi/` folder (contract
+   * `jwplc-hmi-host/1`) and get the page the HMI Designer tab shows.
+   * Editor only; web leaves the HMI Designer calls undefined.
    */
-  openHmiDesigner?(args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult>
+  prepareHmiDesigner?(args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult>
+
+  /** The project's PLC variables changed: the Designer lists them again. */
+  updateHmiDesignerVariables?(variables: HmiHostVariable[]): Promise<{ ok: boolean }>
+
+  /** Save the open design to `hmi/` (header and `JWPLC_HMI.jwhmi`). */
+  saveHmiDesigner?(): Promise<{ ok: boolean }>
+
+  /** Unsaved changes of the design; returns the unsubscribe function. */
+  onHmiDesignerDirty?(callback: (dirty: boolean) => void): () => void
 }

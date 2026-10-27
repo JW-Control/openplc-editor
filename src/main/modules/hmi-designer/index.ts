@@ -1,18 +1,21 @@
 /**
  * JWPLC HMI Designer hosted by OpenPLC (`jwplc-hmi-host/1`, bridge 1.1).
  *
- * Opens the Designer (the same web files as the stand-alone .exe) in its own
- * window, served read-only from 127.0.0.1, with a preload that exposes:
+ * Shows the Designer (the same web files as the stand-alone .exe) inside the
+ * OpenPLC window, in the `<webview>` of the "HMI Designer" tab, served
+ * read-only from 127.0.0.1, with a preload that exposes:
  *
  * - `window.JWPLCHMINative`: the bridge the Designer uses with its .exe. Here
  *   the "linked sketch" is always the open OpenPLC project's `hmi/` folder:
  *   "Actualizar HMI" / Save write the header and `JWPLC_HMI.jwhmi` there, the
- *   Designer opens that project itself (`readProject`), asks before closing
- *   with unsaved changes and picks serial ports with its own dialog (Live).
+ *   Designer opens that project itself (`readProject`) and picks serial ports
+ *   with its own dialog (Live). Unsaved changes show on the tab like any
+ *   OpenPLC file, and OpenPLC's Save writes the design too.
  *   Sketch-only calls (create/change sketch, recent projects, Arduino IDE)
  *   are not exposed: the Designer hides them in OpenPLC mode.
- * - `window.JWPLCHMIHost`: project context and PLC variables (`listVariables`)
- *   for the Designer's OpenPLC mode.
+ * - `window.JWPLCHMIHost`: project context and PLC variables (`listVariables`,
+ *   refreshed when the project's variables change) for the Designer's OpenPLC
+ *   mode.
  *
  * Contract: platform-jwplc docs/v2.1.0-alpha.14/A14_F3_CONTRATO_HMI_OPENPLC_20261017.md
  *
@@ -30,7 +33,16 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 
-import { app, BrowserWindow, IpcMain, IpcMainEvent, IpcMainInvokeEvent, session, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  IpcMain,
+  IpcMainEvent,
+  IpcMainInvokeEvent,
+  session,
+  shell,
+  type WebContents,
+} from 'electron'
 
 import {
   JWPLC_HMI_HEADER_FILE,
@@ -43,7 +55,7 @@ import {
   type HmiHostVariable,
   pickJwhmiToLoad,
 } from '../../../backend/shared/compile/jwplc-hmi-host'
-import type { OpenHmiDesignerArgs, OpenHmiDesignerResult } from '../../../middleware/shared/ports/device-port'
+import type { OpenHmiDesignerArgs, PrepareHmiDesignerResult } from '../../../middleware/shared/ports/device-port'
 
 const HEADER_MARKER = '// Código generado por JWPLC HMI Designer'
 const MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -51,7 +63,7 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024
 const DESIGNER_PARTITION = 'persist:jwplc-hmi-designer'
 // Files that only exist in a Designer with the flow this host expects.
 const REQUIRED_DESIGNER_FILES = ['desktop.html', 'designer-save-flow.js', 'designer-openplc-host.js']
-const CLOSE_GUARD_TIMEOUT_MS = 2000
+const SAVE_ON_QUIT_TIMEOUT_MS = 3000
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -81,6 +93,11 @@ interface SerialPortRequest {
 
 type DesignerRoot = { root: string } | { error: string }
 
+const designerPreloadPath = () =>
+  app.isPackaged
+    ? join(__dirname, 'hmi-designer-preload.js')
+    : join(__dirname, '../../configs/dll/hmi-designer-preload.js')
+
 const designerCandidates = () =>
   [
     process.env.JWPLC_HMI_DESIGNER_DIR,
@@ -108,7 +125,10 @@ export function resolveDesignerRoot(): DesignerRoot {
 }
 
 class HmiDesignerHost {
-  private window: BrowserWindow | null = null
+  /** The Designer page: the `<webview>` of the HMI Designer tab. */
+  private guest: WebContents | null = null
+  /** The OpenPLC renderer that owns the tab. */
+  private owner: WebContents | null = null
   private server: http.Server | null = null
   private baseUrl = ''
   private session: Session | null = null
@@ -117,20 +137,34 @@ class HmiDesignerHost {
   private serialPickerReady = false
   private serialRequest: SerialPortRequest | null = null
   private serialRequestSeq = 0
-  private closeGuardReady = false
-  private allowClose = false
-  private closeGuardTimer: NodeJS.Timeout | undefined
 
   register(ipcMain: IpcMain): void {
     if (this.registered) return
     this.registered = true
 
-    ipcMain.handle('hmi-designer:open', (event, args: OpenHmiDesignerArgs) => this.open(event, args))
+    const fromEditor = <T>(handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<T> | T) => {
+      return async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+        if (this.isDesigner(event)) return { ok: false, error: 'Canal reservado al editor.' }
+        return handler(event, ...args)
+      }
+    }
+    ipcMain.handle(
+      'hmi-designer:prepare',
+      fromEditor((event, args) => this.prepare(event, args as OpenHmiDesignerArgs)),
+    )
+    ipcMain.handle(
+      'hmi-designer:update-variables',
+      fromEditor((_event, variables) => this.updateVariables(variables)),
+    )
+    ipcMain.handle(
+      'hmi-designer:save',
+      fromEditor(async () => ({ ok: this.session ? await this.saveOpenProject(this.session) : false })),
+    )
 
     const fromDesigner = <T>(handler: (session: Session, ...args: unknown[]) => Promise<T> | T) => {
       return async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
         if (!this.isDesigner(event) || !this.session) {
-          return { ok: false, error: 'Canal reservado a la ventana del HMI Designer.' }
+          return { ok: false, error: 'Canal reservado al HMI Designer.' }
         }
         return handler(this.session, ...args)
       }
@@ -187,14 +221,9 @@ class HmiDesignerHost {
       fromDesigner((session) => this.readProject(session)),
     )
 
-    // Closing with unsaved changes: the Designer asks and then confirms.
-    onDesigner('jwplc-hmi:close-guard-ready', () => {
-      this.closeGuardReady = true
-    })
-    onDesigner('jwplc-hmi:close-guard-ack', () => clearTimeout(this.closeGuardTimer))
-    onDesigner('jwplc-hmi:close-confirmed', () => {
-      this.allowClose = true
-      this.window?.close()
+    // Unsaved changes of the design: the tab shows them like any other file.
+    onDesigner('jwplc-hmi-host:dirty', (payload) => {
+      if (this.owner && !this.owner.isDestroyed()) this.owner.send('hmi-designer:dirty', Boolean(payload))
     })
 
     // Serial port picker of the Designer (designer-port-picker.js).
@@ -208,14 +237,61 @@ class HmiDesignerHost {
     })
   }
 
-  private isDesigner(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
-    return Boolean(this.window && !this.window.isDestroyed() && event.sender === this.window.webContents)
+  /**
+   * The OpenPLC window hosts the Designer in a `<webview>`: only the
+   * Designer page served by this host may attach, always with the
+   * Designer preload and its own partition.
+   */
+  attachTo(window: BrowserWindow): void {
+    window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+      if (!this.baseUrl || !params.src.startsWith(`${this.baseUrl}/`)) {
+        event.preventDefault()
+        return
+      }
+      webPreferences.preload = designerPreloadPath()
+      webPreferences.partition = DESIGNER_PARTITION
+      webPreferences.sandbox = true
+      webPreferences.contextIsolation = true
+      webPreferences.nodeIntegration = false
+      params.partition = DESIGNER_PARTITION
+    })
+    window.webContents.on('did-attach-webview', (_event, guest) => this.adoptGuest(guest))
   }
 
-  private async open(event: IpcMainInvokeEvent, args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult> {
-    if (this.isDesigner(event)) {
-      return { ok: false, error: 'Canal reservado al editor.' }
-    }
+  /** Save the open design before OpenPLC closes (no dialog, like the files of the project). */
+  async flush(timeoutMs = SAVE_ON_QUIT_TIMEOUT_MS): Promise<void> {
+    const current = this.session
+    if (!current || !this.guest || this.guest.isDestroyed()) return
+    await Promise.race([
+      this.saveOpenProject(current),
+      new Promise((resolveTimeout) => setTimeout(resolveTimeout, timeoutMs)),
+    ])
+  }
+
+  private isDesigner(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
+    return Boolean(this.guest && !this.guest.isDestroyed() && event.sender === this.guest)
+  }
+
+  private adoptGuest(guest: WebContents): void {
+    this.guest = guest
+    this.serialPickerReady = false
+    guest.setWindowOpenHandler(() => ({ action: 'deny' }))
+    guest.on('will-navigate', (navigation, url) => {
+      if (!url.startsWith(this.baseUrl)) navigation.preventDefault()
+    })
+    guest.on('did-start-navigation', (details) => {
+      // The new page registers its serial picker again.
+      if (details.isMainFrame) this.serialPickerReady = false
+    })
+    guest.once('destroyed', () => {
+      if (this.guest !== guest) return
+      this.guest = null
+      this.serialRequest?.finish('')
+    })
+  }
+
+  /** Link the Designer to the open project; the tab then loads the returned URL. */
+  private async prepare(event: IpcMainInvokeEvent, args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult> {
     const projectDir = resolve(String(args?.projectPath ?? '').replace(/project\.json$/i, ''))
     if (!args?.projectPath || !existsSync(join(projectDir, 'project.json'))) {
       return { ok: false, error: 'Guarda el proyecto antes de abrir el HMI Designer.' }
@@ -224,8 +300,9 @@ class HmiDesignerHost {
     if ('error' in designer) return { ok: false, error: designer.error }
 
     const previous = this.session
-    const sameProject = previous?.projectDir === projectDir
-    if (previous && !sameProject) await this.saveOpenProject(previous)
+    // Another project while the Designer still shows the previous one: keep that design.
+    if (previous && previous.projectDir !== projectDir) await this.saveOpenProject(previous)
+    this.owner = event.sender
     this.session = {
       projectDir,
       hmiDir: join(projectDir, JWPLC_HMI_PROJECT_DIR),
@@ -233,78 +310,16 @@ class HmiDesignerHost {
       device: String(args.device || ''),
       variables: Array.isArray(args.variables) ? args.variables : [],
     }
-
-    if (this.window && !this.window.isDestroyed()) {
-      // Another project: reload so the Designer starts from that project's hmi/.
-      if (!sameProject) await this.window.loadURL(`${this.baseUrl}/desktop.html?host=openplc`)
-      this.window.focus()
-      return { ok: true }
-    }
-
     await this.startServer(designer.root)
     this.installSerialSupport()
-    const owner = BrowserWindow.fromWebContents(event.sender)
-    const preload = app.isPackaged
-      ? join(__dirname, 'hmi-designer-preload.js')
-      : join(__dirname, '../../configs/dll/hmi-designer-preload.js')
-    const window = new BrowserWindow({
-      width: 1500,
-      height: 920,
-      title: `JWPLC HMI Designer · ${this.session.projectName}`,
-      autoHideMenuBar: true,
-      webPreferences: {
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        preload,
-        partition: DESIGNER_PARTITION,
-        backgroundThrottling: false,
-      },
-    })
-    this.window = window
-    this.allowClose = false
-    this.closeGuardReady = false
-    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    window.webContents.on('will-navigate', (navigation, url) => {
-      if (!url.startsWith(this.baseUrl)) navigation.preventDefault()
-    })
-    window.webContents.on('did-start-navigation', (details) => {
-      // The new page registers its close guard and serial picker again.
-      if (details.isMainFrame) {
-        this.closeGuardReady = false
-        this.serialPickerReady = false
-      }
-    })
-    window.on('page-title-updated', (titleEvent) => titleEvent.preventDefault())
-    window.on('close', (closeEvent) => {
-      if (this.allowClose || !this.closeGuardReady || window.webContents.isCrashed()) return
-      // The Designer asks about unsaved changes; if it hangs, close anyway.
-      closeEvent.preventDefault()
-      window.webContents.send('jwplc-hmi:close-requested')
-      clearTimeout(this.closeGuardTimer)
-      this.closeGuardTimer = setTimeout(() => {
-        this.allowClose = true
-        if (!window.isDestroyed()) window.close()
-      }, CLOSE_GUARD_TIMEOUT_MS)
-    })
-    window.on('closed', () => {
-      clearTimeout(this.closeGuardTimer)
-      this.serialRequest?.finish('')
-      this.window = null
-      this.server?.close()
-      this.server = null
-    })
-    owner?.once('closed', () => {
-      if (!this.window || this.window.isDestroyed()) return
-      // OpenPLC is closing: keep the design (no dialog), then close.
-      const designerWindow = this.window
-      const current = this.session
-      void (current ? this.saveOpenProject(current) : Promise.resolve(false)).finally(() => {
-        if (!designerWindow.isDestroyed()) designerWindow.destroy()
-      })
-    })
+    return { ok: true, url: `${this.baseUrl}/desktop.html?host=openplc` }
+  }
 
-    await window.loadURL(`${this.baseUrl}/desktop.html?host=openplc`)
+  /** The project's variables changed in the editor: the Designer asks for them again. */
+  private updateVariables(variables: unknown): { ok: boolean } {
+    if (!this.session || !Array.isArray(variables)) return { ok: false }
+    this.session.variables = variables as HmiHostVariable[]
+    if (this.guest && !this.guest.isDestroyed()) this.guest.send('jwplc-hmi-host:variables-changed')
     return { ok: true }
   }
 
@@ -377,8 +392,8 @@ class HmiDesignerHost {
 
     const sendPortList = () => {
       const request = this.serialRequest
-      if (!request || !this.window || this.window.isDestroyed()) return
-      this.window.webContents.send('jwplc-hmi:serial-port-list', {
+      if (!request || !this.guest || this.guest.isDestroyed()) return
+      this.guest.send('jwplc-hmi:serial-port-list', {
         requestId: request.requestId,
         ports: [...request.ports.values()].map(describeHmiSerialPort),
       })
@@ -442,14 +457,16 @@ class HmiDesignerHost {
   }
 
   /**
-   * Save the Designer's current design to hmi/ without asking (switching
-   * project or closing OpenPLC): the header first, then JWPLC_HMI.jwhmi, so the
-   * next compile never finds a design without its header.
+   * Save the Designer's current design to hmi/ without asking (Save in
+   * OpenPLC, switching project or closing OpenPLC): the header first, then
+   * JWPLC_HMI.jwhmi, so the next compile never finds a design without its
+   * header. The Designer then counts it as saved.
    */
   private async saveOpenProject(session: Session): Promise<boolean> {
-    if (!this.window || this.window.isDestroyed()) return false
+    const guest = this.guest
+    if (!guest || guest.isDestroyed()) return false
     try {
-      const { header, project } = (await this.window.webContents.executeJavaScript(
+      const { header, project } = (await guest.executeJavaScript(
         `(async () => {
           const api = window.JWPLCHMIProject;
           if (!api || !api.serialize) return { header: '', project: '' };
@@ -462,6 +479,9 @@ class HmiDesignerHost {
       if (!project) return false
       if (header) await this.writeHeader(session, { text: header })
       const result = await this.writeProject(session, { text: project })
+      if (result.ok && !guest.isDestroyed()) {
+        await guest.executeJavaScript('window.JWPLCHMISaveFlow && window.JWPLCHMISaveFlow.markSaved()', true)
+      }
       return result.ok
     } catch {
       return false

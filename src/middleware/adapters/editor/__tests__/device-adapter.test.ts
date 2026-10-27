@@ -29,7 +29,10 @@ beforeEach(() => {
     refreshAvailableBoards: jest.fn().mockResolvedValue(mockRefreshResult),
     refreshCommunicationPorts: jest.fn().mockResolvedValue(mockPorts),
     getPreviewImage: jest.fn().mockResolvedValue('data:image/png;base64,abc123'),
-    openHmiDesigner: jest.fn().mockResolvedValue({ ok: true }),
+    prepareHmiDesigner: jest.fn().mockResolvedValue({ ok: true, url: 'http://127.0.0.1:1/desktop.html?host=openplc' }),
+    updateHmiDesignerVariables: jest.fn().mockResolvedValue({ ok: true }),
+    saveHmiDesigner: jest.fn().mockResolvedValue({ ok: true }),
+    onHmiDesignerDirty: jest.fn().mockReturnValue(() => undefined),
     discoverJwplcDevices: jest.fn().mockResolvedValue({ devices: [] }),
   } as unknown as typeof window.bridge
 })
@@ -80,9 +83,26 @@ describe('createEditorDeviceAdapter', () => {
     await expect(adapter.discoverJwplcDevices()).resolves.toEqual({ devices: [] })
   })
 
-  it('opens JWPLC HMI Designer through window.bridge', async () => {
+  it('links JWPLC HMI Designer to the project through window.bridge', async () => {
     const args = { projectPath: '/p', projectName: 'P', device: 'JWPLC', variables: [] }
-    await expect(adapter.openHmiDesigner?.(args)).resolves.toEqual({ ok: true })
-    expect(window.bridge.openHmiDesigner).toHaveBeenCalledWith(args)
+    await expect(adapter.prepareHmiDesigner?.(args)).resolves.toEqual({
+      ok: true,
+      url: 'http://127.0.0.1:1/desktop.html?host=openplc',
+    })
+    expect(window.bridge.prepareHmiDesigner).toHaveBeenCalledWith(args)
+  })
+
+  it('sends the PLC variables and saves the design through window.bridge', async () => {
+    await expect(adapter.updateHmiDesignerVariables?.([])).resolves.toEqual({ ok: true })
+    expect(window.bridge.updateHmiDesignerVariables).toHaveBeenCalledWith([])
+    await expect(adapter.saveHmiDesigner?.()).resolves.toEqual({ ok: true })
+    expect(window.bridge.saveHmiDesigner).toHaveBeenCalledTimes(1)
+  })
+
+  it('subscribes to unsaved changes of the design through window.bridge', () => {
+    const callback = jest.fn()
+    const unsubscribe = adapter.onHmiDesignerDirty?.(callback)
+    expect(window.bridge.onHmiDesignerDirty).toHaveBeenCalledWith(callback)
+    expect(typeof unsubscribe).toBe('function')
   })
 })

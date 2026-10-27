@@ -11,6 +11,7 @@ export type FileSliceType =
   | 'library-manager'
   | 'library-manifest'
   | 'vendor-screen'
+  | 'hmi-designer'
   | null
 
 export type FileSliceData = {
