@@ -25,7 +25,9 @@ env:
   PLATFORM_DESIGNER_SHA: fbb61e6abe6f0e8f9aac5cc3676be4fc53688f4f
   # v2.1.0-alpha.15/OpenPLC-HMI/feature/vpp-version-alpha15 (VPP 2.1.0-alpha.15, signature 3b46176)
   PLATFORM_VPP_SHA: a8458dcd6551ce213ca0d1897ddbc8617ab8eaa3
-  VPP_NAME: jwplc-basic-openplc-2.1.0-alpha.15.jwcontrol-signed.vpp
+  # Short download names (the version is in the release title and in SHA256SUMS.txt).
+  VPP_NAME: JWPLC-Basic.vpp
+  EXE_NAME: OpenPLC-Editor.exe
 
 jobs:
   build-windows-x64:
@@ -145,7 +147,9 @@ jobs:
         id: files
         working-directory: dist
         run: |
-          EXE=$(ls *.exe | head -n 1)
+          BUILT=$(ls *.exe | head -n 1)
+          mv "$BUILT" "$EXE_NAME"
+          EXE="$EXE_NAME"
           sha256sum *.exe *.vpp | tee SHA256SUMS.txt
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
           sed "s|__EXE_NAME__|$EXE|g" "$GITHUB_WORKSPACE/docs/jwplc/releases/$GITHUB_REF_NAME.md" > "$RUNNER_TEMP/notes.md"
