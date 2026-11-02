@@ -4,6 +4,7 @@ import { ImperativePanelHandle } from 'react-resizable-panels'
 import { useShallow } from 'zustand/react/shallow'
 
 import { projectCapabilities } from '../../middleware/shared/ports/types'
+import { hasHmiDisplay } from '../../backend/shared/compile/jwplc-hmi'
 import {
   useCapabilities,
   useChatPanel,
@@ -23,6 +24,7 @@ import { RemoteDeviceEditor } from '../components/_features/[workspace]/editor/d
 import { DiffViewerEditor } from '../components/_features/[workspace]/editor/diff-viewer'
 import { GraphicalEditor } from '../components/_features/[workspace]/editor/graphical'
 import { HmiDesignerEditor } from '../components/_features/[workspace]/editor/hmi-designer'
+import { HmiSidePanel } from '../components/_features/[workspace]/hmi-panel'
 import { LibraryManagerEditor } from '../components/_features/[workspace]/editor/library-manager'
 import { LibraryManifestEditor } from '../components/_features/[workspace]/editor/library-manifest'
 import { MonacoEditor } from '../components/_features/[workspace]/editor/monaco'
@@ -151,6 +153,12 @@ const WorkspaceScreen = () => {
   const hasVersionControl = capabilities.hasVersionControl && projectCaps.hasVersionControl
   const sourceControlPanelRef = useRef<ImperativePanelHandle | null>(null)
   const [leftPanelSize, setLeftPanelSize] = useState(16)
+
+  const deviceBoard = useOpenPLCStore((s) => s.deviceDefinitions.configuration.deviceBoard)
+  const availableBoards = useOpenPLCStore((s) => s.deviceAvailableOptions.availableBoards)
+  const currentBoardInfo = availableBoards.get(deviceBoard)
+  const hasHmi = hasHmiDisplay(currentBoardInfo)
+  const [isHmiPanelOpen, setIsHmiPanelOpen] = useState(false)
 
   // Start global runtime polling for status and logs
   useRuntimePolling()
@@ -623,7 +631,7 @@ const WorkspaceScreen = () => {
             // the newly-added/removed console-right panel pushes the total
             // past 100% — the exact "Invalid layout total size" warning that
             // preceded the ApexCharts container-dimension crash.
-            key={isConsoleDockedRight ? 'dock-right' : 'dock-bottom'}
+            key={`${isConsoleDockedRight ? 'dock-right' : 'dock-bottom'}-${isHmiPanelOpen ? 'hmi-open' : 'hmi-closed'}`}
             direction='horizontal'
             className='relative flex h-full w-full'
           >
@@ -644,10 +652,10 @@ const WorkspaceScreen = () => {
             <ResizablePanel
               id='workspacePanel'
               order={2}
-              // Leave room for the console-right panel (30%) so Explorer +
-              // workspace + console-right sum to ~100% instead of 114%.
-              defaultSize={isConsoleDockedRight ? 54 : 68}
-              minSize={50}
+              // Leave room for the console-right panel (30%) and hmi panel (22%)
+              // so Explorer + workspace + right panels sum to ~100%.
+              defaultSize={isConsoleDockedRight ? (isHmiPanelOpen ? 38 : 54) : (isHmiPanelOpen ? 48 : 68)}
+              minSize={35}
               className='flex h-full min-h-0 overflow-hidden'
             >
               <div
@@ -924,7 +932,37 @@ const WorkspaceScreen = () => {
                 </ResizablePanel>
               </>
             )}
+            {hasHmi && isHmiPanelOpen && (
+              <>
+                <ResizableHandle
+                  id='hmiDockHandle'
+                  hitAreaMargins={{ coarse: 12, fine: 3 }}
+                  className='z-[99] my-[2px] w-[4px] py-2 transition-colors duration-200 data-[resize-handle-active="pointer"]:bg-brand-light data-[resize-handle-state="hover"]:bg-brand-light data-[resize-handle-active="pointer"]:dark:bg-neutral-700 data-[resize-handle-state="hover"]:dark:bg-neutral-700'
+                />
+                <ResizablePanel
+                  id='hmiPanel'
+                  order={5}
+                  collapsible
+                  defaultSize={24}
+                  minSize={18}
+                  maxSize={45}
+                  className='relative flex h-full min-h-0 w-full flex-col rounded-lg border-2 border-neutral-200 bg-white p-3.5 data-[panel-size="0.0"]:hidden dark:border-neutral-800 dark:bg-neutral-950'
+                >
+                  <HmiSidePanel onClose={() => setIsHmiPanelOpen(false)} />
+                </ResizablePanel>
+              </>
+            )}
           </ResizablePanelGroup>
+          {hasHmi && !isHmiPanelOpen && (
+            <button
+              type='button'
+              onClick={() => setIsHmiPanelOpen(true)}
+              title='Abrir panel lateral HMI Designer (TFT ST7789)'
+              className='absolute right-0 top-1/2 z-[100] flex -translate-y-1/2 items-center gap-1.5 rounded-l-md border-y border-l border-blue-500 bg-blue-600 px-1.5 py-3 text-xs font-semibold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95 [writing-mode:vertical-rl]'
+            >
+              <span>🖥️ HMI Designer ◀</span>
+            </button>
+          )}
         </WorkspaceMainContent>
       </div>
       {hasVersionControl && projectPath && (
