@@ -21,10 +21,10 @@ on:
 env:
   NODE_VERSION: '22.x'
   PLATFORM_REPO: https://github.com/JW-Control/platform-jwplc.git
-  # v2.1.0-alpha.15/OpenPLC-HMI/feature/designer-alpha14-en-openplc (Designer 2.1.0-alpha.15, window + binding view 1.4)
-  PLATFORM_DESIGNER_SHA: fbb61e6abe6f0e8f9aac5cc3676be4fc53688f4f
-  # v2.1.0-alpha.15/OpenPLC-HMI/feature/vpp-version-alpha15 (VPP 2.1.0-alpha.15, signature 3b46176)
-  PLATFORM_VPP_SHA: a8458dcd6551ce213ca0d1897ddbc8617ab8eaa3
+  # v2.1.0-alpha.16/JWPLC-Sim/main @ 94edd7d (Designer 2.1.0-alpha.16: iconos, medidor, historial, modo claro, proyecto Runtime)
+  PLATFORM_DESIGNER_SHA: 94edd7d4ace73718f0f226ded8d0b7c30019823d
+  # v2.1.0-alpha.16/JWPLC-Sim/main @ 94edd7d (VPP 2.1.0-alpha.16 de #207, firma jwcontrol-2026 verificada)
+  PLATFORM_VPP_SHA: 94edd7d4ace73718f0f226ded8d0b7c30019823d
   # Short download names (the version is in the release title and in SHA256SUMS.txt).
   VPP_NAME: JWPLC-Basic.vpp
   EXE_NAME: OpenPLC-Editor.exe
@@ -65,7 +65,7 @@ jobs:
           for f in desktop.html designer-save-flow.js designer-openplc-host.js; do
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
           done
-          grep -q '2.1.0-alpha.15' resources/jwplc-hmi-designer/poc/desktop.html
+          grep -q '2.1.0-alpha.16' resources/jwplc-hmi-designer/poc/desktop.html
           # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4).
           test -f resources/jwplc-hmi-designer/poc/designer-openplc-bindings.js
           rm -rf platform
