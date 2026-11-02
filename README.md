@@ -7,6 +7,22 @@
 <img alt="draft-cover" src="assets/images/github-background.png">
 </p>
 
+## JWPLC Edition (JW Control)
+
+Este fork es el **OpenPLC Editor – JWPLC Edition** para el **JWPLC Basic** de JW Control. Versión actual:
+**4.2.8-jwplc.9**, que acompaña al package `jwplc:esp32@2.1.0-alpha.16`.
+
+| Qué | Descarga |
+|---|---|
+| Editor (Windows x64, con el **JWPLC HMI Designer 2.1.0-alpha.16** incluido) | [`OpenPLC-Editor.exe`](https://github.com/JW-Control/openplc-editor/releases/download/jwplc-editor-v4.2.8-jwplc.9/OpenPLC-Editor.exe) · [notas y SHA-256](https://github.com/JW-Control/openplc-editor/releases/tag/jwplc-editor-v4.2.8-jwplc.9) |
+| Paquete de placas **JWPLC Basic (VPP) 2.1.0-alpha.16**, firmado | [`JWPLC-Basic.vpp`](https://github.com/JW-Control/openplc-editor/releases/download/jwplc-editor-v4.2.8-jwplc.9/JWPLC-Basic.vpp) |
+| Package Arduino, HMI Designer para Arduino IDE y documentación | [JW-Control/platform-jwplc](https://github.com/JW-Control/platform-jwplc) |
+| **JWPLC Sim**: corre un proyecto de OpenPLC simulado en la PC, sin placa | [JW-Control/jwplc-sim](https://github.com/JW-Control/jwplc-sim/releases/latest) |
+
+Instalación: ejecutar `OpenPLC-Editor.exe` (actualiza una JWPLC Edition anterior; si SmartScreen avisa, **Más
+información → Ejecutar de todas formas**), importar `JWPLC-Basic.vpp` y elegir la placa **JWPLC BASIC**. Las
+notas de cada versión están en [`docs/jwplc/releases/`](docs/jwplc/releases/).
+
 ## Running a preview version
 
 In order to run the development version, clone the repository, and install dependencies via `npm`, you need network access.
