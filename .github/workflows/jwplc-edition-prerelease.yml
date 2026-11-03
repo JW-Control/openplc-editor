@@ -54,7 +54,11 @@ jobs:
       - name: Verify VPP signature with the editor verifier
         run: |
           mkdir -p verify/pkg
-          cp src/backend/shared/utils/vpp/verify-package-signature.ts src/backend/shared/utils/vpp/trusted-keys.ts verify/
+          cp src/backend/shared/utils/vpp/verify-package-signature.ts src/backend/shared/utils/vpp/package-verification-core.ts \
+            src/backend/shared/utils/vpp/trusted-keys.ts verify/
+          # Node's ESM loader needs the extension that webpack and tsc resolve on their own.
+          sed -i "s#from './package-verification-core'#from './package-verification-core.ts'#" verify/verify-package-signature.ts
+          grep -q "package-verification-core.ts'" verify/verify-package-signature.ts
           unzip -q "vpp-out/$VPP_NAME" -d verify/pkg
           cat > verify/run.ts <<'EOF'
           import { TRUSTED_PACKAGE_KEYS } from './trusted-keys.ts'
