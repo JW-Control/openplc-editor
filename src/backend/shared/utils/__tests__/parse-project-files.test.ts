@@ -1074,3 +1074,57 @@ describe('graphical POU holding a native library block', () => {
     })
   })
 })
+
+describe('parseProjectFiles: JWPLC alpha.16 Modbus migration', () => {
+  const legacyConfig = () =>
+    JSON.stringify({
+      deviceBoard: 'JWPLC BASIC [2.0.0]',
+      communicationPort: 'COM5',
+      vendorScreenData: {
+        modbus_rtu: { enabled: true, rtu_interface: 'Serial2', rtu_baud_rate: '19200', rtu_slave_id: 3 },
+        modbus_tcp: {
+          enabled: true,
+          tcp_interface: 'Ethernet',
+          enable_dhcp: true,
+          tcp_debug_ip_address: '192.168.0.77',
+        },
+      },
+    })
+
+  it('creates the Modbus server and moves the line settings to serial/network', () => {
+    const result = parseProjectFiles('/p', makeProjectJson(), legacyConfig(), makePinMapping(), [], [], [])
+    const servers = result.projectData.servers ?? []
+    expect(servers).toHaveLength(1)
+    expect(servers[0]).toMatchObject({
+      name: 'modbus_server',
+      protocol: 'modbus-tcp',
+      modbusSlaveConfig: {
+        enabled: true,
+        transports: ['rtu', 'tcp'],
+        serialPort: 'Serial2',
+        baudRate: 19200,
+        slaveId: 3,
+      },
+    })
+    const screens = result.deviceConfiguration?.vendorScreenData ?? {}
+    expect(screens).not.toHaveProperty('modbus_rtu')
+    expect(screens).not.toHaveProperty('modbus_tcp')
+    expect(screens).toMatchObject({
+      network: { enabled: true, enable_dhcp: true, tcp_debug_ip_address: '192.168.0.77' },
+    })
+    expect(result.warnings?.some((w) => w.includes('4.3 layout'))).toBe(true)
+  })
+
+  it('keeps an existing Modbus server and leaves a 4.3 project untouched', () => {
+    const server: RawProjectFile = {
+      relativePath: 'devices/servers/mine.json',
+      content: JSON.stringify({ name: 'mine', protocol: 'modbus-tcp' }),
+    }
+    const migrated = parseProjectFiles('/p', makeProjectJson(), legacyConfig(), makePinMapping(), [], [server], [])
+    expect((migrated.projectData.servers ?? []).map((s) => s.name)).toEqual(['mine'])
+
+    const plain = parseProjectFiles('/p', makeProjectJson(), makeDeviceConfig(), makePinMapping(), [], [], [])
+    expect(plain.projectData.servers).toEqual([])
+    expect(plain.warnings?.some((w) => w.includes('4.3 layout')) ?? false).toBe(false)
+  })
+})

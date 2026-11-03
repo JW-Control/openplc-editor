@@ -31,6 +31,7 @@ import type {
 import { deviceConfigurationSchema, pinMappingFileSchema } from '../types/PLC/devices'
 import { PLCProjectSchema, PLCRemoteDeviceSchema, PLCServerSchema } from '../types/PLC/open-plc'
 import { getDefaultSchemaValues } from './default-zod-schema-values'
+import { migrateLegacyBaremetalModbus } from './migrate-legacy-baremetal-modbus'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -582,6 +583,22 @@ export function parseProjectFiles(
     warnings.push(`Data type "${dt.name}" in project.json has an invalid name and was skipped.`)
   }
 
+  let projectServers: PLCServer[] = servers.length > 0 ? servers : ((data.servers as PLCServer[]) ?? [])
+  // JWPLC Edition: a pre-4.3 baremetal Modbus setup becomes a project server; the next save persists it.
+  if (deviceConfiguration) {
+    const modbusMigration = migrateLegacyBaremetalModbus(deviceConfiguration, projectServers)
+    if (modbusMigration.migrated) {
+      deviceConfiguration = modbusMigration.deviceConfiguration
+      if (modbusMigration.createdServer) {
+        const created = PLCServerSchema.safeParse(modbusMigration.createdServer)
+        if (created.success) projectServers = [...projectServers, created.data]
+      }
+      warnings.push(
+        'The Modbus settings of this project were moved to the 4.3 layout (Servers, Serial, Network). Save the project to keep them.',
+      )
+    }
+  }
+
   return {
     meta,
     projectData: {
@@ -591,7 +608,7 @@ export function parseProjectFiles(
       globalVariableLists: (data.globalVariableLists as PLCGlobalVariableList[]) ?? [],
       pous,
       configurations: configuration,
-      servers: servers.length > 0 ? servers : ((data.servers as PLCServer[]) ?? []),
+      servers: projectServers,
       remoteDevices: remoteDevices.length > 0 ? remoteDevices : ((data.remoteDevices as PLCRemoteDevice[]) ?? []),
       libraries: (data.libraries as ParsedProjectData['projectData']['libraries']) ?? [],
       ...(metaType === 'plc-library' ? { libraryManifest } : {}),

@@ -186,6 +186,7 @@ import {
   type CppPouData as CppPouDataHeader,
   generateCBlocksHeader,
 } from '@root/backend/shared/utils/cpp/generateCBlocksHeader'
+import { migrateLegacyScreens } from '@root/backend/shared/utils/migrate-legacy-baremetal-modbus'
 import { buildVppPluginFiles } from '@root/backend/shared/utils/vpp/build-vpp-plugin-files'
 import {
   buildModuleConfigEntries,
@@ -2839,7 +2840,8 @@ class CompilerModule {
       let configuredIp: string | undefined
       try {
         const deviceConfig = await CompilerModule.readJSONFile<DeviceConfiguration>(devicesConfigurationFilePath)
-        const vendorScreenData = deviceConfig.vendorScreenData ?? {}
+        // JWPLC Edition: an unsaved alpha.16 project still holds `modbus_rtu`/`modbus_tcp` on disk.
+        const vendorScreenData = migrateLegacyScreens(deviceConfig.vendorScreenData ?? {})
         configuredIp = deviceConfig.runtimeIpAddress
         vppModbusState = {
           serial: vendorScreenData['serial'] as VppModbusScreenState['serial'],
