@@ -10,6 +10,8 @@ permissions:
 jobs:
   cla:
     name: CLA
+    # The CLA covers contributions to Autonomy-Logic/openplc-editor, not internal PRs of the JWPLC fork.
+    if: github.repository == 'Autonomy-Logic/openplc-editor'
     runs-on: ubuntu-latest
     steps:
       - name: Check the Contributor License Agreement checkbox
