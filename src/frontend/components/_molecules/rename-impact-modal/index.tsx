@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import type { ReferenceImpactAnalysis } from '../../../utils/variable-references/types'
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '../modal'
 
@@ -6,7 +8,18 @@ type RenameImpactModalProps = {
   oldName?: string
   newName?: string
   changes?: Array<{ oldName: string; newName?: string; oldType?: string; newType?: string }>
-  impact: ReferenceImpactAnalysis
+  // The modal only renders the aggregate maps, so any location shape works.
+  impact: ReferenceImpactAnalysis<unknown>
+  // Copy overrides — defaults keep the original variable-rename wording.
+  title?: string
+  /** Replaces the "Renaming X to Y will affect:" line. */
+  description?: ReactNode
+  affectedListLabel?: string
+  byKindLabel?: string
+  confirmLabel?: string
+  confirmDescription?: string
+  cancelLabel?: string
+  cancelDescription?: string
   onConfirm: () => void
   onCancel: () => void
 }
@@ -17,6 +30,14 @@ export const RenameImpactModal = ({
   newName,
   changes,
   impact,
+  title = 'Variable Changes: Impact Analysis',
+  description,
+  affectedListLabel = 'Affected POUs:',
+  byKindLabel = 'By Editor Type:',
+  confirmLabel = 'Yes, rename references',
+  confirmDescription = 'All references will be updated to use the new name',
+  cancelLabel = 'No, keep references unchanged',
+  cancelDescription = 'References will remain with the old name and will no longer match the renamed variable, causing them to become unresolved references',
   onConfirm,
   onCancel,
 }: RenameImpactModalProps) => {
@@ -28,18 +49,18 @@ export const RenameImpactModal = ({
   return (
     <Modal open>
       <ModalContent
-        className='flex max-h-[600px] w-[600px] select-none flex-col gap-4 rounded-lg p-8'
+        className='flex max-h-[min(600px,92vh)] w-[600px] select-none flex-col gap-4 rounded-lg p-8'
         onClose={onCancel}
       >
         <ModalHeader>
-          <ModalTitle className='text-sm font-medium text-neutral-950 dark:text-white'>
-            Variable Changes: Impact Analysis
-          </ModalTitle>
+          <ModalTitle className='text-sm font-medium text-neutral-950 dark:text-white'>{title}</ModalTitle>
         </ModalHeader>
 
         <div className='flex flex-col gap-3 overflow-y-auto'>
           <div className='text-xs text-neutral-600 dark:text-neutral-50'>
-            {hasMultipleChanges ? (
+            {description !== undefined ? (
+              <p className='mb-2'>{description}</p>
+            ) : hasMultipleChanges ? (
               <>
                 <p className='mb-2 font-medium'>The following variable changes will affect:</p>
                 <ul className='mb-2 list-inside list-disc space-y-1'>
@@ -91,7 +112,9 @@ export const RenameImpactModal = ({
 
             {impact.byPou.size > 0 && (
               <div className='mb-3'>
-                <div className='mb-1 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Affected POUs:</div>
+                <div className='mb-1 text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                  {affectedListLabel}
+                </div>
                 <ul className='list-inside list-disc space-y-1 text-xs text-neutral-600 dark:text-neutral-400'>
                   {Array.from(impact.byPou.entries()).map(([pouName, count]) => (
                     <li key={pouName}>
@@ -104,7 +127,7 @@ export const RenameImpactModal = ({
 
             {impact.byEditorType.size > 0 && (
               <div>
-                <div className='mb-1 text-xs font-medium text-neutral-700 dark:text-neutral-300'>By Editor Type:</div>
+                <div className='mb-1 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{byKindLabel}</div>
                 <ul className='list-inside list-disc space-y-1 text-xs text-neutral-600 dark:text-neutral-400'>
                   {Array.from(impact.byEditorType.entries()).map(([editorType, count]) => (
                     <li key={editorType}>
@@ -120,12 +143,10 @@ export const RenameImpactModal = ({
             <p className='font-medium'>What would you like to do?</p>
             <ul className='mt-2 list-inside list-disc space-y-1'>
               <li>
-                <span className='font-semibold'>Yes, rename references:</span> All references will be updated to use the
-                new name
+                <span className='font-semibold'>{confirmLabel}:</span> {confirmDescription}
               </li>
               <li>
-                <span className='font-semibold'>No, keep references unchanged:</span> References will remain with the
-                old name and will no longer match the renamed variable, causing them to become unresolved references
+                <span className='font-semibold'>{cancelLabel}:</span> {cancelDescription}
               </li>
             </ul>
           </div>
@@ -136,10 +157,10 @@ export const RenameImpactModal = ({
             onClick={onCancel}
             className='h-8 w-full rounded bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            No, keep references unchanged
+            {cancelLabel}
           </button>
           <button onClick={onConfirm} className='h-8 w-full rounded bg-brand px-3 py-1 text-xs text-white'>
-            Yes, rename references
+            {confirmLabel}
           </button>
         </ModalFooter>
       </ModalContent>

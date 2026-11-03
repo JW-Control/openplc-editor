@@ -1,11 +1,23 @@
-export { formatAddress, isBitClass, isIecAddress, parseAddress, type ParsedAddress, prefixOf } from './address-space'
+export {
+  formatAddress,
+  isBitClass,
+  isIecAddress,
+  parseAddress,
+  type ParsedAddress,
+  prefixOf,
+  slotRangesOverlap,
+} from './address-space'
 export { allocateAddresses, channelKey } from './allocate'
 export {
+  activeKindsFor,
   ethercatConsumerId,
   ethercatMemoryKey,
+  ethercatModuleMemoryKey,
   migrateToRegistry,
   modbusConsumerId,
   modbusMemoryKey,
+  moduleRegistryChannelId,
+  parseModuleRegistryChannelId,
   recalculateFromLegacy,
   unpinAllocatableChannels,
   vppMemoryKey,

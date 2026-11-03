@@ -1,4 +1,4 @@
-import { useOpenPLCStore } from '@root/frontend/store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { useState } from 'react'
 
 import { ContactNode } from '../../../../../../../_atoms/graphical-editor/ladder/contact'
@@ -14,15 +14,10 @@ type ContactElementProps = {
 }
 
 const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
+  const store = useOpenPLCStoreApi()
   const pouName = useBoundPou()
-  const {
-    ladderFlows,
-    project: {
-      data: { pous },
-    },
-    ladderFlowActions: { updateNode },
-    modalActions: { onOpenChange },
-  } = useOpenPLCStore()
+  const updateNode = useOpenPLCStore((state) => state.ladderFlowActions.updateNode)
+  const onOpenChange = useOpenPLCStore((state) => state.modalActions.onOpenChange)
 
   const [selectedModifier, setSelectedModifier] = useState<string | null>(node?.data.variant as string)
   const contactModifiers = Object.entries(DEFAULT_CONTACT_TYPES).map(([label, contact]) => ({
@@ -42,7 +37,8 @@ const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
   }
 
   const handleConfirmAlteration = () => {
-    const { rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+    const { project, ladderFlows } = store.getState()
+    const { rung } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
       nodeId: node.id,
     })
     if (!rung) return

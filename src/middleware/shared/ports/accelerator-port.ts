@@ -39,11 +39,24 @@ export interface AcceleratorPort {
   // --- Project actions ---
   onCreateProject(callback: () => void): Unsubscribe
   onOpenProject(callback: () => void): Unsubscribe
-  onOpenRecent(callback: (projectData?: unknown) => void): Unsubscribe
+  onOpenRecent(callback: (projectPath: string) => void): Unsubscribe
   onSaveProject(callback: () => void): Unsubscribe
+  /** Save As. Desktop only in practice; web's adapter returns a no-op
+   *  unsubscribe like its other accelerators. */
+  onSaveProjectAs(callback: () => void): Unsubscribe
   onSaveFile(callback: () => void): Unsubscribe
+  /** Retrieve Project from PLC. Desktop only in practice: the web build reaches
+   *  the same modal from its own File menu, which it always renders, so its
+   *  adapter returns a no-op unsubscribe like the other accelerators. */
+  onRetrieveProject(callback: () => void): Unsubscribe
+  /** Import PLCopen XML from the native macOS/Linux File menu; web renders its own File menu. */
+  onImportPlcopen(callback: () => void): Unsubscribe
   onCloseProject(callback: () => void): Unsubscribe
   onExportProject(callback: () => void): Unsubscribe
+  /** File > Print / Ctrl+P (Cmd+P). Preview is an alias into the same
+   *  export-PDF wizard, not a separate accelerator. */
+  onPrint(callback: () => void): Unsubscribe
+  onPageSetup(callback: () => void): Unsubscribe
 
   // --- Editor actions ---
   onCloseTab(callback: () => void): Unsubscribe
@@ -56,6 +69,13 @@ export interface AcceleratorPort {
   onSwitchPerspective(callback: () => void): Unsubscribe
   onAbout(callback: () => void): Unsubscribe
 
+  /** Developer I/O image diagnostics, from the desktop's NATIVE menu — the one
+   *  a framed window shows, where the React menu bar is not on screen.
+   *  Optional because a platform without a native menu simply has no such
+   *  event; web reaches the same tab from the menu bar it always renders. */
+  onOpenDiagnostics?(callback: () => void): Unsubscribe
+
   // --- App lifecycle ---
   onQuitApp(callback: () => void): Unsubscribe
+  onRefresh(callback: () => void): Unsubscribe
 }

@@ -6,6 +6,7 @@
  */
 
 export type {
+  ResolvedOpcUaConfig,
   RuntimeAddressSpace,
   RuntimeArray,
   RuntimeConfig,
@@ -20,11 +21,13 @@ export type {
   RuntimeVariable,
   RuntimeVariablePermissions,
 } from './generate-opcua-config'
-export { generateOpcUaConfig, validateOpcUaConfig } from './generate-opcua-config'
+export { buildOpcUaRuntimeConfig, generateOpcUaConfig, validateOpcUaConfig } from './generate-opcua-config'
+export { collectOpcUaNodes, generateOpcUaHeaderContent, type GenerateOpcUaHeaderInput } from './generate-opcua-header'
 export {
   type LeafAddress,
   OpcUaConfigError,
   resolveArrayAddress,
+  resolveArrayElementFields,
   resolveStructureAddresses,
   resolveVariableAddress,
 } from './resolve-indices'

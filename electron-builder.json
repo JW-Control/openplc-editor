@@ -4,11 +4,8 @@
   "asar": true,
   "asarUnpack": "**\\*.{node,dll}",
   "generateUpdatesFilesForAllChannels": true,
-  "files": [
-    "dist",
-    "node_modules",
-    "package.json"
-  ],
+  "files": ["dist", "node_modules", "package.json"],
+  "afterPack": "scripts/mac-inject-local-network-usage.js",
   "afterSign": "scripts/notarize.js",
   "directories": {
     "app": "release/app",
@@ -28,6 +25,10 @@
     {
       "from": "./resources/jwplc-hmi-designer",
       "to": "./jwplc-hmi-designer"
+    },
+    {
+      "from": "./resources/jwplc-vpp",
+      "to": "./jwplc-vpp"
     }
   ],
   "mac": {
@@ -50,7 +51,8 @@
     },
     "extendInfo": {
       "CFBundleDisplayName": "OpenPLC Editor",
-      "CFBundleName": "OpenPLC Editor"
+      "CFBundleName": "OpenPLC Editor",
+      "NSLocalNetworkUsageDescription": "OpenPLC Editor needs local network access to discover and connect to PLCs on your network."
     },
     "type": "distribution",
     "hardenedRuntime": true,
@@ -96,6 +98,13 @@
       }
     ],
     "artifactName": "${productName}_${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": false,
+    "license": "LICENSE",
+    "runAfterFinish": true
   },
   "linux": {
     "extraResources": [

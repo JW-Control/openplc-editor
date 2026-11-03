@@ -12,9 +12,9 @@
 
 import { useCallback, useRef } from 'react'
 
-import type { DebugConnectionConfig, DebugTreeNode, FbInstanceInfo } from '../../middleware/shared/ports/types'
-import { useDebugger, useSimulator } from '../../middleware/shared/providers'
-import { useOpenPLCStore } from '../store'
+import type { DebugTreeNode, FbInstanceInfo } from '../../middleware/shared/ports/types'
+import { useDebugger } from '../../middleware/shared/providers'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../store'
 import { parseDebugMap } from '../utils/debug-parser'
 import {
   buildDebugVariableTreeMap,
@@ -32,10 +32,10 @@ export interface UseDebugSessionReturn {
    * connects via the debugger port, stores all artifacts in workspace,
    * and activates the debugger UI.
    *
-   * @param config — Connection target (simulator, TCP, RTU, WebSocket).
-   *                 If omitted, defaults to simulator.
+   * Takes nothing: the connection manager holds the session for every target by the
+   * time a debug session can start, so there is no medium for a caller to name.
    */
-  connectAndStart: (config?: DebugConnectionConfig) => Promise<{ success: boolean; error?: string }>
+  connectAndStart: () => Promise<{ success: boolean; error?: string }>
 
   /** Disconnect from the debug target and clear all debug state. */
   stopSession: () => Promise<void>
@@ -48,8 +48,8 @@ export interface UseDebugSessionReturn {
 }
 
 export function useDebugSession(): UseDebugSessionReturn {
+  const store = useOpenPLCStoreApi()
   const debuggerPort = useDebugger()
-  const simulator = useSimulator()
 
   const {
     project: { data: projectData, meta: projectMeta },
@@ -60,164 +60,160 @@ export function useDebugSession(): UseDebugSessionReturn {
 
   const debugTreesRef = useRef<Record<string, DebugTreeNode[]>>({})
 
-  const connectAndStart = useCallback(
-    async (config?: DebugConnectionConfig): Promise<{ success: boolean; error?: string }> => {
-      const debugConfig = config ?? ({ connectionType: 'simulator', connectionParams: {} } as DebugConnectionConfig)
-      const { project, workspaceActions: wsActions, consoleActions: logActions } = useOpenPLCStore.getState()
-      const boardTarget = deviceDefinitions.configuration.deviceBoard
-      const projectPath = project.meta.path
+  const connectAndStart = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    const { project, workspaceActions: wsActions, consoleActions: logActions } = store.getState()
+    const boardTarget = deviceDefinitions.configuration.deviceBoard
+    const projectPath = project.meta.path
 
-      logActions.addLog({ id: crypto.randomUUID(), level: 'info', message: 'Connecting debugger...' })
+    logActions.addLog({ level: 'info', message: 'Connecting debugger...' })
 
-      try {
-        const debugFileResult = await debuggerPort.readDebugFile(projectPath, boardTarget)
-        if (!debugFileResult.success || !debugFileResult.content) {
-          const error = `Failed to read debug-map.json: ${debugFileResult.error ?? 'No content'}`
-          logActions.addLog({ id: crypto.randomUUID(), level: 'error', message: error })
-          return { success: false, error }
-        }
-
-        wsActions.setDebugCContent(debugFileResult.content)
-
-        const instances = project.data.configurations.resource.instances
-
-        const debugMap = parseDebugMap(debugFileResult.content)
-        if (!debugMap) {
-          const error = 'Invalid debug-map.json (expected schema version 2)'
-          logActions.addLog({ id: crypto.randomUUID(), level: 'error', message: error })
-          return { success: false, error }
-        }
-
-        const entriesForTree = debugMapToEntries(debugMap)
-        logActions.addLog({
-          id: crypto.randomUUID(),
-          level: 'info',
-          message: `Debug map: ${debugMap.leaves.length} leaves across ${debugMap.arrays.length} arrays.`,
-        })
-
-        // Build the debug variable tree — the single enumeration walk. The
-        // composite-key → index map (used by the LD/FBD editors and the poller)
-        // is derived from this same tree, so every consumer resolves a
-        // variable's address identically.
-        let treeMap = new Map<string, DebugTreeNode>()
-        const pouTrees: Record<string, DebugTreeNode[]> = {}
-        try {
-          const treeResult = buildDebugVariableTreeMap(
-            project.data.pous,
-            instances,
-            entriesForTree,
-            project.data,
-            useOpenPLCStore.getState().libraries.system,
-          )
-          treeMap = treeResult.treeMap
-
-          // Group trees by POU name for polling hook
-          for (const node of treeResult.trees) {
-            const pouName = node.compositeKey.split(':')[0]
-            if (!pouTrees[pouName]) pouTrees[pouName] = []
-            pouTrees[pouName].push(node)
-          }
-
-          for (const w of treeResult.warnings) {
-            logActions.addLog({ id: crypto.randomUUID(), level: 'warning', message: w })
-          }
-
-          logActions.addLog({
-            id: crypto.randomUUID(),
-            level: 'info',
-            message: `Debug tree builder: Built ${treeResult.trees.length} trees (${treeResult.complexCount} complex).`,
-          })
-        } catch {
-          logActions.addLog({
-            id: crypto.randomUUID(),
-            level: 'warning',
-            message: 'Debug tree builder encountered errors.',
-          })
-        }
-
-        debugTreesRef.current = pouTrees
-
-        // Derive the composite-key → packed-address map from the tree leaves.
-        const indexMap = deriveVariableIndexMap(treeMap, debugMap)
-
-        // Build FB instance map
-        const fbDebugInstancesMap = buildFbInstanceMap(project.data.pous, instances)
-
-        const fbTypesCount = fbDebugInstancesMap.size
-        const totalFbInstances = Array.from(fbDebugInstancesMap.values()).reduce((sum, list) => sum + list.length, 0)
-        if (fbTypesCount > 0) {
-          logActions.addLog({
-            id: crypto.randomUUID(),
-            level: 'info',
-            message: `FB instance map: Found ${totalFbInstances} instances across ${fbTypesCount} FB types.`,
-          })
-        }
-
-        // Connect debugger via port
-        const connectResult = await debuggerPort.connect(debugConfig)
-        if (!connectResult.success) {
-          const error = `Debugger connection failed: ${connectResult.error ?? 'Unknown error'}`
-          logActions.addLog({ id: crypto.randomUUID(), level: 'error', message: error })
-          return { success: false, error }
-        }
-
-        // Store debug artifacts in workspace
-        wsActions.setDebugVariableIndexes(indexMap)
-        wsActions.setDebugVariableTree(treeMap)
-        wsActions.setFbDebugInstances(fbDebugInstancesMap)
-
-        // Set default selected instance for each FB type
-        fbDebugInstancesMap.forEach((instanceList: FbInstanceInfo[], fbTypeName: string) => {
-          if (instanceList.length > 0) {
-            wsActions.setFbSelectedInstance(fbTypeName, instanceList[0].key)
-          }
-        })
-
-        // Set target IP for non-simulator connections
-        if (debugConfig.connectionType !== 'simulator' && debugConfig.connectionParams.ipAddress) {
-          wsActions.setDebuggerTargetIp(debugConfig.connectionParams.ipAddress)
-        }
-
-        // Record the active transport so useDebugPolling picks the right
-        // poll cadence + batch size.  Set on EVERY start path (runtime
-        // targets also set it earlier in handleMd5Verification; this
-        // additionally covers the simulator path, which doesn't go
-        // through MD5 verification — without it the simulator stayed at
-        // the default 200ms instead of its intended 50ms).  Must be set
-        // before `setDebuggerVisible(true)`, which is what triggers the
-        // polling effect.
-        wsActions.setDebugConnectionType(debugConfig.connectionType)
-
-        wsActions.setDebuggerVisible(true)
-        logActions.addLog({
-          id: crypto.randomUUID(),
-          level: 'info',
-          message: `Debugger connected. Found ${indexMap.size} debug variables.`,
-        })
-
-        return { success: true }
-      } catch (err: unknown) {
-        const error = `Debugger error: ${err instanceof Error ? err.message : String(err)}`
-        logActions.addLog({ id: crypto.randomUUID(), level: 'error', message: error })
+    try {
+      const debugFileResult = await debuggerPort.readDebugFile(projectPath, boardTarget)
+      if (!debugFileResult.success || !debugFileResult.content) {
+        const error = `Failed to read debug-map.json: ${debugFileResult.error ?? 'No content'}`
+        logActions.addLog({ level: 'error', message: error })
         return { success: false, error }
       }
-    },
-    [debuggerPort, deviceDefinitions, projectData, projectMeta],
-  )
 
-  const stopSession = useCallback(async () => {
-    // If simulator is running, stop it
-    if (simulator.isRunning()) {
-      await simulator.stop()
+      wsActions.setDebugCContent(debugFileResult.content)
+
+      // A library-debug session runs against a generated harness program
+      // that instantiates every block in the library — it exists only in
+      // memory, so the POU list and instance list the debug tree is built
+      // from come from the session overlay, not from `project.data`.  An
+      // ordinary PLC project has no overlay and reads the project itself.
+      // See `composeLibraryDebugHarness`.
+      const harness = store.getState().workspace.debugHarness
+      const debugPous = harness ? [...project.data.pous, harness.programPou] : project.data.pous
+      const instances = harness?.instances ?? project.data.configurations.resource.instances
+
+      const debugMap = parseDebugMap(debugFileResult.content)
+      if (!debugMap) {
+        const error = 'Invalid debug-map.json (expected schema version 2)'
+        logActions.addLog({ level: 'error', message: error })
+        return { success: false, error }
+      }
+
+      const entriesForTree = debugMapToEntries(debugMap)
+      logActions.addLog({
+        level: 'info',
+        message: `Debug map: ${debugMap.leaves.length} leaves across ${debugMap.arrays.length} arrays.`,
+      })
+
+      // Build the debug variable tree — the single enumeration walk. The
+      // composite-key → index map (used by the LD/FBD editors and the poller)
+      // is derived from this same tree, so every consumer resolves a
+      // variable's address identically.
+      let treeMap = new Map<string, DebugTreeNode>()
+      const pouTrees: Record<string, DebugTreeNode[]> = {}
+      try {
+        const treeResult = buildDebugVariableTreeMap(
+          debugPous,
+          instances,
+          entriesForTree,
+          { ...project.data, pous: debugPous },
+          store.getState().libraries.system,
+        )
+        treeMap = treeResult.treeMap
+
+        // Group trees by POU name for polling hook
+        for (const node of treeResult.trees) {
+          const pouName = node.compositeKey.split(':')[0]
+          if (!pouTrees[pouName]) pouTrees[pouName] = []
+          pouTrees[pouName].push(node)
+        }
+
+        for (const w of treeResult.warnings) {
+          logActions.addLog({ level: 'warning', message: w })
+        }
+
+        logActions.addLog({
+          level: 'info',
+          message: `Debug tree builder: Built ${treeResult.trees.length} trees (${treeResult.complexCount} complex).`,
+        })
+      } catch {
+        logActions.addLog({
+          level: 'warning',
+          message: 'Debug tree builder encountered errors.',
+        })
+      }
+
+      debugTreesRef.current = pouTrees
+
+      // Derive the composite-key → packed-address map from the tree leaves.
+      const indexMap = deriveVariableIndexMap(treeMap, debugMap)
+
+      // Build FB instance map
+      const fbDebugInstancesMap = buildFbInstanceMap(debugPous, instances)
+
+      const fbTypesCount = fbDebugInstancesMap.size
+      const totalFbInstances = Array.from(fbDebugInstancesMap.values()).reduce((sum, list) => sum + list.length, 0)
+      if (fbTypesCount > 0) {
+        logActions.addLog({
+          level: 'info',
+          message: `FB instance map: Found ${totalFbInstances} instances across ${fbTypesCount} FB types.`,
+        })
+      }
+
+      // Connect debugger via port
+      const connectResult = await debuggerPort.connect()
+      if (!connectResult.success) {
+        const error = `Debugger connection failed: ${connectResult.error ?? 'Unknown error'}`
+        logActions.addLog({ level: 'error', message: error })
+        return { success: false, error }
+      }
+
+      // Store debug artifacts in workspace
+      wsActions.setDebugVariableIndexes(indexMap)
+      wsActions.setDebugVariableTree(treeMap)
+      wsActions.setFbDebugInstances(fbDebugInstancesMap)
+
+      // Set default selected instance for each FB type
+      fbDebugInstancesMap.forEach((instanceList: FbInstanceInfo[], fbTypeName: string) => {
+        if (instanceList.length > 0) {
+          wsActions.setFbSelectedInstance(fbTypeName, instanceList[0].key)
+        }
+      })
+
+      // Set target IP for non-simulator connections
+      // The target's address, for the debugger's own display. Comes from the
+      // session the manager holds, not from a config the caller chose.
+      const sessionEndpoint = store.getState().deviceConnection.port
+      if (sessionEndpoint) wsActions.setDebuggerTargetIp(sessionEndpoint)
+
+      // Nothing to record about the transport: `useDebugPolling` reads the medium
+      // the connection manager published (`deviceConnection.debugTransport`) and
+      // derives both its batch size and its cadence from it. Copying that into a
+      // second store field is what let the two disagree — and made a session whose
+      // medium was not yet known silently poll as if it were the simulator.
+      wsActions.setDebuggerVisible(true)
+      logActions.addLog({
+        level: 'info',
+        message: `Debugger connected. Found ${indexMap.size} debug variables.`,
+      })
+
+      return { success: true }
+    } catch (err: unknown) {
+      const error = `Debugger error: ${err instanceof Error ? err.message : String(err)}`
+      logActions.addLog({ level: 'error', message: error })
+      return { success: false, error }
     }
+  }, [store, debuggerPort, deviceDefinitions, projectData, projectMeta])
 
-    // Disconnect debugger
+  /**
+   * End the debug session — and ONLY the debug session.
+   *
+   * It used to stop the simulator too, which had the ownership backwards: a debug
+   * session is a consumer of a connection, not the owner of the thing on the other
+   * end. Stopping the simulator is the Stop button's job (`handleSimulatorControl`),
+   * and closing that session is the connection manager's.
+   */
+  const stopSession = useCallback(async () => {
     await debuggerPort.disconnect()
 
-    // Clear all debug state
     workspaceActions.clearDebugState()
     debugTreesRef.current = {}
-  }, [simulator, debuggerPort, workspaceActions])
+  }, [debuggerPort, workspaceActions])
 
   const forceVariable = useCallback(
     async (index: number, force: boolean, value?: string, type?: string, enumValues?: string[]): Promise<boolean> => {
@@ -227,7 +223,6 @@ export function useDebugSession(): UseDebugSessionReturn {
           valueBuffer = encodeForceValue(value ?? '0', type ?? 'BOOL', enumValues)
         } catch (err) {
           consoleActions.addLog({
-            id: crypto.randomUUID(),
             level: 'error',
             message: `Force input error: ${err instanceof Error ? err.message : String(err)}`,
           })
@@ -237,14 +232,12 @@ export function useDebugSession(): UseDebugSessionReturn {
       const result = await debuggerPort.setVariable(index, force, valueBuffer)
       if (result.success) {
         consoleActions.addLog({
-          id: crypto.randomUUID(),
           level: 'info',
           message: 'Variable force applied successfully',
         })
         return true
       } else {
         consoleActions.addLog({
-          id: crypto.randomUUID(),
           level: 'error',
           message: `Failed to set variable: ${result.error}`,
         })

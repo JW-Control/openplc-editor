@@ -55,13 +55,14 @@ export type {
   AITelemetryEventName,
 } from './ai-port'
 export type { CompilerPort } from './compiler-port'
+export type { ConfiguratorPort, ConfiguratorSnapshot } from './configurator-port'
 export type { DebuggerPort } from './debugger-port'
 export type { DevicePort } from './device-port'
 export type { NavigationPort, NavigationSearch } from './navigation-port'
 export { buildNavigationUrl } from './navigation-port'
 export type { OrchestratorPort } from './orchestrator-port'
 export type { ProjectPort } from './project-port'
-export type { RuntimePort } from './runtime-port'
+export type { FetchedProject, RetrievableDevice, RuntimePort } from './runtime-port'
 export type { SimulatorPort } from './simulator-port'
 export type { StlibSource, StlibSourcePort } from './stlib-source-port'
 export type { SystemPort } from './system-port'
@@ -141,7 +142,7 @@ export {
 } from './plc-schemas'
 
 // --- Port parameter/result types ---
-export type { CompileProgramArgs, DebugCompileArgs, ExportXmlArgs } from './compiler-port'
+export type { CompileProgramArgs, DebugCompileArgs } from './compiler-port'
 export type { OrchestratorDevice, OrchestratorInfo } from './orchestrator-port'
 export type {
   CreatePouParams,
@@ -159,6 +160,7 @@ export type {
   LoginParams,
   LoginResult,
   RuntimeLogsResult,
+  RuntimeProjectSnapshotMetadata,
   RuntimeStatusResult,
   UsersInfoResult,
 } from './runtime-port'

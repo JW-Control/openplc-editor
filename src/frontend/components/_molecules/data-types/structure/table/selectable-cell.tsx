@@ -2,7 +2,6 @@ import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { useEffect, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
 
 import { baseTypeEnum } from '../../../../../../middleware/shared/ports/plc-schemas'
 import type { PLCStructureVariable } from '../../../../../../middleware/shared/ports/types'
@@ -13,22 +12,25 @@ import { hasStringName, safeUpper } from '../../../../../utils/safe-upper'
 import { InputWithRef } from '../../../../_atoms/input'
 import { ArrayModal } from './elements/array-modal'
 
-type ISelectableCellProps = CellContext<PLCStructureVariable, unknown> & { editable?: boolean }
+type ISelectableCellProps = CellContext<PLCStructureVariable, unknown> & {
+  dataTypeName: string
+  editable?: boolean
+}
 
 const SelectableTypeCell = ({
   getValue,
   row: { index },
   column: { id },
   table,
+  dataTypeName,
   editable = true,
 }: ISelectableCellProps) => {
-  const { editor, dataTypes, libraries: sliceLibraries } = useOpenPLCStore(
-    useShallow((s) => ({
-      editor: s.editor,
-      dataTypes: s.project.data.dataTypes,
-      libraries: s.libraries,
-    })),
-  )
+  const {
+    project: {
+      data: { dataTypes },
+    },
+    libraries: sliceLibraries,
+  } = useOpenPLCStore()
 
   const VariableTypes = [
     { definition: 'base-type', values: baseTypeEnum.options },
@@ -49,7 +51,7 @@ const SelectableTypeCell = ({
       definition: 'user',
       values: sliceLibraries.user
         .filter(hasStringName)
-        .filter((userLibrary) => userLibrary.name !== editor.meta.name)
+        .filter((userLibrary) => userLibrary.name !== dataTypeName)
         .flatMap((userLibrary) => {
           const pous = (userLibrary as { pous?: { type?: string; name?: string }[] }).pous
           if (Array.isArray(pous)) {
@@ -101,6 +103,7 @@ const SelectableTypeCell = ({
   return (
     <>
       <ArrayModal
+        dataTypeName={dataTypeName}
         variableName={variableName}
         VariableRow={index}
         arrayModalIsOpen={arrayModalIsOpen}

@@ -2,7 +2,6 @@ import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { useEffect, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
 
 import { baseTypeEnum } from '../../../../middleware/shared/ports'
 import type { PLCGlobalVariable, PLCVariable } from '../../../../middleware/shared/ports/types'
@@ -14,6 +13,7 @@ import { cn } from '../../../utils/cn'
 import { hasStringName, safeUpper } from '../../../utils/safe-upper'
 import { propagateVariableTypeChange } from '../../../utils/variable-references'
 import { InputWithRef } from '../../_atoms/input'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
 import { TypeChangeModal } from '../type-change-modal'
 import { GlobalArrayModal } from './elements/array-modal'
 
@@ -47,12 +47,15 @@ const SelectableTypeCell = ({
   table,
   editable = true,
 }: ISelectableCellProps) => {
-  const { dataTypes, libraries: sliceLibraries } = useOpenPLCStore(
-    useShallow((s) => ({
-      dataTypes: s.project.data.dataTypes,
-      libraries: s.libraries,
-    })),
-  )
+  const {
+    project: {
+      data: { dataTypes, pous },
+    },
+    ladderFlows,
+    fbdFlows,
+    projectActions: { updateVariable },
+    libraries: sliceLibraries,
+  } = useOpenPLCStore()
 
   const VariableTypes = [
     {
@@ -132,16 +135,9 @@ const SelectableTypeCell = ({
     setCellValue(value)
     table.options.meta?.updateData(index, id, { definition, value })
 
-    const {
-      project: {
-        data: { pous: freshPous },
-      },
-      projectActions: { updateVariable },
-    } = useOpenPLCStore.getState()
-
     const newType = createVariableType(definition, value)
     if (newType) {
-      propagateVariableTypeChange(variableName, newType, freshPous, { updateVariable })
+      propagateVariableTypeChange(variableName, newType, pous, { updateVariable })
     }
   }
 
@@ -159,23 +155,7 @@ const SelectableTypeCell = ({
       return
     }
 
-    const {
-      ladderFlows: freshLadderFlows,
-      fbdFlows: freshFBDFlows,
-      project: {
-        data: { pous: freshPous },
-      },
-    } = useOpenPLCStore.getState()
-
-    const validation = validateTypeChange(
-      variableName,
-      oldType,
-      newType,
-      freshLadderFlows,
-      freshFBDFlows,
-      'global',
-      freshPous,
-    )
+    const validation = validateTypeChange(variableName, oldType, newType, ladderFlows, fbdFlows, 'global', pous)
 
     if (validation.affectedNodes.length > 0 || validation.warnings.length > 0) {
       setPendingTypeChange({ definition, value })
@@ -408,20 +388,33 @@ const SelectableClassCell = ({
   }, [initialValue])
 
   return (
-    <select
-      value={cellValue as string}
-      onChange={(e) => onValueChange(e.target.value)}
-      className={cn(
-        'h-full w-full cursor-pointer justify-center bg-transparent p-2 text-center font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
-        { 'pointer-events-none': !editable },
-      )}
-    >
-      {VariableClasses.map((type) => (
-        <option key={type} value={type}>
-          {_.startCase(type)}
-        </option>
-      ))}
-    </select>
+    <Select value={cellValue as string} onValueChange={(value) => onValueChange(value)}>
+      <SelectTrigger
+        placeholder={cellValue as string}
+        className={cn(
+          'flex h-full w-full justify-center p-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:text-neutral-300',
+          { 'pointer-events-none': !editable },
+        )}
+      />
+      <SelectContent
+        position='popper'
+        side='bottom'
+        sideOffset={-20}
+        className='box h-fit w-[200px] overflow-hidden rounded-lg bg-white outline-none dark:bg-neutral-950'
+      >
+        {VariableClasses.map((type) => (
+          <SelectItem
+            key={type}
+            value={type}
+            className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
+          >
+            <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
+              {_.startCase(type)}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 

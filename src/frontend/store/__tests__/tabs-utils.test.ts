@@ -96,7 +96,7 @@ describe('tabs/utils', () => {
       expect(result.type).toBe('plc-datatype')
       if (result.type === 'plc-datatype') {
         expect(result.meta.derivation).toBe('enumerated')
-        expect(result.structure).toEqual({ selectedRow: '-1', description: '' })
+        expect(result.structure).toEqual({ display: 'table', selectedRow: '-1', description: '' })
       }
     })
 
@@ -269,6 +269,13 @@ describe('tabs/utils', () => {
       expect(result.type).toBe('plc-datatype')
     })
 
+    it('creates editor from diagnostics tab', () => {
+      const tab: TabsProps = { name: 'I/O Image Diagnostics', elementType: { type: 'diagnostics' } }
+      const result = CreateEditorObjectFromTab(tab)
+      expect(result.type).toBe('plc-diagnostics')
+      expect(result.meta.name).toBe('I/O Image Diagnostics')
+    })
+
     it('creates editor from resource tab', () => {
       const tab: TabsProps = { name: 'Res', elementType: { type: 'resource' } }
       const result = CreateEditorObjectFromTab(tab)
@@ -291,6 +298,13 @@ describe('tabs/utils', () => {
       const tab: TabsProps = { name: 'Srv', elementType: { type: 'server', protocol: 's7comm' } }
       const result = CreateEditorObjectFromTab(tab)
       expect(result.type).toBe('plc-server')
+    })
+
+    it('creates editor from user-management tab', () => {
+      const tab: TabsProps = { name: 'User Management', elementType: { type: 'user-management' } }
+      const result = CreateEditorObjectFromTab(tab)
+      expect(result.type).toBe('plc-user-management')
+      expect(result.meta.name).toBe('User Management')
     })
 
     it('creates editor from diff-viewer tab', () => {

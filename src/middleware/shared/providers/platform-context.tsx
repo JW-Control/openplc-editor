@@ -74,6 +74,11 @@ export function useDevice() {
   return usePlatform().device
 }
 
+/** JWPLC: the device port, or undefined outside a PlatformProvider (isolated renders). */
+export function useOptionalDevice() {
+  return useContext(PlatformContext)?.device
+}
+
 export function useOrchestrator() {
   return usePlatform().orchestrator
 }
@@ -116,6 +121,33 @@ export function usePackages() {
 
 export function useEsi() {
   return usePlatform().esi
+}
+
+export function useEtherCATScan() {
+  return usePlatform().ethercatScan
+}
+
+export function useEtherCATDiagnostics() {
+  return usePlatform().ethercatDiagnostics
+}
+
+/**
+ * The Edge account port, or undefined on a platform that has no Edge account.
+ *
+ * Named `useEdgeAccount` here and re-exported as `useEdgeAccountPort` so it does
+ * not collide with the `useEdgeAccount` hook in `frontend/hooks`, which is the
+ * stateful consumer of this port rather than an accessor for it.
+ */
+export function useEdgeAccount() {
+  return usePlatform().edgeAccount
+}
+
+export function useEditSession() {
+  return usePlatform().editSession
+}
+
+export function useAppUpdate() {
+  return usePlatform().appUpdate
 }
 
 export function useLibrary() {

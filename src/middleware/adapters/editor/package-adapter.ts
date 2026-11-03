@@ -20,7 +20,8 @@
  * importFromFile`) can run unchanged.
  */
 
-import { parsePackageManifest } from '../../shared/ports/package-manifest-schema'
+import type { VppPackagePin } from '../../../backend/shared/types/PLC/devices/configuration'
+import { parseInstalledPackageManifest } from '../../shared/ports/package-manifest-schema'
 import type { PackagePort } from '../../shared/ports/package-port'
 import type {
   ImportResult,
@@ -62,6 +63,9 @@ import { mockInstallFromRemote, mockListRemoteCatalog } from './remote-catalog-m
 const PRODUCTION_CATALOG_URL = 'https://api.autonomylogic.com'
 const CATALOG_BASE_URL = process.env.VPP_CATALOG_URL || PRODUCTION_CATALOG_URL
 
+/** How long the catalog fetch may take before it is abandoned. */
+const CATALOG_FETCH_TIMEOUT_MS = 15_000
+
 /**
  * Local-dev toggle: when `true`, the catalog port methods are served from
  * the static fixture in `remote-catalog-mock.ts` so the Browse Catalog UI
@@ -72,6 +76,18 @@ const USE_LOCAL_MOCK = false
 
 export function createEditorPackageAdapter(): PackagePort {
   return {
+    // The desktop connects to a board directly, never to a vPLC, and keeps
+    // every installed package available whatever it is pointed at. The web
+    // build is where this decides which package is loaded.
+    setTargetDevice(): Promise<void> {
+      return Promise.resolve()
+    },
+
+    /** No vPLC to follow: the desktop picks a board directly. */
+    listTargetBoards(): Promise<string[]> {
+      return Promise.resolve([])
+    },
+
     importFromFile(): Promise<ImportResult> {
       return window.bridge.importPackageFromFile()
     },
@@ -92,15 +108,30 @@ export function createEditorPackageAdapter(): PackagePort {
       // manifest.json. Validate the shape here before handing it to UI
       // code — drift between port type and on-disk JSON is a real risk
       // that an unchecked cast would silently absorb.
+      //
+      // Same read-path tolerance as the main process applies (DOPE-448): this
+      // manifest belongs to an installed package, so an unreadable
+      // compatibility floor is dropped rather than taking the whole manifest —
+      // and the package's boards — down with it.
       const raw = await window.bridge.getPackageManifest(packageId)
       if (raw === null || raw === undefined) return null
-      return parsePackageManifest(raw)
+      return parseInstalledPackageManifest(raw)
+    },
+
+    getPackagePin(packageId: string): Promise<VppPackagePin | null> {
+      return window.bridge.getPackagePin(packageId)
     },
 
     async listRemoteCatalog(): Promise<RemoteCatalog> {
       /* istanbul ignore if -- USE_LOCAL_MOCK is a working-tree-only dev toggle (committed false) */
       if (USE_LOCAL_MOCK) return mockListRemoteCatalog()
-      const response = await fetch(`${CATALOG_BASE_URL}/vpp-catalog/v1/catalog.json`)
+      // A deadline, because this fetch has two callers with the same failure
+      // mode: the catalog browser, where a hung request is a spinner that never
+      // resolves, and the startup prime behind the build's package-update
+      // notice, where it would be a request left open for the session.
+      const response = await fetch(`${CATALOG_BASE_URL}/vpp-catalog/v1/catalog.json`, {
+        signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS),
+      })
       if (!response.ok) {
         throw new Error(`Catalog fetch failed: ${response.status} ${response.statusText}`)
       }

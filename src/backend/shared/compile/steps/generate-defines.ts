@@ -17,10 +17,104 @@
  * into the in-memory file map sent to `/compile-arduino`).
  */
 
+import type { PinPullSpec } from '../../../../middleware/shared/ports/types'
+import { IMAGE_TABLES } from '../../../../middleware/shared/utils/io-image/tables'
+import { PIN_PULL_CODES, resolveEffectivePinPull } from '../../../../middleware/shared/utils/pin-pull'
 import type { DevicePin } from '../../types/PLC/devices'
-import { generateModbusDefines, type VppModbusScreenState } from './modbus-defines'
+import type { IoImageSizes } from './compute-io-image'
+import {
+  DEBUG_SLAVE,
+  generateModbusDefines,
+  type ModbusServerCompileConfig,
+  resolveDefaultPortBaud,
+  type VppModbusScreenState,
+} from './modbus-defines'
 
 export type { VppModbusScreenState } from './modbus-defines'
+
+/**
+ * IEC prefix → the `MAX_*` macro `openplc.h` declares its buffer from,
+ * in emission order, which reads like the header does: inputs before
+ * outputs, I/O before memory.
+ *
+ * This table is the whole contract between the sizer and the firmware, and
+ * it is deliberately not exhaustive over the prefixes: `%IB`, `%QB`, `%MB`
+ * and `%MX` are absent because bare metal declares no byte-addressed buffer
+ * and no bit-addressed memory area, so there is no macro to put them in.
+ * `IMAGE_AREAS_BAREMETAL` refuses a declaration in one of those areas before
+ * the build gets here, which is what keeps the two lists in step.
+ *
+ * THE UNIT IS BITS FOR THE TWO BIT AREAS, and so is `image.conf`'s. The two
+ * emitters do NOT differ in unit -- both carry the unit the addresses use --
+ * they differ in PADDING, and only this one pads.
+ *
+ * Bare metal declares `bool_input[MAX_DIGITAL_INPUT/8][8]` and divides, so a
+ * count that is not a whole number of bytes rounds down in the firmware and
+ * the slots of the partial byte become unaddressable. Runtime v4 receives the
+ * exact figure and converts on its own side, where it knows the storage shape,
+ * and the Modbus config derives exact coil counts from it.
+ *
+ * Getting this backwards is how a factor of eight appears the next time either
+ * emitter is edited, which is the specific thing splitting them was meant to
+ * prevent: a comment claiming a unit difference where only a padding
+ * difference exists reads as an instruction to convert.
+ */
+/* The nine macros bare metal declares, and the order it declares them in,
+ * both derived from the one table list. Filtering that list to the entries
+ * carrying a macro yields exactly the order this file emitted when the nine
+ * were written out by hand, so no output moves. */
+const PROCESS_IMAGE_MACROS: ReadonlyArray<readonly [prefix: string, macro: string]> = IMAGE_TABLES.filter(
+  (table): table is typeof table & { macro: string } => table.macro !== undefined,
+).map((table) => [table.prefix, table.macro] as const)
+
+/**
+ * Bit areas reach the firmware as a whole number of bytes (FR06, BR04, CON05).
+ *
+ * THIS IS THE ONLY EMITTER THAT NEEDS IT, which is why it rounds here rather
+ * than taking a padded figure from the sizer. `openplc.h` declares
+ * `bool_input[MAX_DIGITAL_INPUT/8][8]` and divides, so a count that is not a
+ * whole number of bytes rounds DOWN in the firmware and the slots of the
+ * partial byte become unaddressable — six bits of `%QX` would declare
+ * `bool_output[0][8]`.
+ *
+ * The other two consumers must NOT see this padding. Runtime v4 receives bits
+ * and converts where it knows the storage shape, and the Modbus config derives
+ * its coil counts from the raw figure, so a project with six coils advertises
+ * six rather than eight.
+ *
+ * `arduino_runtime_glue.cpp` static_asserts both macros are multiples of eight.
+ * That assert is the proof this rounding happened and stays untouched.
+ */
+const BITS_PER_BYTE = 8
+const BIT_MACRO_PREFIXES: ReadonlySet<string> = new Set(['%IX', '%QX'])
+
+function firmwareCount(prefix: string, slots: number): number {
+  if (!BIT_MACRO_PREFIXES.has(prefix)) return slots
+  return Math.ceil(slots / BITS_PER_BYTE) * BITS_PER_BYTE
+}
+
+/**
+ * The `//Process image` block, or `''` when the caller passed no sizes.
+ *
+ * Absent means the target is one we do not size — Runtime v3, whose image we
+ * know nothing about, and the simulator, which has no address producers at
+ * all. Emitting nothing for them leaves their `defines.h` byte-for-byte as it
+ * was and leaves `openplc.h`'s own `#ifdef` ladder in charge, which is what
+ * they have always built with.
+ *
+ * A zero is emitted rather than skipped: it is a real answer, and skipping it
+ * would silently hand the area back to the header's fallback — the opposite of
+ * what a project with nothing in that area asked for (FR21, BR12, BR10).
+ */
+export function generateProcessImageDefines(sizes: IoImageSizes | undefined): string {
+  if (!sizes) return ''
+
+  let block = '//Process image\n'
+  for (const [prefix, macro] of PROCESS_IMAGE_MACROS) {
+    block += `#define ${macro} ${firmwareCount(prefix, sizes[prefix] ?? 0)}\n`
+  }
+  return block
+}
 
 /**
  * Slice of a `hals.json` board entry we read here.  Defined inline
@@ -48,13 +142,6 @@ export interface GenerateDefinesInput {
    *  category (`DIN` / `AIN` / `DOUT` / `AOUT`) plus matching
    *  count defines (`NUM_DISCRETE_INPUT` etc.). */
   devicePinMapping: DevicePin[]
-  /** Concatenated ST program content (the output of xml2st).
-   *  Scanned with `String.prototype.includes` for the marker
-   *  function-block names that toggle the Arduino-library
-   *  `USE_*_BLOCK` defines.  The set of marker strings here is
-   *  the canonical list — every change MUST match what the
-   *  firmware's HAL headers `#ifdef`-gate on. */
-  stProgramFileContent: string
   /** MD5 hash of `program.st` bytes — embedded as `PROGRAM_MD5` so
    *  the runtime can detect a stale upload (a v4 runtime reports
    *  this back on `FC 0x45` and the debugger uses it to confirm
@@ -79,43 +166,99 @@ export interface GenerateDefinesInput {
    *  fixed RTU-over-USART0 block.  Web passes `undefined` until
    *  VPP screens land on the web build. */
   vppModbusState?: VppModbusScreenState
+  /** The project's Modbus server, when it has one. Says what is served; the
+   *  screen state says what it is served over. */
+  modbusServer?: ModbusServerCompileConfig
+  /** Name of the board's default serial port (from the VPP manifest device's
+   *  `defaultSerial`; `BoardInfo.defaultSerial`). Drives `DEBUG_IFACE` and the
+   *  RTU "shares the debug serial" flag. Absent → `Serial`. */
+  defaultSerial?: string
+  /** Slots the project needs per IEC address area, from `computeIoImage`.
+   *
+   *  Absent for the targets we do not size — Runtime v3 and the simulator —
+   *  and those keep the `MAX_*` fallbacks in `openplc.h`, so their
+   *  `defines.h` is unchanged. Present for every arduino-cli board, where it
+   *  overrides those fallbacks through their `#ifndef` guards. */
+  imageSizes?: IoImageSizes
+
+  /** The board's `networkInterfaces`, forwarded to `generateModbusDefines`
+   *  so a project that never picked a carrier compiles for the one the
+   *  board has instead of assuming Ethernet. */
+  networkInterfaces?: string[]
+  /** Bytes the program's retain blob occupies (`debugMap.retainBlobSize`);
+   *  absent or 0 when the program retains nothing.
+   *
+   *  Emitted as `OPLC_RETAIN_BLOB_SIZE` so the firmware can `static_assert`
+   *  it against its own buffer. Without it, a program retaining more than the
+   *  board holds links, runs, and drops retain in silence — there is no
+   *  console on a microcontroller to report it, so the check has to happen at
+   *  build time or not at all. */
+  retainBlobSize?: number
+  /** The board's `pins.pull` spec. Present → `PINPULL_DIN` is emitted, one code per digital input
+   *  in `PINMASK_DIN` order; absent → nothing, and the HAL keeps plain `INPUT`. */
+  pinPull?: PinPullSpec
 }
 
 /**
  * Build the contents of `defines.h`.
  *
  * Output sections, in order:
- *   1. `// Board defines` — only when `boardEntry.define` is present.
+ *   1. `// Board defines` — `boardEntry.define`; omitted entirely when
+ *      the board declares none.
  *   2. `#define PROGRAM_MD5 "<md5>"` — always.
  *   3. `// Comms Configuration` (simulator-only) — fixed Modbus RTU
  *      over emulated USART0 so avr8js's serial bridge can drive
  *      Modbus traffic into the running emulator.
  *   4. `// IO Config` — PINMASK_{DIN,AIN,DOUT,AOUT} + NUM_* derived
  *      from `devicePinMapping`.
- *   5. `// Arduino libraries` — `USE_*_BLOCK` toggles gated on FB
- *      names appearing in the ST source.
  *
  * The output is plain C preprocessor text terminated with newlines
  * matching the editor's emission exactly (so a byte-diff between
  * editor-produced and web-produced firmware comes out clean).
  */
 export function generateDefinesContent(input: GenerateDefinesInput): string {
-  const { boardEntry, devicePinMapping, stProgramFileContent, buildMD5Hash, boardRuntime, vppModbusState } = input
+  const {
+    boardEntry,
+    devicePinMapping,
+    buildMD5Hash,
+    boardRuntime,
+    vppModbusState,
+    modbusServer,
+    defaultSerial,
+    networkInterfaces,
+    retainBlobSize,
+    imageSizes,
+    pinPull,
+  } = input
 
   let DEFINES_CONTENT = ''
 
-  // 1. Board defines from hals.json.  Single-string and array forms
-  //    both supported; absent `define` field means no Board defines
-  //    section header at all (the next section starts directly).
+  // 1. Board defines from `hals.json`'s per-board `define` field
+  //    (single-string and array forms both supported, emitted verbatim).
+  //    An empty list means no header at all: the next section starts
+  //    directly.
+  //
+  //    DOPE-589 removed the second source that briefly lived here,
+  //    `OPENPLC_NO_UNIQUE_ID`. It existed to keep `ArduinoUniqueID` out of
+  //    a build the library refuses to compile in (mbed), and it is
+  //    unnecessary now that the open firmware links no unique-id library
+  //    at all: the identity comes from the closed license-core through
+  //    `license_gate_device_id()`. The list-then-header shape it
+  //    introduced stays, because it is what makes a board with
+  //    `define: []` emit no bare header.
+  const boardDefines: string[] = []
   if (boardEntry && boardEntry.define) {
-    DEFINES_CONTENT = '// Board defines\n'
     if (Array.isArray(boardEntry.define)) {
-      boardEntry.define.forEach((define) => {
-        DEFINES_CONTENT += `#define ${define}\n`
-      })
+      boardDefines.push(...boardEntry.define)
     } else if (typeof boardEntry.define === 'string') {
-      DEFINES_CONTENT += `#define ${boardEntry.define}\n`
+      boardDefines.push(boardEntry.define)
     }
+  }
+  if (boardDefines.length > 0) {
+    DEFINES_CONTENT = '// Board defines\n'
+    boardDefines.forEach((define) => {
+      DEFINES_CONTENT += `#define ${define}\n`
+    })
   }
 
   // 2. Trailing blank-line pair after the board-defines section
@@ -155,11 +298,36 @@ export function generateDefinesContent(input: GenerateDefinesInput): string {
     DEFINES_CONTENT += '#define MODBUS_ENABLED\n'
     DEFINES_CONTENT += `\n\n`
   } else if (boardRuntime !== 'openplc-compiler' && vppModbusState) {
-    const modbusBlock = generateModbusDefines(vppModbusState)
+    const modbusBlock = generateModbusDefines(vppModbusState, defaultSerial, modbusServer, networkInterfaces)
     if (modbusBlock.length > 0) {
       DEFINES_CONTENT += modbusBlock
       DEFINES_CONTENT += '\n\n'
     }
+  }
+
+  // 4b. Debugger — always-on serial debugger for baremetal Arduino targets.
+  //     The default serial port is ALWAYS initialised (DEBUG_IFACE @ DEBUG_BAUD)
+  //     so the debug function codes (0x41-0x48) respond over serial regardless
+  //     of whether Modbus is configured — without allocating operation buffers.
+  //     When Modbus RTU runs on that same default port, generateModbusDefines
+  //     emits MBSERIAL_SHARES_DEBUG_SERIAL so the firmware begins the port once.
+  //     Simulator uses its fixed MODBUS_ENABLED block above; openplc-compiler
+  //     runtimes don't use this firmware at all.
+  if (boardRuntime !== 'simulator' && boardRuntime !== 'openplc-compiler') {
+    DEFINES_CONTENT += '//Debugger\n'
+    DEFINES_CONTENT += '#define DEBUGGER_ENABLED\n'
+    DEFINES_CONTENT += `#define DEBUG_IFACE ${defaultSerial ?? 'Serial'}\n`
+    // Not `serial.baud_rate ?? 115200`: a package published without a `serial`
+    // section still configures a baud — on the RTU section — and that IS this
+    // port's speed. Ignoring it compiled a firmware listening at 115200 while
+    // the editor dialled the other value, and the board answered nothing
+    // ("No Firmware Detected" on a healthy board).
+    DEFINES_CONTENT += `#define DEBUG_BAUD ${resolveDefaultPortBaud(vppModbusState ?? {})}\n`
+    // A constant, unlike the baud: the firmware answers it alongside the Modbus
+    // server's id and routes by function code, so nothing the user configures can
+    // move the editor's link off it.
+    DEFINES_CONTENT += `#define DEBUG_SLAVE ${DEBUG_SLAVE}\n`
+    DEFINES_CONTENT += `\n\n`
   }
 
   // 5. IO Config — derived from devicePinMapping.  Pin order is
@@ -175,6 +343,10 @@ export function generateDefinesContent(input: GenerateDefinesInput): string {
   DEFINES_CONTENT += `#define PINMASK_AIN ${analogInputPins.map(({ pin }) => pin).join(', ')}\n`
   DEFINES_CONTENT += `#define PINMASK_DOUT ${digitalOutputPins.map(({ pin }) => pin).join(', ')}\n`
   DEFINES_CONTENT += `#define PINMASK_AOUT ${analogOutputPins.map(({ pin }) => pin).join(', ')}\n`
+  if (pinPull) {
+    const codes = digitalInputPins.map((pin) => PIN_PULL_CODES[resolveEffectivePinPull(pinPull, pin)])
+    DEFINES_CONTENT += `#define PINPULL_DIN ${codes.join(', ')}\n`
+  }
 
   DEFINES_CONTENT += `#define NUM_DISCRETE_INPUT ${digitalInputPins.length}\n`
   DEFINES_CONTENT += `#define NUM_ANALOG_INPUT ${analogInputPins.length}\n`
@@ -182,61 +354,22 @@ export function generateDefinesContent(input: GenerateDefinesInput): string {
   DEFINES_CONTENT += `#define NUM_ANALOG_OUTPUT ${analogOutputPins.length}\n`
   DEFINES_CONTENT += `\n\n`
 
-  // 6. Arduino libraries — toggled on FB names appearing in the ST.
-  //    The marker-string set here is the canonical list; the
-  //    firmware HAL headers `#ifdef`-gate `#include` directives off
-  //    these names, so adding a marker here without a matching
-  //    HAL change is harmless, but adding a HAL gate without the
-  //    matching marker here silently breaks link.
-  DEFINES_CONTENT += '//Arduino libraries\n'
-
-  if (
-    stProgramFileContent.includes('DS18B20;') ||
-    stProgramFileContent.includes('DS18B20_2_OUT;') ||
-    stProgramFileContent.includes('DS18B20_3_OUT;') ||
-    stProgramFileContent.includes('DS18B20_4_OUT;') ||
-    stProgramFileContent.includes('DS18B20_5_OUT;')
-  ) {
-    DEFINES_CONTENT += '#define USE_DS18B20_BLOCK\n'
+  // 6. Retain blob size.  Emitted only when the program retains something,
+  //    so boards that never touch retain see no change at all.  The firmware
+  //    static_asserts this against RETAIN_BUFFER_MAX: a program that outgrows
+  //    the buffer must fail the build rather than silently start behaving as
+  //    NON_RETAIN on a machine somebody has already installed.
+  if (retainBlobSize !== undefined && retainBlobSize > 0) {
+    DEFINES_CONTENT += '\n//Retain\n'
+    DEFINES_CONTENT += `#define OPLC_RETAIN_BLOB_SIZE ${retainBlobSize}\n`
   }
 
-  if (stProgramFileContent.includes('P1AM_INIT;')) DEFINES_CONTENT += '#define USE_P1AM_BLOCKS\n'
-
-  if (stProgramFileContent.includes('CLOUD_BEGIN;')) DEFINES_CONTENT += '#define USE_CLOUD_BLOCKS\n'
-
-  if (stProgramFileContent.includes('MQTT_CONNECT;') || stProgramFileContent.includes('MQTT_CONNECT_AUTH;'))
-    DEFINES_CONTENT += '#define USE_MQTT_BLOCKS\n'
-
-  if (
-    stProgramFileContent.includes('ARDUINOCAN_CONF;') ||
-    stProgramFileContent.includes('ARDUINOCAN_WRITE;') ||
-    stProgramFileContent.includes('ARDUINOCAN_WRITE_WORD;') ||
-    stProgramFileContent.includes('ARDUINOCAN_READ;')
-  ) {
-    DEFINES_CONTENT += '#define USE_ARDUINOCAN_BLOCK\n'
-  }
-
-  if (
-    stProgramFileContent.includes('STM32CAN_CONF;') ||
-    stProgramFileContent.includes('STM32CAN_WRITE;') ||
-    stProgramFileContent.includes('STM32CAN_READ;')
-  ) {
-    DEFINES_CONTENT += '#define USE_STM32CAN_BLOCK\n'
-  }
-
-  if (
-    stProgramFileContent.includes('SM_8RELAY;') ||
-    stProgramFileContent.includes('SM_16RELAY;') ||
-    stProgramFileContent.includes('SM_8DIN;') ||
-    stProgramFileContent.includes('SM_16DIN;') ||
-    stProgramFileContent.includes('SM_4REL4IN;') ||
-    stProgramFileContent.includes('SM_INDUSTRIAL;') ||
-    stProgramFileContent.includes('SM_RTD;') ||
-    stProgramFileContent.includes('SM_BAS;') ||
-    stProgramFileContent.includes('SM_HOME;') ||
-    stProgramFileContent.includes('SM_8MOSFET;')
-  ) {
-    DEFINES_CONTENT += '#define USE_SM_BLOCKS\n'
+  // 7. Process image.  Last and conditional for the same reason as the retain
+  //    block above: a target we do not size sees no change at all, so its
+  //    defines.h stays byte-for-byte what it was.
+  const imageBlock = generateProcessImageDefines(imageSizes)
+  if (imageBlock.length > 0) {
+    DEFINES_CONTENT += `\n${imageBlock}`
   }
 
   return DEFINES_CONTENT

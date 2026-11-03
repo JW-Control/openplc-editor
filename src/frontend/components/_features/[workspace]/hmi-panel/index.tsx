@@ -2,7 +2,7 @@ import { collectHmiCandidates, describeHmiVariables } from '@root/backend/shared
 import { useDevice } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useState } from 'react'
 
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { openHmiDesigner, openHmiDesignerTab } from '../editor/hmi-designer'
 
 interface HmiSidePanelProps {
@@ -17,19 +17,18 @@ interface HmiSidePanelProps {
  */
 export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
   const device = useDevice()
+  const store = useOpenPLCStoreApi()
   const [opening, setOpening] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const projectName = useOpenPLCStore((s) => s.project.meta.name)
   const deviceBoard = useOpenPLCStore((s) => s.deviceDefinitions.configuration.deviceBoard)
-  const availableBoards = useOpenPLCStore((s) => s.deviceAvailableOptions.availableBoards)
-  const currentBoardInfo = availableBoards.get(deviceBoard)
 
   const handleOpenWindow = useCallback(async () => {
     setOpening(true)
     setError(null)
     try {
-      const result = await openHmiDesigner(device)
+      const result = await openHmiDesigner(store, device)
       if (!result.ok && result.error) {
         setError(result.error)
       }
@@ -38,16 +37,16 @@ export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
     } finally {
       setOpening(false)
     }
-  }, [device])
+  }, [device, store])
 
   const handleOpenTab = useCallback(() => {
-    openHmiDesignerTab()
-  }, [])
+    openHmiDesignerTab(store)
+  }, [store])
 
   // Calculate available candidate variables for binding
   const candidatesCount = (() => {
     try {
-      const state = useOpenPLCStore.getState()
+      const state = store.getState()
       const projectData = state.projectActions.getCompileReadyProjectData()
       const vars = describeHmiVariables(collectHmiCandidates(projectData))
       return vars.length
@@ -59,7 +58,7 @@ export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
   return (
     <div
       id='hmi-side-panel'
-      className='flex h-full w-full flex-col gap-3 overflow-y-auto text-xs font-caption text-neutral-800 dark:text-neutral-200'
+      className='flex h-full w-full flex-col gap-3 overflow-y-auto font-caption text-xs text-neutral-800 dark:text-neutral-200'
     >
       {/* Panel Header */}
       <div className='flex items-center justify-between border-b border-neutral-200 pb-2.5 dark:border-neutral-800'>
@@ -72,7 +71,7 @@ export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
               HMI Designer
             </h3>
             <p className='text-[10px] text-neutral-500 dark:text-neutral-400'>
-              {currentBoardInfo?.name || 'JWPLC Basic'} · TFT ST7789
+              {deviceBoard || 'JWPLC Basic'} · TFT ST7789
             </p>
           </div>
         </div>
@@ -88,17 +87,17 @@ export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
 
       {/* TFT Display Representation Card */}
       <div className='flex flex-col gap-1.5 rounded-lg border border-neutral-300 bg-neutral-950 p-2.5 text-neutral-300 shadow-inner dark:border-neutral-800'>
-        <div className='flex items-center justify-between border-b border-neutral-800 pb-1 text-[9px] text-neutral-400 font-mono'>
+        <div className='flex items-center justify-between border-b border-neutral-800 pb-1 font-mono text-[9px] text-neutral-400'>
           <span>TFT 320 × 170 px</span>
           <span className='flex items-center gap-1 text-green-400'>
-            <span className='h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse'></span>
+            <span className='h-1.5 w-1.5 animate-pulse rounded-full bg-green-400'></span>
             RGB565
           </span>
         </div>
-        <div className='flex h-20 w-full flex-col items-center justify-center rounded bg-neutral-900 p-2 text-center border border-neutral-800/80'>
-          <span className='text-xs font-bold text-neutral-100 tracking-wide'>JWPLC DISPLAY</span>
-          <span className='text-[10px] text-blue-400 font-mono'>hmi/JWPLC_HMI.jwhmi</span>
-          <span className='text-[9px] text-neutral-500 mt-1'>6 teclas: LEFT, UP, RIGHT, ESC, OK, DOWN</span>
+        <div className='flex h-20 w-full flex-col items-center justify-center rounded border border-neutral-800/80 bg-neutral-900 p-2 text-center'>
+          <span className='text-xs font-bold tracking-wide text-neutral-100'>JWPLC DISPLAY</span>
+          <span className='font-mono text-[10px] text-blue-400'>hmi/JWPLC_HMI.jwhmi</span>
+          <span className='mt-1 text-[9px] text-neutral-500'>6 teclas: LEFT, UP, RIGHT, ESC, OK, DOWN</span>
         </div>
       </div>
 
@@ -135,7 +134,7 @@ export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
       <div className='flex flex-col gap-1 rounded-lg border border-neutral-200 bg-neutral-50/50 p-2.5 dark:border-neutral-800 dark:bg-neutral-900/40'>
         <div className='flex items-center justify-between text-[11px] font-semibold text-neutral-800 dark:text-neutral-200'>
           <span>Variables PLC disponibles</span>
-          <span className='rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300'>
+          <span className='rounded bg-blue-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300'>
             {candidatesCount}
           </span>
         </div>
@@ -146,8 +145,13 @@ export const HmiSidePanel = ({ onClose }: HmiSidePanelProps) => {
 
       {/* Footer Info */}
       <div className='mt-auto border-t border-neutral-200 pt-2 text-[10px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400'>
-        <p>Proyecto: <span className='font-mono font-medium text-neutral-700 dark:text-neutral-300'>{projectName}</span></p>
-        <p className='mt-0.5'>La pantalla se guarda en <code className='text-neutral-700 dark:text-neutral-300'>hmi/</code> y se compila directamente en el firmware.</p>
+        <p>
+          Proyecto: <span className='font-mono font-medium text-neutral-700 dark:text-neutral-300'>{projectName}</span>
+        </p>
+        <p className='mt-0.5'>
+          La pantalla se guarda en <code className='text-neutral-700 dark:text-neutral-300'>hmi/</code> y se compila
+          directamente en el firmware.
+        </p>
       </div>
     </div>
   )

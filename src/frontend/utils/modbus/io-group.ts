@@ -1,0 +1,139 @@
+import type { ModbusIOGroup, ModbusIOPoint } from '../../../middleware/shared/ports/types'
+
+type ModbusFunctionCode = ModbusIOGroup['functionCode']
+type ModbusErrorHandling = ModbusIOGroup['errorHandling']
+
+/**
+ * Maximum number of elements a single Modbus request can carry per function
+ * code, straight from the protocol's PDU limits. FC 5 and FC 6 address exactly
+ * one element by definition; the read codes are bounded by the 253-byte PDU.
+ *
+ * This is an INPUT rule (what the user may type), not a stored invariant — see
+ * `clampIOGroupLength`.
+ */
+export const MAX_IO_GROUP_LENGTH_BY_FC: Record<ModbusFunctionCode, number> = {
+  '1': 2000,
+  '2': 2000,
+  '3': 125,
+  '4': 125,
+  '5': 1,
+  '6': 1,
+  '15': 1968,
+  '16': 123,
+}
+
+/**
+ * FC 5 (Write Single Coil) and FC 6 (Write Single Register) write exactly one
+ * element, so a group using them always holds a single I/O point.
+ */
+export const isSingleElementFunctionCode = (functionCode: ModbusFunctionCode): boolean =>
+  functionCode === '5' || functionCode === '6'
+
+/**
+ * FC 1 to FC 4 read from the slave into the PLC's input image; FC 5, 6, 15 and
+ * 16 write the PLC's outputs to the slave.
+ */
+export const isReadFunctionCode = (functionCode: ModbusFunctionCode): boolean =>
+  functionCode === '1' || functionCode === '2' || functionCode === '3' || functionCode === '4'
+
+/**
+ * Error handling only exists for read groups: it decides what the input image
+ * holds while the slave is unreachable. A write group has nothing to apply it
+ * to, so it is always stored as the inert default.
+ */
+export const resolveIOGroupErrorHandling = (
+  functionCode: ModbusFunctionCode,
+  errorHandling: ModbusErrorHandling,
+): ModbusErrorHandling => (isReadFunctionCode(functionCode) ? errorHandling : 'keep-last-value')
+
+/**
+ * Normalizes a group's length to the invariant every writer must uphold: a
+ * positive integer, and exactly 1 for single-element function codes.
+ *
+ * FLOOR ONLY — deliberately does NOT apply `MAX_IO_GROUP_LENGTH_BY_FC`. Doing
+ * so would silently truncate a pre-existing group (say an FC 3 group of length
+ * 200) the moment the user edited only its name, i.e. data loss introduced by
+ * a bug fix. The maximum is enforced at the input, by `validateIOGroupLength`.
+ */
+export const clampIOGroupLength = (functionCode: ModbusFunctionCode, length: number): number => {
+  if (isSingleElementFunctionCode(functionCode)) return 1
+  if (!Number.isFinite(length)) return 1
+  const floored = Math.floor(length)
+  return floored < 1 ? 1 : floored
+}
+
+type IOGroupLengthValidation = { ok: true; length: number } | { ok: false; message: string }
+
+/**
+ * Validates the raw string a user typed into the Length field. Rejects
+ * non-integers, values below 1 and values above the function code's PDU limit,
+ * returning a message that names the code so the reason is actionable.
+ */
+export const validateIOGroupLength = (functionCode: ModbusFunctionCode, raw: string): IOGroupLengthValidation => {
+  if (isSingleElementFunctionCode(functionCode)) return { ok: true, length: 1 }
+
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return { ok: false, message: 'Length is required.' }
+
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return { ok: false, message: 'Length must be a number.' }
+  if (!Number.isInteger(parsed)) return { ok: false, message: 'Length must be a whole number.' }
+  if (parsed < 1) return { ok: false, message: 'Length must be at least 1.' }
+
+  const max = MAX_IO_GROUP_LENGTH_BY_FC[functionCode]
+  if (parsed > max) return { ok: false, message: `FC ${functionCode} addresses at most ${max} elements per request.` }
+
+  return { ok: true, length: parsed }
+}
+
+/**
+ * Renders a group's occupied IEC address span for the collapsed table row.
+ * Showing the range (rather than just the first point's address) is what makes
+ * a size change — and the project-wide address recompaction that follows it —
+ * visible without expanding the group.
+ */
+export const formatIOGroupAddressRange = (points: ModbusIOPoint[]): string => {
+  if (points.length === 0) return '-'
+  const first = points[0].iecLocation
+  if (points.length === 1) return first
+  return `${first} – ${points[points.length - 1].iecLocation}`
+}
+
+/**
+ * The options offered by the New / Edit IO Group form. Shared with the
+ * import/export module so a file and the form always speak the same
+ * vocabulary — adding a function code here makes it importable too.
+ */
+export const IO_GROUP_FUNCTION_CODE_OPTIONS: ReadonlyArray<{ value: ModbusFunctionCode; label: string }> = [
+  { value: '1', label: 'Read Coils (FC 1)' },
+  { value: '2', label: 'Read Discrete Inputs (FC 2)' },
+  { value: '3', label: 'Read Holding Registers (FC 3)' },
+  { value: '4', label: 'Read Input Registers (FC 4)' },
+  { value: '5', label: 'Write Single Coil (FC 5)' },
+  { value: '6', label: 'Write Single Register (FC 6)' },
+  { value: '15', label: 'Write Multiple Coils (FC 15)' },
+  { value: '16', label: 'Write Multiple Registers (FC 16)' },
+]
+
+export const IO_GROUP_ERROR_HANDLING_OPTIONS: ReadonlyArray<{ value: ModbusErrorHandling; label: string }> = [
+  { value: 'keep-last-value', label: 'Keep last value' },
+  { value: 'set-to-zero', label: 'Set to zero' },
+]
+
+/** The values the New IO Group form starts with (name excepted). */
+export const IO_GROUP_FORM_DEFAULTS: {
+  functionCode: ModbusFunctionCode
+  cycleTime: number
+  offset: string
+  length: number
+  errorHandling: ModbusErrorHandling
+} = {
+  functionCode: '3',
+  cycleTime: 100,
+  offset: '0',
+  length: 1,
+  errorHandling: 'keep-last-value',
+}
+
+/** Longest IO group name, enforced by the form and by import alike. */
+export const IO_GROUP_NAME_MAX_LENGTH = 64

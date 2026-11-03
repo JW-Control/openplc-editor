@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, resolve as pathResolve, sep as pathSep } from 'node:path'
+import { promisify } from 'node:util'
 
 import { app as electronApp } from 'electron'
 import { produce } from 'immer'
@@ -8,11 +10,16 @@ import { SerialPort as NodeSerialPort } from 'serialport'
 
 import { readHalsFile } from '../../shared/firmware/hals-loader'
 import { type BoardBuildInfo, BoardInfoResolver } from '../../shared/hardware/board-info-resolver'
+import { resolveConfigTemplatePluginName } from '../../shared/utils/vpp/build-vpp-plugin-files'
 import { PackageManagerModule } from '../package-manager'
 import { logger } from '../services/logger-service'
 import { assertPathContained } from '../utils/path-containment'
 import { orderBoardsByVppGroup } from './order-boards-by-vpp-group'
+import { mergeSerialPortList, toCalloutPath } from './serial-port-list'
+import { toVppModuleDefinition } from './to-vpp-module-definition'
 import type { AvailableBoards, HalsFile, SerialPort } from './types'
+
+const execFileAsync = promisify(execFile)
 
 // interface MethodsResult<T> {
 //   success: boolean
@@ -33,7 +40,9 @@ class HardwareModule {
   // ############################################################################
   static readonly HOST_PLATFORM = process.platform
   static readonly HOST_ARCHITECTURE = process.arch
-  static readonly DEVELOPMENT_MODE = process.env.NODE_ENV === 'development'
+  /** Unpackaged means the binaries and sources sit beside the checkout. See the
+   *  note on `CompilerModule.DEVELOPMENT_MODE` for why this is not `NODE_ENV`. */
+  static readonly DEVELOPMENT_MODE = !electronApp.isPackaged
 
   constructor() {
     this.binaryDirectoryPath = this.#constructBinaryDirectoryPath()
@@ -94,22 +103,98 @@ class HardwareModule {
 
   // ++ ============================= Getters ================================ ++
   async getAvailableSerialPorts(): Promise<SerialPort[]> {
-    // Native `serialport` package replaces the legacy `xml2st
-    // --list-ports` subprocess (xml2st was retired when the JSON
-    // transpiler landed in-process; see
-    // `editor-compiler-platform-port.transpileToSt`).  `NodeSerialPort.list()`
-    // returns each port's `path` plus optional vendor metadata; map
-    // it onto the `{name, address}` shape the renderer expects.
+    // Two independent, best-effort scans merged by device path. The path is
+    // always the primary, unique label (mirrors the Arduino IDE); the
+    // parenthetical descriptor is the arduino-cli-identified board name when
+    // known, falling back to `serialport`'s manufacturer/vendor string. See
+    // `mergeSerialPortList` for the labelling rules. Running both scans is
+    // cheap here: the list is static after build and only re-scanned on an
+    // explicit user refresh.
+    const [boardNamesByPath, manufacturersByPath] = await Promise.all([
+      this.#identifyBoardsByPath(),
+      this.#listSerialPortManufacturers(),
+    ])
+    return mergeSerialPortList(boardNamesByPath, manufacturersByPath)
+  }
+
+  /**
+   * Is this serial port still attached?
+   *
+   * The `serialport` scan only — deliberately NOT `getAvailableSerialPorts()`,
+   * which also shells out to arduino-cli. This is called on every tick of the
+   * device link poll to tell a pulled USB cable (fail now, there is nothing to
+   * retry against) from a device that is merely slow to answer (retry), so it has
+   * to be instant.
+   *
+   * Fails SAFE: if enumeration itself breaks, the port is reported present. A
+   * false "gone" would tear down a working connection, which is worse than
+   * waiting out one timeout.
+   */
+  async isSerialPortPresent(address: string): Promise<boolean> {
     try {
       const ports = await NodeSerialPort.list()
-      return ports.map((port) => ({
-        name: port.manufacturer ?? port.path,
-        address: port.path,
-      }))
+      const wanted = toCalloutPath(address)
+      return ports.some((port) => toCalloutPath(port.path) === wanted)
+    } catch (error: unknown) {
+      logger.error(`Failed to check serial port presence: ${String(error)}`)
+      return true
+    }
+  }
+
+  /**
+   * `serialport` enumeration → `path → manufacturer`. This is the reliable,
+   * instant, cross-platform source for the *set* of ports; arduino-cli only
+   * enriches it. Best-effort: any failure yields an empty map (never throws)
+   * so arduino-cli-discovered ports still come through.
+   */
+  async #listSerialPortManufacturers(): Promise<Map<string, string | undefined>> {
+    try {
+      const ports = await NodeSerialPort.list()
+      return new Map(ports.map((port) => [port.path, port.manufacturer]))
     } catch (error: unknown) {
       logger.error(`Failed to enumerate serial ports: ${String(error)}`)
-      return []
+      return new Map()
     }
+  }
+
+  /**
+   * `arduino-cli board list --format json` → `path → board name`. arduino-cli
+   * matches each port's USB VID/PID against the installed cores' `boards.txt`
+   * — the exact identification the Arduino IDE surfaces (e.g. `Arduino Uno`,
+   * `Opta`). A detected-but-unmatched port maps to `undefined` (it will fall
+   * back to the manufacturer descriptor). Best-effort: a missing binary, no
+   * installed cores, a spawn error, or malformed JSON all yield an empty map
+   * so plain `serialport` enumeration still works. Reuses the same binary and
+   * `--config-file` as compile/upload, so it sees the same installed cores.
+   */
+  async #identifyBoardsByPath(): Promise<Map<string, string | undefined>> {
+    const boardNamesByPath = new Map<string, string | undefined>()
+    try {
+      let binaryPath = this.arduinoCliBinaryPath
+      if (HardwareModule.HOST_PLATFORM === 'win32') binaryPath += '.exe'
+
+      const { stdout } = await execFileAsync(
+        binaryPath,
+        ['board', 'list', '--format', 'json', ...this.arduinoCliBaseParameters],
+        { timeout: 15_000, maxBuffer: 16 * 1024 * 1024 },
+      )
+
+      const parsed = JSON.parse(stdout) as {
+        detected_ports?: Array<{
+          matching_boards?: Array<{ name?: string }>
+          port?: { address?: string }
+        }>
+      }
+
+      for (const detected of parsed.detected_ports ?? []) {
+        const address = detected.port?.address
+        if (!address) continue
+        boardNamesByPath.set(address, detected.matching_boards?.[0]?.name)
+      }
+    } catch (error: unknown) {
+      logger.warn(`arduino-cli board list failed; serial ports will show without board names: ${String(error)}`)
+    }
+    return boardNamesByPath
   }
 
   /**
@@ -164,6 +249,7 @@ class HardwareModule {
         draft.set(board, {
           compiler: boardData.compiler,
           core: boardData.core,
+          ...(boardData.platform ? { platform: boardData.platform } : {}),
           preview: boardData.preview,
           specs: boardData.specs,
           coreVersion: coreVersion ?? undefined,
@@ -247,27 +333,20 @@ class HardwareModule {
 
           const modules = device.moduleSystem
             ? await Promise.all(
-                device.moduleSystem.modules.map(async (m) => ({
-                  id: m.id,
-                  name: m.name,
-                  hwId: m.hwId,
-                  fixed: m.fixed,
-                  image: m.image,
-                  description: m.description,
-                  specs: m.specs,
-                  configScreen: m.configScreen,
-                  configScreenDefinition: await loadModuleConfigScreen(m.configScreen),
-                  io: m.io,
-                  parameters: m.parameters,
-                  addressMapping: m.addressMapping,
-                  exclusiveSerialPort: m.exclusiveSerialPort,
-                })),
+                device.moduleSystem.modules.map(async (m) =>
+                  toVppModuleDefinition(m, await loadModuleConfigScreen(m.configScreen)),
+                ),
               )
             : []
+
+          const pluginName = await HardwareModule.#readPluginName(pkg.path, device.hal?.configTemplate)
 
           boards.set(device.name, {
             compiler,
             core: device.target.core ?? '',
+            // Upload transport ("ethernet" for the LOGO! 8.2; serial default).
+            uploadMethod: device.target.uploadMethod,
+            ...(device.target.platform ? { platform: device.target.platform } : {}),
             preview: device.preview,
             specs: device.specs ?? {},
             pins: {
@@ -275,6 +354,7 @@ class HardwareModule {
               defaultDout: device.defaults?.pins?.defaultDout,
               defaultAin: device.defaults?.pins?.defaultAin,
               defaultAout: device.defaults?.pins?.defaultAout,
+              ...(device.defaults?.pins?.pull ? { pull: device.defaults.pins.pull } : {}),
             },
             // Forward platformOptions only when the manifest actually declares
             // some; the UI keys off `platformOptions?.length` to decide whether
@@ -294,20 +374,41 @@ class HardwareModule {
               deviceId: device.id,
               packagePath: pkg.path,
               screens,
+              ...(device.hidesNativeScreens ? { hidesNativeScreens: device.hidesNativeScreens } : {}),
+              ...(pluginName ? { pluginName } : {}),
               moduleSystem: device.moduleSystem
                 ? {
                     enabled: device.moduleSystem.enabled,
                     maxSlots: device.moduleSystem.maxSlots,
+                    discoverySupported: device.moduleSystem.discoverySupported === true,
                     modules,
                   }
                 : null,
             },
+            ...(device.serialPorts ? { serialPorts: device.serialPorts } : {}),
+            ...(device.defaultSerial ? { defaultSerial: device.defaultSerial } : {}),
+            ...(device.networkInterfaces ? { networkInterfaces: device.networkInterfaces } : {}),
             ...(device.debug ? { debug: device.debug } : {}),
           })
         }
       }
     } catch (err) {
       logger.error(`Failed to load VPP packages: ${String(err)}`)
+    }
+  }
+
+  /** Plugin name from the device's config template, or null when it is absent, unreadable or unsafe. */
+  static async #readPluginName(packagePath: string, configTemplate: string | undefined): Promise<string | null> {
+    if (!configTemplate) return null
+    const templatePath = join(packagePath, configTemplate)
+    try {
+      assertPathContained(packagePath, templatePath, 'hal.configTemplate')
+      if (!existsSync(templatePath)) return null
+      const parsed: unknown = await HardwareModule.readJSONFile(templatePath)
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+      return resolveConfigTemplatePluginName(parsed as Record<string, unknown>)
+    } catch {
+      return null
     }
   }
 

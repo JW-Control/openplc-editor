@@ -1,7 +1,25 @@
 import { produce } from 'immer'
 import { StateCreator } from 'zustand'
 
-import type { EditorSlice, EditorState } from './types'
+import type { EditorSlice, EditorState, StructureTableType } from './types'
+
+const applyStructureView = (
+  current: StructureTableType,
+  data: { display?: 'code' | 'table'; selectedRow?: number; description?: string; code?: string },
+): StructureTableType => {
+  const display = data.display ?? current.display
+  if (display === 'table') {
+    const prevSelectedRow = current.display === 'table' ? current.selectedRow : '-1'
+    const prevDescription = current.display === 'table' ? current.description : ''
+    return {
+      display: 'table',
+      selectedRow: data.selectedRow !== undefined ? data.selectedRow.toString() : prevSelectedRow,
+      description: data.description ? data.description : prevDescription,
+    }
+  }
+  const existingCode = current.display === 'code' ? current.code : undefined
+  return { display: 'code', code: data.code !== undefined ? data.code : existingCode }
+}
 
 export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> = (setState, getState) => ({
   editors: [],
@@ -159,16 +177,27 @@ export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> =
         }),
       ),
 
-    updateModelStructure: ({ selectedRow, description }) =>
+    // Both writers below accept a Global Variable List as well as a data type: the two
+    // models carry the same `StructureTableType`, and a list's code buffer is the draft
+    // the save path folds in (`reconcileGlobalVariableListText`). Guarding on
+    // `plc-datatype` alone dropped every GVL keystroke on the floor without a word.
+    updateModelStructure: (data) =>
       setState(
         produce((state: EditorState) => {
           const { editor } = state
-          if (editor.type === 'plc-datatype') {
-            editor.structure = {
-              selectedRow: selectedRow !== undefined ? selectedRow.toString() : editor.structure.selectedRow,
-              description: description ? description : editor.structure.description,
-            }
+          if (editor.type === 'plc-datatype' || editor.type === 'plc-global-variable-list') {
+            editor.structure = applyStructureView(editor.structure, data)
           }
+        }),
+      ),
+
+    updateModelStructureForName: (name, data) =>
+      setState(
+        produce((state: EditorState) => {
+          const targetEditor =
+            state.editor.meta.name === name ? state.editor : state.editors.find((e) => e.meta.name === name)
+          if (targetEditor?.type !== 'plc-datatype' && targetEditor?.type !== 'plc-global-variable-list') return
+          targetEditor.structure = applyStructureView(targetEditor.structure, data)
         }),
       ),
 
@@ -305,6 +334,19 @@ export const createEditorSlice: StateCreator<EditorSlice, [], [], EditorSlice> =
           // so writing to both is required.
           if (state.editor.meta.name === name && state.editor.type !== 'available') {
             state.editor.cursorPosition = cursorPosition
+          }
+        }),
+      ),
+
+    setEditorGraphicalFocus: (name, graphicalFocus) =>
+      setState(
+        produce((state: EditorState) => {
+          const index = state.editors.findIndex((e) => e.meta.name === name)
+          if (index !== -1) {
+            state.editors[index].graphicalFocus = graphicalFocus
+          }
+          if (state.editor.meta.name === name && state.editor.type !== 'available') {
+            state.editor.graphicalFocus = graphicalFocus
           }
         }),
       ),

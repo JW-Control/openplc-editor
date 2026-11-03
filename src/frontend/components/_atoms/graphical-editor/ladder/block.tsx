@@ -1,13 +1,14 @@
-import { FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FocusEvent, memo, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { PLCVariable } from '../../../../../middleware/shared/ports'
 import { PLCPou } from '../../../../../middleware/shared/ports'
 import { RefreshIcon } from '../../../../assets/icons/interface/Refresh'
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { LibraryState } from '../../../../store/slices/library'
 import { checkVariableName } from '../../../../store/slices/project/validation/variables'
 import { cn } from '../../../../utils/cn'
+import { legacyInOutSourcePinIds } from '../../../../utils/graphical/in-out-pin-rules'
 import { isLegalIdentifier } from '../../../../utils/keywords'
 import { toast } from '../../../_features/[app]/toast/use-toast'
 import { useBoundEditorModel, useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
@@ -15,9 +16,17 @@ import { updateDiagramElementsPosition } from '../../../_molecules/graphical-edi
 import { reconcileBranchesIfNeeded } from '../../../_molecules/graphical-editor/ladder/rung/ladder-utils/elements/handle-branch'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { InputWithRef } from '../../input'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../tooltip'
 import { BlockOutputDebugBadges } from '../block-output-debug-badges'
+import { InOutPinMarker } from '../in-out-pin-marker'
 import { BlockVariant as newBlockVariant } from '../types/block'
-import { getBlockDocumentation, getVariableRestrictionType } from '../utils'
+import {
+  blockInputVariables,
+  blockOutputVariables,
+  getBlockDocumentation,
+  getVariableRestrictionType,
+  inOutVariableNames,
+} from '../utils'
 import { buildBlockNode } from './buildNodes'
 import { CustomHandle } from './handle'
 import { getLadderPouVariablesRungNodeAndEdges } from './utils'
@@ -57,18 +66,13 @@ export const BlockNodeElement = <T extends object>({
   wrongVariable?: boolean
   scale?: number
 }) => {
+  const store = useOpenPLCStoreApi()
   const pouName = useBoundPou()
   const editor = useBoundEditorModel()
-  // Mounted once per block node on the canvas — an unselected useOpenPLCStore()
-  // here re-renders every block on every store change (e.g. every debug poll
-  // tick), which is the exact "Maximum update depth exceeded" pattern
-  // documented in UPDATE.md. `libraries`/`pous`/`ladderFlows` are only read
-  // inside handleNameInputOnBlur (never during render), so they're read via
-  // getState() there instead of subscribed to reactively.
-  const { updateModelVariables } = useOpenPLCStore(useCallback((s) => s.editorActions, []))
-  const { setNodes, setEdges, setHandleBranches } = useOpenPLCStore(useCallback((s) => s.ladderFlowActions, []))
-  const { updateVariable, deleteVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
-  const { pushToHistory } = useOpenPLCStore(useCallback((s) => s.snapshotActions, []))
+  const updateModelVariables = useOpenPLCStore((state) => state.editorActions.updateModelVariables)
+  const { setNodes, setEdges, setHandleBranches } = useOpenPLCStore((state) => state.ladderFlowActions)
+  const { updateVariable, deleteVariable } = useOpenPLCStore((state) => state.projectActions)
+  const pushToHistory = useOpenPLCStore((state) => state.snapshotActions.pushToHistory)
 
   const {
     name: blockName,
@@ -76,12 +80,9 @@ export const BlockNodeElement = <T extends object>({
     type: blockType,
   } = (data.variant as BlockVariant) ?? DEFAULT_BLOCK_TYPE
 
-  const inputConnectors = blockVariables
-    .filter((variable) => variable.class === 'input' || variable.class === 'inOut')
-    .map((variable) => variable.name)
-  const outputConnectors = blockVariables
-    .filter((variable) => variable.class === 'output' || variable.class === 'inOut')
-    .map((variable) => variable.name)
+  const inputConnectors = blockInputVariables(blockVariables).map((variable) => variable.name)
+  const outputConnectors = blockOutputVariables(blockVariables).map((variable) => variable.name)
+  const inOutConnectors = inOutVariableNames(blockVariables)
 
   const [blockNameValue, setBlockNameValue] = useState<string>(blockType === 'generic' ? '' : blockName)
   const [validBlockNameValue, setValidBlockNameValue] = useState<string>(blockNameValue)
@@ -165,14 +166,8 @@ export const BlockNodeElement = <T extends object>({
       return
     }
 
-    const {
-      libraries,
-      project: {
-        data: { pous },
-      },
-      ladderFlows,
-    } = useOpenPLCStore.getState()
-
+    const { project, libraries, ladderFlows } = store.getState()
+    const pous = project.data.pous
     const libraryBlock = resolveLibraryBlock(blockNameValue, libraries, pous)
 
     if (!libraryBlock) {
@@ -180,6 +175,11 @@ export const BlockNodeElement = <T extends object>({
       toast({ title: 'Invalid name', description: 'The name could not be changed', variant: 'fail' })
       return
     }
+
+    // The block's library goes into `project.libraries` here, not only through the
+    // Library Manager: without the entry the other editor renders the block from its
+    // node data and has nothing to warn about when the library is not installed.
+    store.getState().libraryActions.ensureLibrariesForTypes([blockNameValue])
 
     const { pou, rung, node, variables, edges } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: nodeId ?? '',
@@ -207,7 +207,7 @@ export const BlockNodeElement = <T extends object>({
         title: '',
       }
 
-      const project = useOpenPLCStore.getState().project
+      const project = store.getState().project
       const currentPou = project.data.pous.find((p) => p.name === pouName)
       pushToHistory(pouName, {
         variables: currentPou?.interface?.variables ?? [],
@@ -321,7 +321,7 @@ export const BlockNodeElement = <T extends object>({
       [rung.defaultBounds[0], rung.defaultBounds[1]],
     )
 
-    const project2 = useOpenPLCStore.getState().project
+    const project2 = store.getState().project
     const currentPou2 = project2.data.pous.find((p) => p.name === pouName)
     pushToHistory(pouName, {
       variables: currentPou2?.interface?.variables ?? [],
@@ -384,18 +384,25 @@ export const BlockNodeElement = <T extends object>({
         onKeyDown={(e) => e.key === 'Enter' && inputNameRef.current?.blur()}
         ref={inputNameRef}
       />
+      {/*
+       * Labels are placed from the pin they name, looked up BY ID rather than by position in the
+       * list. The two can disagree: a rung saved before VAR_IN_OUT became input-only still holds
+       * the in-out's output-side pin, so indexing the persisted array by the derived list's index
+       * would draw every real output label one slot too high until the block is updated.
+       */}
       {inputConnectors.map((connector, index) => {
-        const handle = (data as BasicNodeData).inputHandles?.[index]
+        const handle = (data as BasicNodeData).inputHandles?.find((h) => h.id === connector)
         const top =
           (handle?.relPosition?.y ?? DEFAULT_BLOCK_CONNECTOR_Y + index * DEFAULT_BLOCK_CONNECTOR_Y_OFFSET) - 10
         return (
           <div key={index} className='absolute text-xs' style={{ top, left: 6 }}>
             {connector}
+            {inOutConnectors.has(connector) && <InOutPinMarker />}
           </div>
         )
       })}
       {outputConnectors.map((connector, index) => {
-        const handle = (data as BasicNodeData).outputHandles?.[index]
+        const handle = (data as BasicNodeData).outputHandles?.find((h) => h.id === connector)
         const top =
           (handle?.relPosition?.y ?? DEFAULT_BLOCK_CONNECTOR_Y + index * DEFAULT_BLOCK_CONNECTOR_Y_OFFSET) - 10
         return (
@@ -408,26 +415,20 @@ export const BlockNodeElement = <T extends object>({
   )
 }
 
-export const Block = <T extends object>(block: BlockProps<T>) => {
+const Block = <T extends object>(block: BlockProps<T>) => {
   const { data, dragging, height, width, selected, id } = block
+  const store = useOpenPLCStoreApi()
 
   const pouName = useBoundPou()
-  // Mounted once per block node — same risk as BlockNodeElement above.
-  // `pous`/`ladderFlows` ARE read synchronously during render (via
-  // getLadderPouVariablesRungNodeAndEdges below), so unlike the handler-only
-  // fields in BlockNodeElement, they stay reactive here — just scoped to
-  // their own selector instead of subscribing to the whole store.
-  const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
-  const ladderFlows = useOpenPLCStore(useCallback((s) => s.ladderFlows, []))
-  const userLibraries = useOpenPLCStore(useCallback((s) => s.libraries.user, []))
-  const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
-  const { pushToHistory } = useOpenPLCStore(useCallback((s) => s.snapshotActions, []))
+  const pous = useOpenPLCStore((state) => state.project.data.pous)
+  const createVariable = useOpenPLCStore((state) => state.projectActions.createVariable)
+  const pushToHistory = useOpenPLCStore((state) => state.snapshotActions.pushToHistory)
   const {
     updateNode,
     setNodes,
     setEdges,
     setHandleBranches: setHandleBranchesBlock,
-  } = useOpenPLCStore(useCallback((s) => s.ladderFlowActions, []))
+  } = useOpenPLCStore((state) => state.ladderFlowActions)
   const { type: blockType } = (data.variant as BlockVariant) ?? DEFAULT_BLOCK_TYPE
   const documentation = getBlockDocumentation(data.variant as newBlockVariant)
 
@@ -435,12 +436,53 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
   const [wrongVariable, setWrongVariable] = useState<boolean>(false)
   const [hoveringBlock, setHoveringBlock] = useState(false)
 
-  const { variables, rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
-    nodeId: id,
-  })
+  // Output-side pins this block still carries for an in-out parameter — empty for every rung
+  // saved since in-outs became input-only.
+  const staleInOutSourcePins = useMemo(() => legacyInOutSourcePinIds(data), [data])
+
+  // Output pins that already have a NAMED variable of their own on the rung, so
+  // the block must not draw a second badge for the same value.
+  //
+  // Derived from the rung's own nodes, not from `data.connectedVariables`. That
+  // field is a denormalised cache and it does not carry output entries in
+  // practice -- a CTU with `current_count` wired to CV records only its inputs
+  // (`R`, `PV`), so the skip never fired and CV was badged twice: once by the
+  // block, once by the variable. The rung graph is the authority, and reading it
+  // also fixes projects saved before now without a migration.
+  //
+  // An output variable node with an EMPTY name is a bare pin stub (every TON
+  // carries one for ET). That is not a connected variable, it shows no badge of
+  // its own, and the block's badge is the only place its value appears -- so it
+  // must NOT suppress anything.
+  // Subscribe to the flows array only (a stable reference until the ladder
+  // actually changes), then derive in a memo. As a live selector this ran its
+  // whole-POU scan on EVERY store update — a debug-value tick, a cursor move —
+  // once per rendered block; keyed on the flows reference it runs only when the
+  // ladder is edited.
+  const ladderFlows = useOpenPLCStore((state) => state.ladderFlows)
+  const connectedOutputKey = useMemo(() => {
+    const rung = ladderFlows.find((flow) => flow.name === pouName)?.rungs.find((r) => r.nodes.some((n) => n.id === id))
+    if (!rung) return ''
+    const names: string[] = []
+    for (const node of rung.nodes) {
+      if (node.type !== 'variable') continue
+      const nd = node.data as {
+        variant?: string
+        block?: { id?: string; handleId?: string }
+        variable?: { name?: string }
+      }
+      if (nd.variant !== 'output') continue
+      if (nd.block?.id !== id) continue
+      if (!nd.block?.handleId) continue
+      if (!nd.variable?.name) continue
+      names.push(nd.block.handleId)
+    }
+    return names.sort().join('\u0000')
+  }, [ladderFlows, pouName, id])
 
   const connectedOutputNames = useMemo(() => {
-    const names = new Set<string>()
+    // Union with the cache: where it DOES carry an output entry, honour it.
+    const names = new Set<string>(connectedOutputKey ? connectedOutputKey.split('\u0000') : [])
     if (Array.isArray(data.connectedVariables)) {
       for (const cv of data.connectedVariables) {
         if (cv.type === 'output' && cv.variable) {
@@ -449,7 +491,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
       }
     }
     return names
-  }, [data.connectedVariables])
+  }, [connectedOutputKey, data.connectedVariables])
 
   const inputVariableRef = useRef<
     HTMLTextAreaElement & {
@@ -465,9 +507,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
 
   useEffect(() => {
     if (data.variable && data.variable.name !== '' && blockType === 'function-block') {
-      if (blockVariableValue !== data.variable.name) {
-        setBlockVariableValue(data.variable.name)
-      }
+      setBlockVariableValue(data.variable.name)
       hasCreatedRef.current = true
       return
     }
@@ -476,6 +516,10 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
       switch (blockType) {
         case 'function-block': {
           if (!data.variable || data.variable.name === '') {
+            const { project, ladderFlows } = store.getState()
+            const { variables } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
+              nodeId: id,
+            })
             const { name, number } = checkVariableName(variables.all, (data.variant as BlockVariant).name.toUpperCase())
 
             handleSubmitBlockVariableOnTextareaBlur(`${name}${number}`, true)
@@ -489,7 +533,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
           break
       }
     }
-  }, [data])
+  }, [store, data])
 
   /**
    * Update wrongVariable state when the table of variables is updated
@@ -500,6 +544,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
       return
     }
 
+    const { ladderFlows } = store.getState()
     const {
       variables: freshVariables,
       rung: freshRung,
@@ -552,7 +597,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
     }
 
     setWrongVariable(true)
-  }, [pous, data.variable.name])
+  }, [store, pous, data.variable.name])
 
   /**
    * Handle with the variable input onBlur event
@@ -566,8 +611,20 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
       return
     }
 
+    const { ladderFlows } = store.getState()
+    const { variables, rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+      nodeId: id,
+    })
+
     if (!rung || !node) {
       toast({ title: 'Error', description: 'Could not find the related rung or node', variant: 'fail' })
+      return
+    }
+
+    // Blur with an unchanged name is not an edit — skip the write so merely
+    // clicking in and out of a block never marks the POU as modified. The
+    // autocomplete's explicit create action (createIfNotFound) still proceeds.
+    if (!createIfNotFound && variableNameToSubmit === (node.data as { variable?: { name?: string } }).variable?.name) {
       return
     }
 
@@ -617,7 +674,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
           updateNodeVariable({ name: variableNameToSubmit })
           return
         }
-        const project = useOpenPLCStore.getState().project
+        const project = store.getState().project
         const currentPou = project.data.pous.find((p) => p.name === pouName)
         pushToHistory(pouName, {
           variables: currentPou?.interface?.variables ?? [],
@@ -656,6 +713,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
   }
 
   const handleUpdateDivergence = () => {
+    const { ladderFlows, libraries } = store.getState()
     const { variables, rung, node, edges } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
       nodeId: id,
     })
@@ -665,7 +723,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
     const variant = (node.data as BlockNodeData<BlockVariant>)?.variant
     if (!variant) return
 
-    const libMatch = userLibraries.find((lib) => lib.name === variant.name && lib.type === variant.type)
+    const libMatch = libraries.user.find((lib) => lib.name === variant.name && lib.type === variant.type)
     if (!libMatch) return
 
     const libPou = pous.find((pou) => pou.name === libMatch.name)
@@ -787,6 +845,14 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
     }
     const reconciledHandleBranches = reconciled2?.handleBranches
 
+    // Every outgoing edge moves to the rebuilt block's primary output pin. This is also what
+    // converts a rung whose rail used to leave a VAR_IN_OUT pin — `rightHandles` included
+    // in-outs before they became input-only, so a BOOL in-out could end up as `outputConnector`
+    // and carry the rail. The rail follows the block; it is deliberately NOT re-pointed at
+    // whatever fed the pin. Ladder edges are the rung chain, not data reads, so FBD's
+    // `rewireInOutReads` would route the rail around the block here. There is always a pin to
+    // move to: `getBlockVariantAndExecutionControl` forces EN/ENO when a block has no BOOL
+    // output, so the rebuilt `outputConnector` is always present.
     edges.source?.forEach((edge) => {
       const newEdge = {
         ...edge,
@@ -847,25 +913,39 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
         <div
           className='pointer absolute right-[-12px] top-[-12px] z-10 flex h-6 w-6 items-center justify-center rounded-full bg-slate-600 shadow-sm'
           onClick={handleUpdateDivergence}
-          title='Update node'
         >
-          <RefreshIcon />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <RefreshIcon />
+              </TooltipTrigger>
+              <TooltipContent side='top' className='text-xs'>
+                Update node
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       )}
 
-      <BlockNodeElement
-        nodeId={id}
-        data={data}
-        height={height ?? DEFAULT_BLOCK_HEIGHT}
-        width={width ?? DEFAULT_BLOCK_WIDTH}
-        selected={selected ?? false}
-        wrongVariable={wrongVariable}
-      />
-      {hoveringBlock && !dragging && blockType !== 'generic' && documentation && (
-        <div className='pointer-events-none absolute left-[calc(100%+8px)] top-0 z-[999] h-fit max-h-56 w-fit max-w-96 overflow-y-auto rounded-md border border-neutral-850 bg-white p-4 text-xs shadow-md dark:bg-neutral-900 dark:text-white'>
-          <span className='whitespace-pre-line'>{documentation}</span>
-        </div>
-      )}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <BlockNodeElement
+              nodeId={id}
+              data={data}
+              height={height ?? DEFAULT_BLOCK_HEIGHT}
+              width={width ?? DEFAULT_BLOCK_WIDTH}
+              selected={selected ?? false}
+              wrongVariable={wrongVariable}
+            />
+          </TooltipTrigger>
+          {!dragging && blockType !== 'generic' && documentation && (
+            <TooltipContent side='right' className='text-xs'>
+              <span className='whitespace-pre-line'>{documentation}</span>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
       <div
         className='absolute -top-[10px]'
         style={{
@@ -880,7 +960,13 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
             handleSubmit={() => handleSubmitBlockVariableOnTextareaBlur(blockVariableValue, false)}
             onFocus={(e) => {
               e.target.select()
+              const { ladderFlows } = store.getState()
+              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+                nodeId: id,
+              })
               if (!node || !rung) return
+              // Drag-lock while typing is UI state, not an edit — transient
+              // so focusing the input never marks the flow as modified.
               updateNode({
                 editorName: pouName,
                 nodeId: node.id,
@@ -889,10 +975,15 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
                   ...node,
                   draggable: false,
                 },
+                transient: true,
               })
               return
             }}
             onBlur={() => {
+              const { ladderFlows } = store.getState()
+              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+                nodeId: id,
+              })
               if (!node || !rung) return
               updateNode({
                 editorName: pouName,
@@ -902,6 +993,7 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
                   ...node,
                   draggable: node.data.draggable as boolean,
                 },
+                transient: true,
               })
               return
             }}
@@ -916,7 +1008,19 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
         )}
       </div>
       {data.handles.map((handle, index) => (
-        <CustomHandle key={index} {...handle} />
+        <CustomHandle
+          key={index}
+          {...handle}
+          // A rung saved before VAR_IN_OUT became input-only still carries the pin's output
+          // side, and this list is what actually renders. Keep drawing it so the existing rung
+          // wiring stays visible, but refuse NEW connections from a pin that no longer exists.
+          // The block's update badge is what removes it.
+          isConnectable={
+            handle.type === 'source' && handle.id !== undefined && staleInOutSourcePins.has(handle.id)
+              ? false
+              : handle.isConnectable
+          }
+        />
       ))}
       <BlockOutputDebugBadges
         blockType={(data.variant as BlockVariant).type}
@@ -932,3 +1036,8 @@ export const Block = <T extends object>(block: BlockProps<T>) => {
     </div>
   )
 }
+
+// Cast keeps the generic call signature `memo` would otherwise widen away.
+const exportBlock = memo(Block) as typeof Block
+
+export { exportBlock as Block }

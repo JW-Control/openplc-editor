@@ -4,14 +4,16 @@ import { useEffect, useState } from 'react'
 import { projectCapabilities } from '../../../../middleware/shared/ports/types'
 import { useCapabilities, useDevice, useProject } from '../../../../middleware/shared/providers'
 import { FolderIcon } from '../../../assets/icons/interface/Folder'
-import { useOpenPLCStore } from '../../../store'
-import { extractSearchQuery } from '../../../store/slices/search/utils'
+import { useTargetCapabilities } from '../../../hooks/use-target-capabilities'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../store'
 import type { TabsProps } from '../../../store/slices/tabs'
 import {
   CreateEditorObjectFromTab,
   HMI_DESIGNER_TAB_NAME,
   LIBRARY_MANIFEST_TAB_NAME,
 } from '../../../store/slices/tabs/utils'
+import { isUserManagementCapableRuntime } from '../../../utils/device'
+import { isNativeScreenAvailable } from '../../../utils/native-screens'
 import { useToast } from '../../_features/[app]/toast/use-toast'
 import { CreatePLCElement } from '../../_features/[workspace]/create-element'
 import { openHmiDesigner } from '../../_features/[workspace]/editor/hmi-designer'
@@ -45,16 +47,17 @@ function validateProjectName(value: string): string | null {
 const Project = () => {
   const capabilities = useCapabilities()
   const device = useDevice()
+  const store = useOpenPLCStoreApi()
   const projectPort = useProject()
   const { toast } = useToast()
   const {
     project: {
-      data: { pous, dataTypes, configurations, servers, remoteDevices },
+      data: { pous, dataTypes, globalVariableLists, configurations, servers, remoteDevices },
       meta: { name, type: projectType, path: projectPath },
     },
     projectActions: { updateMetaName },
     tabsActions: { updateTabs },
-    editorActions: { setEditor, addModel, getEditorFromEditors },
+    editorActions: { setEditor, addModel, getEditorFromEditors, removeModel },
     workspaceActions: { setSelectedProjectTreeLeaf },
     searchQuery,
   } = useOpenPLCStore()
@@ -63,12 +66,31 @@ const Project = () => {
   // endpoint requires edit access, so gate the affordance here too.
   const canEdit = useOpenPLCStore((s) => s.workspace.canEdit)
 
+  // Runtime User Management is only meaningful while connected to a runtime
+  // (it reads/writes the runtime's account list over the authenticated API)
+  // AND only exists on runtimes ≥ v4.1.9 — older runtimes lack the endpoints.
+  const runtimeConnected = useOpenPLCStore((s) => s.runtimeConnection.connectionStatus === 'connected')
+  const runtimeVersion = useOpenPLCStore((s) => s.runtimeConnection.runtimeVersion)
+  const showUserManagement = runtimeConnected && isUserManagementCapableRuntime(runtimeVersion)
+  // Everything on the Runtime Status screen is read from a live device -- scan
+  // statistics, host facts, the bootloader's state -- so the leaf appears only
+  // while connected rather than opening onto an empty screen.
+  const showRuntimeStatus = runtimeConnected
+
   // Per-project-type capability matrix — drives which branches
   // render.  Library projects only show Functions / Function Blocks /
   // Data Types plus the manifest tab; Programs / Resource / Devices /
   // Servers / Remote-Devices / VPP screens are program-level
   // affordances that don't apply to a `.stlib` build.
   const projectCaps = projectCapabilities({ type: projectType })
+
+  // Remote devices are also gated on the TARGET, not just the project type:
+  // a board that hosts neither Modbus remote I/O nor EtherCAT cannot drive
+  // them at all (the v3 build ships a single `program.st` and no remote-I/O
+  // config), and the variable-location dropdown already hides their points
+  // behind this exact predicate.
+  const targetCaps = useTargetCapabilities()
+  const canHostRemoteIo = targetCaps.modbusTcpRemote || targetCaps.ethercat
 
   // Get VPP vendor screens from the currently selected board
   const deviceBoard = useOpenPLCStore((s) => s.deviceDefinitions.configuration.deviceBoard)
@@ -82,19 +104,39 @@ const Project = () => {
         .map(([screenName]) => screenName)
     : []
 
+  // Persistent Storage is a PROJECT screen: the settings are saved with the
+  // project and delivered by the upload, so it is available offline and has
+  // nothing to do with whether a device is connected. Two facts about the
+  // TARGET decide whether it appears at all:
+  //
+  //   • the target's runtime has a built-in retain store to configure. Only
+  //     runtime v4 does; on baremetal the store is whatever the board's driver
+  //     provides and nothing in the project can point it anywhere.
+  //   • the target has not taken retention over. A VPP whose driver implements
+  //     its own store declares `hidesNativeScreens: ['persistent-storage']`,
+  //     and the editor then also emits no `retain.conf` — which makes the
+  //     runtime remove its copy and the built-in store stand down. So the
+  //     screen never offers settings that are inert.
+  const showPersistentStorage =
+    targetCaps.nativeRetainStore && isNativeScreenAvailable(currentBoardInfo, 'persistent-storage')
+
   const handleCreateTab = ({ elementType, name, path, configuration: tabConfig }: TabsProps) => {
     const tabToBeCreated = { name, path, elementType, configuration: tabConfig }
     updateTabs(tabToBeCreated)
 
-    const editor = getEditorFromEditors(tabToBeCreated.name)
-    if (!editor) {
-      const model = CreateEditorObjectFromTab(tabToBeCreated)
-      addModel(model)
-      setEditor(model)
-      return
-    }
-    addModel(editor)
-    setEditor(editor)
+    const existing = getEditorFromEditors(tabToBeCreated.name)
+    const fresh = CreateEditorObjectFromTab(tabToBeCreated)
+    // The editor cache is keyed by display name alone, so an element rebuilt under the same
+    // name (a module removed and added again) would reopen the old model. Any identity field
+    // that disagrees with the fresh model marks the cached one stale.
+    const existingMeta = existing === null ? null : new Map<string, unknown>(Object.entries(existing.meta))
+    const stale =
+      existing !== null &&
+      (existing.type !== fresh.type || Object.entries(fresh.meta).some(([k, v]) => existingMeta?.get(k) !== v))
+    if (stale) removeModel(tabToBeCreated.name)
+    const model = existing !== null && !stale ? existing : fresh
+    addModel(model)
+    setEditor(model)
   }
 
   const [isEditing, setIsEditing] = useState(false)
@@ -217,7 +259,8 @@ const Project = () => {
                   key={pou.name}
                   leafLang={pou.body.language as PouLeafLang}
                   leafType='function'
-                  label={searchQuery ? extractSearchQuery(pou.name, searchQuery) : pou.name}
+                  label={pou.name}
+                  highlightQuery={searchQuery}
                   onClick={() =>
                     handleCreateTab({
                       name: pou.name,
@@ -239,7 +282,8 @@ const Project = () => {
                   key={pou.name}
                   leafLang={pou.body.language as PouLeafLang}
                   leafType='function-block'
-                  label={searchQuery ? extractSearchQuery(pou.name, searchQuery) : pou.name}
+                  label={pou.name}
+                  highlightQuery={searchQuery}
                   onClick={() =>
                     handleCreateTab({
                       name: pou.name,
@@ -263,7 +307,8 @@ const Project = () => {
                     key={pou.name}
                     leafLang={pou.body.language as PouLeafLang}
                     leafType='program'
-                    label={searchQuery ? extractSearchQuery(pou.name, searchQuery) : pou.name}
+                    label={pou.name}
+                    highlightQuery={searchQuery}
                     onClick={() =>
                       handleCreateTab({
                         name: pou.name,
@@ -286,7 +331,8 @@ const Project = () => {
                   key={name}
                   leafLang='arr'
                   leafType='data-type'
-                  label={searchQuery ? extractSearchQuery(name, searchQuery) : name}
+                  label={name}
+                  highlightQuery={searchQuery}
                   onClick={() =>
                     handleCreateTab({
                       name,
@@ -304,7 +350,8 @@ const Project = () => {
                   key={name}
                   leafLang='enum'
                   leafType='data-type'
-                  label={searchQuery ? extractSearchQuery(name, searchQuery) : name}
+                  label={name}
+                  highlightQuery={searchQuery}
                   /** Todo: Update the tab state */
                   onClick={() =>
                     handleCreateTab({
@@ -323,13 +370,37 @@ const Project = () => {
                   key={name}
                   leafLang='str'
                   leafType='data-type'
-                  label={searchQuery ? extractSearchQuery(name, searchQuery) : name}
+                  label={name}
+                  highlightQuery={searchQuery}
                   /** Todo: Update the tab state */
                   onClick={() =>
                     handleCreateTab({
                       name,
                       path: `/data/data-types/structure/${name}`,
                       elementType: { type: 'data-type', derivation: 'structure' },
+                    })
+                  }
+                />
+              ))}
+          </ProjectTreeBranch>
+
+          {/* Global Variable Lists — CODESYS's own grouping, one node per list. */}
+          <ProjectTreeBranch branchTarget='global-variable-list'>
+            {globalVariableLists
+              ?.slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(({ name }) => (
+                <ProjectTreeLeaf
+                  key={name}
+                  leafLang='gvl'
+                  leafType='global-variable-list'
+                  label={name}
+                  highlightQuery={searchQuery}
+                  onClick={() =>
+                    handleCreateTab({
+                      name,
+                      path: `/data/global-variables/${name}`,
+                      elementType: { type: 'global-variable-list' },
                     })
                   }
                 />
@@ -377,36 +448,89 @@ const Project = () => {
                 <ProjectTreeLeaf
                   leafLang='devOrchestrators'
                   leafType='device'
-                  label='Orchestrators'
+                  label='Edge Devices'
                   onClick={() =>
                     handleCreateTab({
-                      name: 'Orchestrators',
+                      name: 'Edge Devices',
                       path: `/device/orchestrators`,
                       elementType: { type: 'device', derivation: 'orchestrators' },
                     })
                   }
                 />
               )}
+              {showRuntimeStatus && (
+                <ProjectTreeLeaf
+                  key='Runtime Status'
+                  leafLang='devConfig'
+                  leafType='device'
+                  label='Runtime Status'
+                  onClick={() =>
+                    handleCreateTab({
+                      name: 'Runtime Status',
+                      path: `/device/runtime-status`,
+                      elementType: { type: 'device', derivation: 'runtime-status' },
+                    })
+                  }
+                />
+              )}
+              {showPersistentStorage && (
+                <ProjectTreeLeaf
+                  key='Persistent Storage'
+                  leafLang='persistentStorage'
+                  leafType='persistent-storage'
+                  label='Persistent Storage'
+                  onClick={() =>
+                    handleCreateTab({
+                      name: 'Persistent Storage',
+                      path: `/device/persistent-storage`,
+                      elementType: { type: 'persistent-storage' },
+                    })
+                  }
+                />
+              )}
+              {showUserManagement && (
+                <ProjectTreeLeaf
+                  key='User Management'
+                  leafLang='userManagement'
+                  leafType='user-management'
+                  label='User Management'
+                  onClick={() =>
+                    handleCreateTab({
+                      name: 'User Management',
+                      path: `/device/user-management`,
+                      elementType: { type: 'user-management' },
+                    })
+                  }
+                />
+              )}
+              {/* Vendor screens from VPP packages — hidden for libraries.
+               *
+               *  Every screen the package declares is listed, the Modbus one
+               *  included. A package built for 4.3.0 ships none: its Modbus became
+               *  the native screen under Servers. A package built before that still
+               *  ships one, and it is the ONLY place that state can be seen — the
+               *  defines emitter falls back to it whenever the project has no
+               *  server, so filtering it out left settings that reach the firmware
+               *  with no UI anywhere. It was filtered while it was re-homed under
+               *  Servers; that re-homing is gone. */}
+              {projectCaps.hasVendorScreens &&
+                vendorScreens.map((screenName) => (
+                  <ProjectTreeLeaf
+                    key={`vendor-${screenName}`}
+                    leafLang='vendorScreen'
+                    leafType='vendor-screen'
+                    label={screenName}
+                    onClick={() =>
+                      handleCreateTab({
+                        name: screenName,
+                        path: `/vendor-screen/${screenName}`,
+                        elementType: { type: 'vendor-screen', screenName },
+                      })
+                    }
+                  />
+                ))}
             </ProjectTreeBranch>
           )}
-
-          {/* Vendor screens from VPP packages — hidden for libraries. */}
-          {projectCaps.hasVendorScreens &&
-            vendorScreens.map((screenName) => (
-              <ProjectTreeLeaf
-                key={`vendor-${screenName}`}
-                leafLang='vendorScreen'
-                leafType='vendor-screen'
-                label={screenName}
-                onClick={() =>
-                  handleCreateTab({
-                    name: screenName,
-                    path: `/vendor-screen/${screenName}`,
-                    elementType: { type: 'vendor-screen', screenName },
-                  })
-                }
-              />
-            ))}
 
           {/* JWPLC HMI Designer — boards with an HMI display (JWPLC Basic). */}
           {projectCaps.hasVendorScreens && capabilities.hasLocalSerialPorts && showHmiDesigner && (
@@ -416,7 +540,7 @@ const Project = () => {
               leafType='hmi-designer'
               label={HMI_DESIGNER_TAB_NAME}
               onClick={() => {
-                void openHmiDesigner(device).then((result) => {
+                void openHmiDesigner(store, device).then((result) => {
                   if (!result.ok) toast({ title: 'HMI Designer', description: result.error, variant: 'fail' })
                 })
               }}
@@ -437,7 +561,8 @@ const Project = () => {
                     key={server.name}
                     leafLang='server'
                     leafType='server'
-                    label={searchQuery ? extractSearchQuery(server.name, searchQuery) : server.name}
+                    label={server.name}
+                    highlightQuery={searchQuery}
                     onClick={() =>
                       handleCreateTab({
                         name: server.name,
@@ -450,8 +575,13 @@ const Project = () => {
             </ProjectTreeBranch>
           )}
 
-          {/* Project Remote Devices tree branch — hidden for libraries. */}
-          {projectCaps.hasRemoteDevices && (
+          {/* Project Remote Devices tree branch — hidden for libraries, and on
+              a target that can host neither Modbus remote I/O nor EtherCAT.
+              Devices already configured stay visible on such a target: the
+              board-switch warning promises they are "disabled during
+              compilation", not removed, so hiding saved data would contradict
+              what the user just accepted. */}
+          {projectCaps.hasRemoteDevices && (canHostRemoteIo || (remoteDevices?.length ?? 0) > 0) && (
             <ProjectTreeBranch branchTarget='remote-device'>
               {[...(remoteDevices || [])]
                 .sort((a, b) => a.name.localeCompare(b.name))
@@ -461,7 +591,8 @@ const Project = () => {
                       key={device.name}
                       leafLang='remoteDevice'
                       leafType='remote-device'
-                      label={searchQuery ? extractSearchQuery(device.name, searchQuery) : device.name}
+                      label={device.name}
+                      highlightQuery={searchQuery}
                       onClick={() =>
                         handleCreateTab({
                           name: device.name,
@@ -470,30 +601,89 @@ const Project = () => {
                         })
                       }
                     >
-                      {device.ethercatConfig?.devices?.map((child) => (
-                        <ProjectTreeLeaf
-                          key={child.id}
-                          leafLang='ethercatDevice'
-                          leafType='ethercat-device'
-                          busName={device.name}
-                          deviceId={child.id}
-                          label={searchQuery ? extractSearchQuery(child.name, searchQuery) : child.name}
-                          onClick={() =>
-                            handleCreateTab({
-                              name: child.name,
-                              path: `/devices/remote/${device.name}/devices/${child.id}`,
-                              elementType: { type: 'ethercat-device', busName: device.name, deviceId: child.id },
-                            })
-                          }
-                        />
-                      ))}
+                      {device.ethercatConfig?.devices?.map((child) => {
+                        // A modular coupler expands to show its slot modules.
+                        // isModularCoupler is set at import time from the ESI's <Slots>
+                        // block; existing modules make the coupler expandable even when
+                        // the flag is missing (older projects).
+                        const isModular = child.isModularCoupler === true || (child.modules?.length ?? 0) > 0
+                        if (isModular) {
+                          return (
+                            <ProjectTreeExpandableLeaf
+                              key={child.id}
+                              leafLang='ethercatDevice'
+                              leafType='ethercat-device'
+                              label={child.name}
+                              highlightQuery={searchQuery}
+                              onClick={() =>
+                                handleCreateTab({
+                                  name: child.name,
+                                  path: `/devices/remote/${device.name}/devices/${child.id}`,
+                                  elementType: { type: 'ethercat-device', busName: device.name, deviceId: child.id },
+                                })
+                              }
+                            >
+                              {(child.modules ?? [])
+                                .slice()
+                                .sort((a, b) => a.slot - b.slot)
+                                .map((module) => (
+                                  <ProjectTreeLeaf
+                                    key={module.id}
+                                    leafLang='ethercatDevice'
+                                    // Must be 'ethercat-module', not 'ethercat-device' —
+                                    // the tree's Delete action keys off leafType to
+                                    // choose between `deleteModule` (one slot) and
+                                    // `delete` (the whole coupler).
+                                    leafType='ethercat-module'
+                                    busName={device.name}
+                                    deviceId={child.id}
+                                    moduleId={module.id}
+                                    label={`Slot ${module.slot} — ${module.name}`}
+                                    highlightQuery={searchQuery}
+                                    onClick={() =>
+                                      handleCreateTab({
+                                        name: `${child.name}/${module.name}`,
+                                        path: `/devices/remote/${device.name}/devices/${child.id}/modules/${module.id}`,
+                                        elementType: {
+                                          type: 'ethercat-module',
+                                          busName: device.name,
+                                          deviceId: child.id,
+                                          moduleId: module.id,
+                                        },
+                                      })
+                                    }
+                                  />
+                                ))}
+                            </ProjectTreeExpandableLeaf>
+                          )
+                        }
+                        return (
+                          <ProjectTreeLeaf
+                            key={child.id}
+                            leafLang={child.cia402?.enabled ? 'softMotionDrive' : 'ethercatDevice'}
+                            leafType='ethercat-device'
+                            busName={device.name}
+                            deviceId={child.id}
+                            label={child.name}
+                            highlightQuery={searchQuery}
+                            onClick={() =>
+                              handleCreateTab({
+                                name: child.name,
+                                path: `/devices/remote/${device.name}/devices/${child.id}`,
+                                elementType: { type: 'ethercat-device', busName: device.name, deviceId: child.id },
+                              })
+                            }
+                          />
+                        )
+                      })}
                     </ProjectTreeExpandableLeaf>
                   ) : (
                     <ProjectTreeLeaf
                       key={device.name}
                       leafLang='remoteDevice'
                       leafType='remote-device'
-                      label={searchQuery ? extractSearchQuery(device.name, searchQuery) : device.name}
+                      label={device.name}
+                      highlightQuery={searchQuery}
                       onClick={() =>
                         handleCreateTab({
                           name: device.name,

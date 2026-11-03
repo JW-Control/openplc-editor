@@ -1,7 +1,5 @@
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
-import { useCapabilities, useProject } from '../../../../middleware/shared/providers'
 import { WarningIcon } from '../../../assets/icons/interface/Warning'
-import { executeSaveProject } from '../../../services/save-actions'
 import { useOpenPLCStore } from '../../../store'
 import type { RungLadderState } from '../../../store/slices/ladder'
 import { BasicNodeData } from '../../_atoms/graphical-editor/ladder/utils/types'
@@ -26,40 +24,63 @@ const compareVariableTypes = (type1: PLCVariable['type'], type2: PLCVariable['ty
   return type1.value.toLowerCase() === type2.value.toLowerCase()
 }
 
+type DeleteElementType = 'pou' | 'datatype' | 'global-variable-list' | 'server' | 'remote-device'
+
+const DELETE_ELEMENT_TYPES: readonly DeleteElementType[] = [
+  'pou',
+  'datatype',
+  'global-variable-list',
+  'server',
+  'remote-device',
+]
+
+/** Legacy `leafLang` values, mapped onto the element types the modal deletes. */
+const LEGACY_LEAF_LANG: Record<string, DeleteElementType> = {
+  gvl: 'global-variable-list',
+  'global-variable-list': 'global-variable-list',
+  server: 'server',
+  remoteDevice: 'remote-device',
+  'remote-device': 'remote-device',
+  'data-type': 'datatype',
+  datatype: 'datatype',
+  function: 'pou',
+  'function-block': 'pou',
+  program: 'pou',
+}
+
+/** Read a string property off an unknown payload, or `undefined` when it isn't one. */
+function stringField(data: object, key: string): string | undefined {
+  const value = (data as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+const isDeleteElementType = (value: string): value is DeleteElementType =>
+  DELETE_ELEMENT_TYPES.some((candidate) => candidate === value)
+
 /**
  * Resolve the element name and type from modal data.
  * Handles both the new format `{ name, elementType }` and the legacy format `{ leafLang, label }`.
+ *
+ * Narrowed rather than asserted: `'name' in data` proves the key is there, not that it
+ * holds a string, so an assertion here could hand a non-string straight to a delete
+ * action. Every field is checked before it is used.
  */
-function resolveDeleteTarget(
-  data: unknown,
-): { name: string; elementType: 'pou' | 'datatype' | 'server' | 'remote-device' } | null {
+function resolveDeleteTarget(data: unknown): { name: string; elementType: DeleteElementType } | null {
   if (!data || typeof data !== 'object') return null
 
   // New format from shared slice deleteRequest actions
-  if ('name' in data && 'elementType' in data) {
-    const d = data as { name: string; elementType: string }
-    if (['pou', 'datatype', 'server', 'remote-device'].includes(d.elementType)) {
-      return { name: d.name, elementType: d.elementType as 'pou' | 'datatype' | 'server' | 'remote-device' }
-    }
+  const name = stringField(data, 'name')
+  const elementType = stringField(data, 'elementType')
+  if (name !== undefined && elementType !== undefined && isDeleteElementType(elementType)) {
+    return { name, elementType }
   }
 
   // Legacy format from web repo: { leafLang, label }
-  if ('leafLang' in data && 'label' in data) {
-    const d = data as { leafLang: string; label: string }
-    const mapping: Record<string, 'pou' | 'datatype' | 'server' | 'remote-device'> = {
-      server: 'server',
-      remoteDevice: 'remote-device',
-      'remote-device': 'remote-device',
-      'data-type': 'datatype',
-      datatype: 'datatype',
-      function: 'pou',
-      'function-block': 'pou',
-      program: 'pou',
-    }
-    const elementType = mapping[d.leafLang]
-    if (elementType) {
-      return { name: d.label, elementType }
-    }
+  const leafLang = stringField(data, 'leafLang')
+  const label = stringField(data, 'label')
+  if (leafLang !== undefined && label !== undefined) {
+    const mapped = LEGACY_LEAF_LANG[leafLang]
+    if (mapped) return { name: label, elementType: mapped }
   }
 
   return null
@@ -67,8 +88,6 @@ function resolveDeleteTarget(
 
 const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteElementProps) => {
   const store = useOpenPLCStore()
-  const projectPort = useProject()
-  const capabilities = useCapabilities()
   const {
     editor,
     project: {
@@ -85,6 +104,7 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
   const deleteDatatypeAction = store.datatypeActions.delete
   const deleteServerAction = store.serverActions.delete
   const deleteRemoteDeviceAction = store.remoteDeviceActions.delete
+  const deleteGlobalVariableListAction = store.globalVariableListActions.delete
 
   const modalData = modals['confirm-delete-element']?.data
 
@@ -147,8 +167,7 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
     })
   }
 
-  const handleDeleteElement = async (): Promise<void> => {
-    let needsPersist = false
+  const handleDeleteElement = (): void => {
     try {
       // Ladder rung deletion: takes precedence when a rung is provided.
       // Rung deletes are an in-editor edit, not a file-level deletion — they
@@ -175,7 +194,6 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
             description: `POU "${name}" was successfully deleted.`,
             variant: 'default',
           })
-          needsPersist = true
           break
         case 'datatype':
           deleteDatatypeAction(name)
@@ -187,6 +205,14 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
           // Datatypes live inside project.json — they ride along the next
           // regular save (no separate file to remove from S3).
           break
+        case 'global-variable-list':
+          deleteGlobalVariableListAction(name)
+          toast({
+            title: 'Global variable list deleted!',
+            description: `"${name}" was successfully deleted.`,
+            variant: 'default',
+          })
+          break
         case 'server':
           deleteServerAction(name)
           toast({
@@ -194,7 +220,6 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
             description: `Server "${name}" was successfully deleted.`,
             variant: 'default',
           })
-          needsPersist = true
           break
         case 'remote-device':
           deleteRemoteDeviceAction(name)
@@ -203,7 +228,6 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
             description: `Remote device "${name}" was successfully deleted.`,
             variant: 'default',
           })
-          needsPersist = true
           break
         default:
           throw new Error('Unknown element type')
@@ -216,16 +240,11 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
       })
     }
 
+    // Deletions are soft and consistent across web and desktop: the element is
+    // removed from the in-memory project, its file removal is queued in
+    // `pendingDeletions`, and the workspace is flagged dirty (see deleteElement).
+    // Nothing is written to disk until the user saves.
     closeModal()
-
-    // For element types that map to a file in S3 (POU, server, remote device),
-    // trigger a full project save so the deletion is actually persisted.
-    // Otherwise the file stays in S3 and reappears on refresh — only the
-    // local UI state had been updated. executeSaveProject surfaces its own
-    // success/failure toasts.
-    if (needsPersist) {
-      await executeSaveProject(projectPort, capabilities)
-    }
   }
 
   const handleCloseModal = () => {
@@ -243,7 +262,7 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
       }}
       {...rest}
     >
-      <ModalContent className='flex max-h-80 w-[300px] select-none flex-col items-center justify-evenly rounded-lg'>
+      <ModalContent className='flex w-[300px] select-none flex-col items-center justify-evenly rounded-lg'>
         <div className='flex select-none flex-col items-center gap-6'>
           <WarningIcon className='mr-2 mt-2 h-[73px] w-[73px]' />
           <div>

@@ -1,7 +1,6 @@
-import { createSelectorHooks } from 'auto-zustand-selectors-hook'
 import { enableMapSet } from 'immer'
-import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
+import { createStore } from 'zustand/vanilla'
 
 // Enable Immer's MapSet plugin for Map/Set support in store state
 enableMapSet()
@@ -27,6 +26,8 @@ import type { LibrarySlice } from './slices/library'
 import { createLibrarySlice } from './slices/library'
 import type { ModalSlice } from './slices/modal'
 import { createModalSlice } from './slices/modal'
+import type { PrintSlice } from './slices/print'
+import { createPrintSlice } from './slices/print'
 import type { ProjectSlice } from './slices/project'
 import { createProjectSlice } from './slices/project'
 import type { ReadmeSlice } from './slices/readme'
@@ -54,6 +55,7 @@ export type RootState = AISlice &
   LadderFlowSlice &
   LibrarySlice &
   ModalSlice &
+  PrintSlice &
   ProjectSlice &
   ReadmeSlice &
   SearchSlice &
@@ -73,8 +75,8 @@ export interface StoreConfig {
 }
 
 export function createOpenPLCStore(config: StoreConfig = {}) {
-  return create(
-    subscribeWithSelector<RootState>((...a) => ({
+  return createStore<RootState>()(
+    subscribeWithSelector((...a) => ({
       ...createAISliceFactory(config.ai)(...a),
       ...createConsoleSlice(...a),
       ...createDeviceSlice(...a),
@@ -85,6 +87,7 @@ export function createOpenPLCStore(config: StoreConfig = {}) {
       ...createLadderFlowSlice(...a),
       ...createLibrarySlice(...a),
       ...createModalSlice(...a),
+      ...createPrintSlice(...a),
       ...createProjectSlice(...a),
       ...createReadmeSlice(...a),
       ...createSearchSlice(...a),
@@ -97,5 +100,6 @@ export function createOpenPLCStore(config: StoreConfig = {}) {
   )
 }
 
-export const openPLCStoreBase = createOpenPLCStore()
-export const useOpenPLCStore = createSelectorHooks(openPLCStoreBase)
+export type OpenPLCStore = ReturnType<typeof createOpenPLCStore>
+
+export { OpenPLCStoreProvider, useOpenPLCStore, useOpenPLCStoreApi } from './context'

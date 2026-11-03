@@ -1,14 +1,18 @@
-import { Files, GitBranch } from 'lucide-react'
-import { useCallback } from 'react'
+import { Files, GitBranch, LogIn } from 'lucide-react'
+import { useCallback, useState } from 'react'
 
-import { useNavigation } from '../../../../middleware/shared/providers'
+import { useCapabilities, useEdgeAccountPort, useNavigation } from '../../../../middleware/shared/providers'
+import { useEdgeAccount } from '../../../hooks/use-edge-account'
 import { useIsNinetiesTheme } from '../../../hooks/use-nineties-theme'
 import { useOpenPLCStore } from '../../../store'
 import { cn } from '../../../utils/cn'
+import { ActivityBarButton } from '../../_atoms/buttons/activity-bar'
 import { RetroExplorer, RetroSourceControl } from '../../_atoms/retro-icons'
 import { DividerActivityBar } from '../../_atoms/workspace-activity-bar/divider'
 import { ExitButton } from '../../_molecules/workspace-activity-bar/default/exit'
 import { TooltipSidebarWrapperButton } from '../../_molecules/workspace-activity-bar/tooltip-button'
+import { EdgeAccountMenu } from '../edge-account-menu'
+import { EdgeSignInModal } from '../edge-sign-in-modal'
 import { DefaultWorkspaceActivityBar } from './default'
 import { FBDToolbox } from './fbd-toolbox'
 import { LadderToolbox } from './ladder-toolbox'
@@ -31,9 +35,23 @@ type ActivityBarProps = {
 }
 
 export const WorkspaceActivityBar = ({ defaultActivityBar, explorer, sourceControl }: ActivityBarProps) => {
+  const caps = useCapabilities()
+  const edgeAccount = useEdgeAccountPort()
+  const {
+    status: accountStatus,
+    user: accountUser,
+    planCaption: accountPlanCaption,
+    signedOutReason: accountSignedOutReason,
+    refresh: refreshAccount,
+    signOut: signOutOfAccount,
+  } = useEdgeAccount(caps.hasEdgeAccount, edgeAccount)
+  const [signInDialogOpen, setSignInDialogOpen] = useState(false)
   const editor = useOpenPLCStore(useCallback((s) => s.editor, []))
   const { closeProject } = useOpenPLCStore(useCallback((s) => s.sharedWorkspaceActions, []))
   const navigation = useNavigation()
+
+  // Deliberately a build property, not "is someone signed in": that would move the exit arrow on every sign-in/out.
+  const hasAccountSlot = caps.hasEdgeAccount && edgeAccount !== undefined
 
   const isFBDEditor = editor?.type === 'plc-graphical' && editor?.meta.language === 'fbd'
   const isLadderEditor = editor?.type === 'plc-graphical' && editor?.meta.language === 'ld'
@@ -87,7 +105,7 @@ export const WorkspaceActivityBar = ({ defaultActivityBar, explorer, sourceContr
             </button>
           </TooltipSidebarWrapperButton>
         )}
-        <DividerActivityBar />
+        {(explorer || sourceControl) && <DividerActivityBar />}
         <div className='flex w-full flex-col items-center gap-5'>
           <DefaultWorkspaceActivityBar {...defaultActivityBar} />
         </div>
@@ -108,11 +126,58 @@ export const WorkspaceActivityBar = ({ defaultActivityBar, explorer, sourceContr
           </>
         )}
       </div>
-      <div className='flex h-7 w-full shrink-0 flex-col gap-6 pb-10'>
+      {/* Bottom padding follows the account slot: a build with no Edge account keeps the
+          exit arrow's original pb-10, so adding the slot never shifts it for that build. */}
+      <div className={cn('flex w-full shrink-0 flex-col items-center gap-4', hasAccountSlot ? 'pb-3' : 'pb-10')}>
         <TooltipSidebarWrapperButton tooltipContent='Exit'>
           <ExitButton onClick={handleExitApplication} />
         </TooltipSidebarWrapperButton>
+
+        {/* hasEdgeAccount, not hasAuthentication: autonomy-node is authenticated but talks to its own
+            API, where Edge's account endpoints don't exist. No tooltip: the menu already shows name/email. */}
+        {caps.hasEdgeAccount && edgeAccount && accountStatus === 'signed-in' && accountUser && (
+          <EdgeAccountMenu
+            user={accountUser}
+            planCaption={accountPlanCaption}
+            edgeBaseUrl={edgeAccount.frontendBaseUrl}
+            onSignOut={() => {
+              void signOutOfAccount()
+            }}
+          />
+        )}
+
+        {/* Same slot, for a build that doesn't demand an account: never rendered where the dialog
+            already opens itself, so the web build is untouched. */}
+        {caps.hasEdgeAccount && edgeAccount && !caps.requiresEdgeAccount && accountStatus === 'signed-out' && (
+          <TooltipSidebarWrapperButton tooltipContent='Sign in to Autonomy Edge'>
+            {/* size-5 and #B4D0FE match ExitButton above it; an icon rather than an empty-avatar '?'. */}
+            <ActivityBarButton aria-label='Sign in to Autonomy Edge' onClick={() => setSignInDialogOpen(true)}>
+              <LogIn className='size-5 text-[#B4D0FE]' />
+            </ActivityBarButton>
+          </TooltipSidebarWrapperButton>
+        )}
       </div>
+
+      {/* Gated on signed-out rather than !user, so a slow /auth/me never flashes a prompt at
+          someone already signed in. `open` follows requiresEdgeAccount: forced open on web,
+          opened on request on desktop, which works offline. */}
+      {caps.hasEdgeAccount && edgeAccount && accountStatus === 'signed-out' && (
+        <EdgeSignInModal
+          open={caps.requiresEdgeAccount || signInDialogOpen}
+          onOpenChange={setSignInDialogOpen}
+          account={edgeAccount}
+          reason={accountSignedOutReason}
+          onSignedIn={({ sessionRestored }) => {
+            // Cleared, not left standing: the flag must not force the dialog back open on a later expiry.
+            setSignInDialogOpen(false)
+
+            // A restoration already reached the account hook, which re-reads on it.
+            if (!sessionRestored) {
+              void refreshAccount()
+            }
+          }}
+        />
+      )}
     </>
   )
 }

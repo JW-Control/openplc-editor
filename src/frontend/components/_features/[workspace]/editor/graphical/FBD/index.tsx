@@ -1,13 +1,18 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
-import { useOpenPLCStore } from '../../../../../../store'
+import { useGraphicalFocus } from '../../../../../../hooks/use-graphical-focus'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../../store'
 import { scheduleFlowWriteBack } from '../../../../../../store/slices/shared/flow-writeback'
+import { hasLegacyInOutOutputHandle } from '../../../../../../utils/graphical/in-out-pin-rules'
 import { BlockNodeData } from '../../../../../_atoms/graphical-editor/fbd/block'
 import { BlockVariant } from '../../../../../_atoms/graphical-editor/types/block'
 import { FBDBody } from '../../../../../_molecules/graphical-editor/fbd'
 import { useBoundPou } from '../active-context'
 
+const EMPTY_DIVERGENCES: string[] = []
+
 export default function FbdEditor() {
+  const store = useOpenPLCStoreApi()
   // Bound POU comes from the `GraphicalEditorActiveProvider` set up
   // in the wrapper one level up.  With multi-mount, every open FBD
   // POU has its own FbdEditor instance — the context is what tells
@@ -19,11 +24,25 @@ export default function FbdEditor() {
   const userLibraries = useOpenPLCStore((state) => state.libraries.user)
   const isDebuggerVisible = useOpenPLCStore((state) => state.workspace.isDebuggerVisible)
 
+  const fbdFlowActions = useOpenPLCStore((state) => state.fbdFlowActions)
+
   const flow = fbdFlows.find((flow) => flow.name === pouName)
   const flowUpdated = flow?.updated || false
 
+  const selectSearchedNode = useCallback(
+    ({ nodeId }: { nodeId: string }) => {
+      const node = flow?.rung.nodes.find((candidate) => candidate.id === nodeId)
+      if (!node) return false
+
+      fbdFlowActions.setSelectedNodes({ nodes: [node], editorName: pouName })
+      return true
+    },
+    [flow?.rung.nodes, fbdFlowActions, pouName],
+  )
+  useGraphicalFocus(pouName, selectSearchedNode)
+
   const nodeDivergences = useMemo(() => {
-    if (!flow) return []
+    if (!flow) return EMPTY_DIVERGENCES
 
     const divergences = []
 
@@ -66,14 +85,18 @@ export default function FbdEditor() {
       const currentMap = new Map(currentVariables.map((variable) => [formatVariable(variable), true]))
       const hasDivergence =
         originalInOut?.length !== currentVariables.length ||
-        !originalInOut?.every((variable) => currentMap.has(formatVariable(variable)))
+        !originalInOut?.every((variable) => currentMap.has(formatVariable(variable))) ||
+        // The declarations can agree while the persisted GEOMETRY is stale: a diagram saved
+        // before a VAR_IN_OUT pin became input-only still carries the pin's output side. The
+        // interface never changed, so the comparison above cannot see it.
+        hasLegacyInOutOutputHandle(node)
 
       if (hasDivergence) {
         divergences.push(node.id)
       }
     }
 
-    return divergences
+    return divergences.length > 0 ? divergences : EMPTY_DIVERGENCES
   }, [flow?.rung.nodes, userLibraries, pous])
 
   /**
@@ -85,8 +108,8 @@ export default function FbdEditor() {
    */
   useEffect(() => {
     if (!flowUpdated) return
-    scheduleFlowWriteBack(useOpenPLCStore.getState, pouName, 'fbd')
-  }, [flowUpdated])
+    scheduleFlowWriteBack(store.getState, pouName, 'fbd')
+  }, [store, flowUpdated])
 
   return (
     <div className='h-full w-full'>

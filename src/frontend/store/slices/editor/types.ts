@@ -25,10 +25,16 @@ export type GlobalVariablesTableType =
       code?: string
     }
 
-export type StructureTableType = {
-  description: string
-  selectedRow: string
-}
+export type StructureTableType =
+  | {
+      display: 'table'
+      description: string
+      selectedRow: string
+    }
+  | {
+      display: 'code'
+      code?: string
+    }
 
 export type TaskType = { display: 'table'; selectedRow: string } | { display: 'code' }
 
@@ -70,13 +76,15 @@ export type CursorPosition = {
    *     editor.  Triggers a forced switch to text mode if the panel
    *     is currently in table mode, and the body editor ignores
    *     positions tagged this way.
+   *   - `data-type` — targets a data type's `.dt` code view, with the
+   *     same forced switch out of table mode.
    *
    * Used by Go to Definition redirects: when the LSP points at a
    * variable declaration (synthesized header line), we surface that
    * line inside the variables panel instead of clamping the cursor
    * to the body's line 1.
    */
-  target?: 'body' | 'variables'
+  target?: 'body' | 'variables' | 'data-type'
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +101,18 @@ type EditorModelBase = {
    * Monaco's own internal cursor state is preserved naturally.
    */
   cursorPosition?: CursorPosition
+  /**
+   * Element a graphical editor should select and reveal, the counterpart of
+   * `cursorPosition` for LD and FBD. Set when a search result points at a node;
+   * the flow only exists once the editor mounts, so the request waits here
+   * until its canvas picks it up.
+   */
+  graphicalFocus?: GraphicalFocus
+}
+
+export type GraphicalFocus = {
+  nodeId: string
+  rungId?: string
 }
 
 export type EditorModel = EditorModelBase &
@@ -131,6 +151,18 @@ export type EditorModel = EditorModelBase &
         structure: StructureTableType
       }
     | {
+        /**
+         * A Global Variable List. It reuses `StructureTableType` because it presents the
+         * same way a structure does — a table of declarations with a code view behind the
+         * same toggle — which is also how CODESYS shows a GVL.
+         */
+        type: 'plc-global-variable-list'
+        meta: {
+          name: string
+        }
+        structure: StructureTableType
+      }
+    | {
         type: 'plc-resource'
         meta: {
           name: string
@@ -144,7 +176,7 @@ export type EditorModel = EditorModelBase &
         type: 'plc-device'
         meta: {
           name: string
-          derivation: 'configuration' | 'pin-mapping' | 'orchestrators'
+          derivation: 'configuration' | 'pin-mapping' | 'orchestrators' | 'runtime-status'
         }
       }
     | {
@@ -175,6 +207,14 @@ export type EditorModel = EditorModelBase &
         }
       }
     | {
+        /** Developer-only I/O image diagnostics. Gated by `isDevMode`; it has
+         *  no project element behind it, so it opens from the Display menu. */
+        type: 'plc-diagnostics'
+        meta: {
+          name: string
+        }
+      }
+    | {
         type: 'plc-package-manager'
         meta: {
           name: string
@@ -182,6 +222,23 @@ export type EditorModel = EditorModelBase &
       }
     | {
         type: 'plc-library-manager'
+        meta: {
+          name: string
+        }
+      }
+    | {
+        /** Runtime User Management screen. A device-scoped singleton shown
+         *  under the Device tree branch while connected to a runtime. */
+        type: 'plc-user-management'
+        meta: {
+          name: string
+        }
+      }
+    | {
+        /** Persistent Storage screen — where the connected runtime keeps its
+         *  RETAIN variables. Device-scoped like User Management: the settings
+         *  live on the runtime, not in the project. */
+        type: 'plc-persistent-storage'
         meta: {
           name: string
         }
@@ -203,6 +260,18 @@ export type EditorModel = EditorModelBase &
           name: string
           busName: string
           deviceId: string
+        }
+      }
+    | {
+        /** One I/O module on a modular EtherCAT coupler. Opened from the
+         *  project tree as a leaf under its coupler; renders only the module's own
+         *  view (channel mappings, process data, startup parameters, device info). */
+        type: 'plc-ethercat-module'
+        meta: {
+          name: string
+          busName: string
+          deviceId: string
+          moduleId: string
         }
       }
     | {
@@ -251,7 +320,17 @@ export type EditorActions = {
       code?: string
     },
   ) => void
-  updateModelStructure: (data: { selectedRow?: number; description?: string }) => void
+  /** `display` is optional so table-mode row/description updates can't flip the view. */
+  updateModelStructure: (data: {
+    display?: 'code' | 'table'
+    selectedRow?: number
+    description?: string
+    code?: string
+  }) => void
+  updateModelStructureForName: (
+    name: string,
+    data: { display?: 'code' | 'table'; selectedRow?: number; description?: string; code?: string },
+  ) => void
   updateModelTasks: (tasks: { selectedRow?: number; display: 'code' | 'table' }) => void
   updateModelInstances: (instances: { selectedRow?: number; display: 'code' | 'table' }) => void
   updateModelLadder: (data: { openRung?: { rungId: string; open: boolean } }) => void
@@ -276,6 +355,8 @@ export type EditorActions = {
    * is exclusively a programmatic-jump channel.
    */
   setEditorCursor: (name: string, cursorPosition: CursorPosition) => void
+  /** Same channel as `setEditorCursor`, for the node a graphical editor must select. */
+  setEditorGraphicalFocus: (name: string, graphicalFocus: GraphicalFocus | undefined) => void
   getEditorFromEditors: (name: string) => EditorModel | null
   setMonacoFocused: (focused: boolean) => void
 }

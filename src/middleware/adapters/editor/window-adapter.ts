@@ -13,9 +13,11 @@
  *   - window-controls:hide        (send)
  *   - window:reload               (send)
  *   - window:rebuild-menu         (send)
+ *   - window:project-open         (send)
  *   - app:quit                    (send)
+ *   - app:request-quit            (send) — request confirmation
+ *   - app:quit-requested          (on)   — show confirmation
  *   - window-controls:is-closing  (on)   — window close notification
- *   - app:darwin-is-closing       (on)   — macOS quit notification
  *   - window-controls:toggle-maximized (on) — maximize state change
  */
 
@@ -44,6 +46,14 @@ export function createEditorWindowAdapter(): WindowPort {
       window.bridge.reloadWindow()
     },
 
+    requestQuit(): void {
+      window.bridge.requestQuitApp()
+    },
+
+    onQuitRequested(callback: () => void): Unsubscribe {
+      return window.bridge.quitRequested(() => callback())
+    },
+
     quit(): void {
       window.bridge.handleQuitApp()
     },
@@ -53,45 +63,24 @@ export function createEditorWindowAdapter(): WindowPort {
     },
 
     onCloseRequested(callback: () => void): Unsubscribe {
-      let active = true
-      window.bridge.windowIsClosing(() => {
-        if (active) callback()
-      })
-      return () => {
-        active = false
-      }
-    },
-
-    onDarwinAppQuitting(callback: () => void): Unsubscribe {
-      let active = true
-      window.bridge.darwinAppIsClosing(() => {
-        if (active) callback()
-      })
-      return () => {
-        active = false
-      }
+      return window.bridge.windowIsClosing(() => callback())
     },
 
     enableAutoCloseHandshake(): Unsubscribe {
-      window.bridge.handleCloseOrHideWindowAccelerator()
-      return () => {
-        window.bridge.removeHandleCloseOrHideWindowAccelerator()
-      }
+      return window.bridge.handleCloseOrHideWindowAccelerator()
     },
 
     onMaximizedChanged(callback: (isMaximized: boolean) => void): Unsubscribe {
       let maximized = false
 
-      const handler = () => {
+      return window.bridge.isMaximizedWindow(() => {
         maximized = !maximized
         callback(maximized)
-      }
-
-      window.bridge.isMaximizedWindow(handler)
-
-      return () => {
-        // Electron IPC does not expose per-listener unsubscribe for this channel.
-      }
+      })
     },
   }
+}
+
+export function setMenuProjectOpen(open: boolean): void {
+  window.bridge.setMenuProjectOpen(open)
 }

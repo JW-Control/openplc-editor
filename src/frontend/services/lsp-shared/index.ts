@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Shared LSP infrastructure for every language service in the
  * editor.  Today: ST (strucpp browser worker) and Python
@@ -43,9 +43,12 @@ export {
   type DiagnosticsBridge,
   type DiagnosticsMirror,
 } from './diagnostics'
+export { createLspDocumentMirror, type LspDocumentMirror, lspMirrorUri, parseLspMirrorUri } from './lsp-mirror'
+export { type NavigateToTarget, navTargetForResource, registerDefinitionOpener } from './navigation'
 export {
-  type DefinitionInterceptor,
+  type DefinitionLocationMapper,
   type LspContext,
+  type MappedLocation,
   type ProviderHooks,
   registerLspProviders,
   type RegisterLspProvidersOptions,
@@ -65,6 +68,7 @@ export {
 export { createLspTransport, type CreateLspTransportOptions, type LspTransport } from './transport'
 
 // Internal helpers exposed for tests / specialised callers.
+export { clipEditsToWindow, lspLineInWindow, type LspLineWindow } from './internal/line-window'
 export { shiftSemanticTokensToBody } from './internal/semantic-tokens-shift'
 export {
   lspDocumentSymbolToMonaco,

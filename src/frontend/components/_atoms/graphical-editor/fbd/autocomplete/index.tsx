@@ -1,5 +1,5 @@
 import { Node } from '@xyflow/react'
-import { ComponentPropsWithRef, forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
+import { ComponentPropsWithRef, forwardRef, useEffect, useMemo, useState } from 'react'
 
 import { PLCVariable } from '../../../../../../middleware/shared/ports/types'
 import {
@@ -8,17 +8,68 @@ import {
   type ScopeCompletion,
   scopeCompletionToVariable,
 } from '../../../../../services/graphical-scope'
-import { useOpenPLCStore } from '../../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../store'
+import type { CreateGraphicalVariableModalData } from '../../../../../store/slices/modal/types'
 import { cn } from '../../../../../utils/cn'
 import { getLiteralType, isLegalIdentifier } from '../../../../../utils/keywords'
+import { newUuid } from '../../../../../utils/new-uuid'
+import type { BoundBlockPin } from '../../../../../utils/PLC/validate-variable-type'
+import { isGenericTypeName } from '../../../../../utils/PLC/validate-variable-type'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
 import { buildGenericNode } from '../../../../_molecules/graphical-editor/fbd/fbd-utils/nodes'
 import { GraphicalEditorAutocomplete } from '../../autocomplete'
 import { BlockVariant } from '../../types/block'
 import { CustomFbdNodeTypes } from '..'
-import { BasicNodeData } from '../utils'
+import { BasicNodeData, resizeFbdNodeToVariableName } from '../utils'
 import { getFBDPouVariablesRungNodeAndEdges } from '../utils/utils'
+
+/** Minimal shape of an FBD rung this module needs — nodes plus their wiring. */
+type FBDRungGraph = {
+  nodes: Node[]
+  edges: { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }[]
+}
+
+const VARIABLE_BOX_TYPES = ['input-variable', 'output-variable', 'inout-variable']
+
+/**
+ * The pins of the same block instance that already carry a variable. A generic
+ * pin (`ANY`, `ANY_NUM`, …) has no type of its own, so a variable created on it
+ * takes the concrete type the block already settled on elsewhere (#479).
+ *
+ * Walks the graph the same way `expectedType` does — from this box to the block
+ * it is wired to — and then across that block's remaining edges.
+ */
+const boundPinsOfConnectedBlock = (rung: FBDRungGraph, boxId: string, isInputBox: boolean): BoundBlockPin[] => {
+  const linkToBlock = rung.edges.find((edge) => (isInputBox ? edge.source === boxId : edge.target === boxId))
+  const blockId = isInputBox ? linkToBlock?.target : linkToBlock?.source
+  if (!blockId) return []
+
+  const pinDefinitions = (rung.nodes.find((node) => node.id === blockId)?.data.variant as BlockVariant | undefined)
+    ?.variables
+  if (!pinDefinitions) return []
+
+  const pins: BoundBlockPin[] = []
+  for (const edge of rung.edges) {
+    const intoBlock = edge.target === blockId
+    if (!intoBlock && edge.source !== blockId) continue
+
+    const otherId = intoBlock ? edge.source : edge.target
+    if (otherId === boxId) continue
+
+    // Only variable boxes carry a concrete type; a block on the other end
+    // exposes its own pins, not a variable's type.
+    const otherNode = rung.nodes.find((node) => node.id === otherId)
+    if (!otherNode || !VARIABLE_BOX_TYPES.includes(otherNode.type ?? '')) continue
+
+    const pinType = pinDefinitions.find((pin) => pin.name === (intoBlock ? edge.targetHandle : edge.sourceHandle))?.type
+      .value
+    const variable = (otherNode.data as BasicNodeData | undefined)?.variable
+    const variableType = variable && 'type' in variable ? variable.type.value : undefined
+    if (pinType && variableType) pins.push({ pinType, variableType })
+  }
+  return pins
+}
 
 type FBDBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
   block: unknown
@@ -30,15 +81,13 @@ type FBDBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
 
 const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProps>(
   ({ block: unknownBlock, isOpen, setIsOpen, keyPressed, valueToSearch }: FBDBlockAutoCompleteProps, ref) => {
+    const store = useOpenPLCStoreApi()
     const pouName = useBoundPou()
-    // Mounted whenever an FBD box's name field is opened for editing — same
-    // risk pattern as the ladder autocomplete (see UPDATE.md). `pous`/
-    // `fbdFlows` are read during render just below, so they stay reactive
-    // via their own selector instead of an unselected whole-store subscription.
-    const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
-    const fbdFlows = useOpenPLCStore(useCallback((s) => s.fbdFlows, []))
-    const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
-    const { updateNode, addNode } = useOpenPLCStore(useCallback((s) => s.fbdFlowActions, []))
+    const pous = useOpenPLCStore((state) => state.project.data.pous)
+    const createVariable = useOpenPLCStore((state) => state.projectActions.createVariable)
+    const fbdFlows = useOpenPLCStore((state) => state.fbdFlows)
+    const { updateNode, addNode } = useOpenPLCStore((state) => state.fbdFlowActions)
+    const openModal = useOpenPLCStore((state) => state.modalActions.openModal)
 
     const block = unknownBlock as Node<BasicNodeData> & { positionAbsoluteX?: number; positionAbsoluteY?: number }
     const { edges, rung } = useMemo(() => {
@@ -79,13 +128,13 @@ const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProp
         return
       }
       let cancelled = false
-      void getScopeCompletions(pouName, valueToSearch, expectedType).then((items) => {
+      void getScopeCompletions(store, pouName, valueToSearch, expectedType).then((items) => {
         if (!cancelled) setVariableCandidates(items)
       })
       return () => {
         cancelled = true
       }
-    }, [isVariableBox, pouName, valueToSearch, expectedType, pous])
+    }, [store, isVariableBox, pouName, valueToSearch, expectedType, pous])
 
     // Connector/continuation boxes suggest the matching pair's labels — a
     // graph-topology concern, unrelated to variable scope, kept as-is.
@@ -114,13 +163,16 @@ const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProp
       updateNode({
         editorName: pouName,
         nodeId: variableNode.id,
-        node: {
-          ...variableNode,
-          data: {
-            ...variableNode.data,
-            variable: variable,
+        node: resizeFbdNodeToVariableName(
+          {
+            ...variableNode,
+            data: {
+              ...variableNode.data,
+              variable: variable,
+            },
           },
-        },
+          variable.name,
+        ),
       })
     }
 
@@ -149,17 +201,77 @@ const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProp
       })
       if (!freshRung || !node) return
 
-      const variableType = newVariableTypeForExpected(expectedType)
+      const variableType = newVariableTypeForExpected(
+        expectedType,
+        isVariableBox ? boundPinsOfConnectedBlock(freshRung, block.id, block.type === 'input-variable') : [],
+      )
+
+      // A generic pin accepts several types, so the inferred one is a proposal,
+      // not a fact — let the user confirm it instead of creating silently
+      // (issue #479). Concrete pins leave no room for choice and keep creating
+      // straight away.
+      if (expectedType && isGenericTypeName(expectedType)) {
+        openModal('create-graphical-variable', {
+          pinType: expectedType,
+          name: variableName,
+          suggestedType: variableType,
+          onConfirm: (choice) => createAndBindVariable(choice),
+          onCancel: clearBoundVariable,
+        } satisfies CreateGraphicalVariableModalData)
+        return
+      }
+
+      createAndBindVariable({ name: variableName, class: 'local', type: variableType })
+    }
+
+    /**
+     * Empty this box. Opening the type dialog blurs the box, which binds the
+     * typed text as a raw reference — abandoning the dialog must not leave that
+     * dangling name behind.
+     */
+    const clearBoundVariable = () => {
+      const { project, fbdFlows: freshFlows } = store.getState()
+      const { node } = getFBDPouVariablesRungNodeAndEdges(pouName, project.data.pous, freshFlows, {
+        nodeId: block.id,
+      })
+      if (!node) return
+
+      updateNode({
+        editorName: pouName,
+        nodeId: node.id,
+        node: resizeFbdNodeToVariableName({ ...node, data: { ...node.data, variable: { id: '', name: '' } } }, ''),
+      })
+    }
+
+    /**
+     * Create the local variable and bind it to this box. Reads the rung/node
+     * fresh from the store because the type dialog may have resolved long after
+     * the dropdown that started this closed.
+     */
+    const createAndBindVariable = ({
+      name,
+      class: variableClass,
+      type,
+    }: {
+      name: string
+      class: PLCVariable['class']
+      type: { definition: PLCVariable['type']['definition']; value: string }
+    }) => {
+      const { project, fbdFlows: freshFlows } = store.getState()
+      const { node } = getFBDPouVariablesRungNodeAndEdges(pouName, project.data.pous, freshFlows, {
+        nodeId: block.id,
+      })
+      if (!node) return
 
       const res = createVariable({
         data: {
-          id: crypto.randomUUID(),
-          name: variableName,
+          id: newUuid(),
+          name,
           type: {
-            definition: variableType.definition,
-            value: variableType.value,
+            definition: type.definition,
+            value: type.value,
           },
-          class: 'local',
+          class: variableClass,
           location: '',
           documentation: '',
           debug: false,
@@ -177,19 +289,22 @@ const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProp
       updateNode({
         editorName: pouName,
         nodeId: node.id,
-        node: {
-          ...node,
-          data: {
-            ...node.data,
-            variable: variable ?? { id: '', name: '' },
+        node: resizeFbdNodeToVariableName(
+          {
+            ...node,
+            data: {
+              ...node.data,
+              variable: variable ?? { id: '', name: '' },
+            },
           },
-        },
+          variable?.name ?? '',
+        ),
       })
     }
 
     const submitCreateANewBlock = (blockType: CustomFbdNodeTypes) => {
       const newBlock = buildGenericNode({
-        id: crypto.randomUUID(),
+        id: newUuid(),
         position:
           block.positionAbsoluteX && block.positionAbsoluteY
             ? { x: block.positionAbsoluteX, y: block.positionAbsoluteY + (block.height ?? 0) + 16 }

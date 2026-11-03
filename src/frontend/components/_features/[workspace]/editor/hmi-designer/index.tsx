@@ -4,29 +4,29 @@ import { useDevice } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { registerHmiDesignerSaver } from '../../../../../services/hmi-designer-save'
-import { openPLCStoreBase, useOpenPLCStore } from '../../../../../store'
+import { type OpenPLCStore, useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../store'
 import { CreateEditorObjectFromTab, HMI_DESIGNER_TAB_NAME } from '../../../../../store/slices/tabs/utils'
 
 /** Variables the Designer may bind, from the compile-ready project (aliases resolved). */
-function currentHmiVariables() {
-  const projectData = openPLCStoreBase.getState().projectActions.getCompileReadyProjectData()
+function currentHmiVariables(store: OpenPLCStore) {
+  const projectData = store.getState().projectActions.getCompileReadyProjectData()
   return describeHmiVariables(collectHmiCandidates(projectData))
 }
 
 /** What the Designer needs to link to the open project. */
-function hmiDesignerArgs(): OpenHmiDesignerArgs {
-  const state = openPLCStoreBase.getState()
+function hmiDesignerArgs(store: OpenPLCStore): OpenHmiDesignerArgs {
+  const state = store.getState()
   return {
     projectPath: state.project.meta.path,
     projectName: state.project.meta.name,
     device: state.deviceDefinitions.configuration.deviceBoard,
-    variables: currentHmiVariables(),
+    variables: currentHmiVariables(store),
   }
 }
 
 /** Show the binding view in the "HMI Designer" tab (opening the tab if needed). */
-export function openHmiDesignerTab(): void {
-  const { tabsActions, editorActions, workspaceActions } = openPLCStoreBase.getState()
+export function openHmiDesignerTab(store: OpenPLCStore): void {
+  const { tabsActions, editorActions, workspaceActions } = store.getState()
   const tab = { name: HMI_DESIGNER_TAB_NAME, path: '/hmi-designer', elementType: { type: 'hmi-designer' as const } }
   tabsActions.updateTabs(tab)
   const model = editorActions.getEditorFromEditors(tab.name) ?? CreateEditorObjectFromTab(tab)
@@ -39,10 +39,13 @@ export function openHmiDesignerTab(): void {
  * "HMI Designer" of the project tree and of Configuration: the full Designer
  * opens in its own window, and back in OpenPLC the tab shows the binding view.
  */
-export async function openHmiDesigner(device: DevicePort): Promise<{ ok: boolean; error?: string }> {
-  openHmiDesignerTab()
+export async function openHmiDesigner(
+  store: OpenPLCStore,
+  device: DevicePort,
+): Promise<{ ok: boolean; error?: string }> {
+  openHmiDesignerTab(store)
   if (!device.openHmiDesignerWindow) return { ok: true }
-  const result = await device.openHmiDesignerWindow(hmiDesignerArgs())
+  const result = await device.openHmiDesignerWindow(hmiDesignerArgs(store))
   return result.ok ? { ok: true } : { ok: false, error: result.error }
 }
 
@@ -64,6 +67,7 @@ const VARIABLES_DEBOUNCE_MS = 400
  */
 export const HmiDesignerEditor = () => {
   const device = useDevice()
+  const store = useOpenPLCStoreApi()
   const projectPath = useOpenPLCStore((s) => s.project.meta.path)
   const [target, setTarget] = useState<{ url: string } | { error: string } | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -77,7 +81,7 @@ export const HmiDesignerEditor = () => {
       setTarget({ error: 'El HMI Designer sólo está disponible en OpenPLC Editor de escritorio.' })
       return
     }
-    const args = hmiDesignerArgs()
+    const args = hmiDesignerArgs(store)
     lastVariables.current = JSON.stringify(args.variables)
     device
       .prepareHmiDesigner(args)
@@ -90,20 +94,20 @@ export const HmiDesignerEditor = () => {
     return () => {
       cancelled = true
     }
-  }, [device, projectPath, attempt])
+  }, [device, store, projectPath, attempt])
 
   // The design as a project file: dirty mark on the tab and OpenPLC's Save.
   useEffect(() => {
-    const { fileActions } = openPLCStoreBase.getState()
+    const { fileActions } = store.getState()
     fileActions.addFile({ name: HMI_DESIGNER_TAB_NAME, type: 'hmi-designer', filePath: '' })
     const unsubscribeDirty = device.onHmiDesignerDirty?.((dirty) => {
-      const { fileActions: files, workspaceActions } = openPLCStoreBase.getState()
+      const { fileActions: files, workspaceActions } = store.getState()
       files.updateFile({ name: HMI_DESIGNER_TAB_NAME, saved: !dirty })
       if (dirty) workspaceActions.setEditingState('unsaved')
       else if (files.checkIfAllFilesAreSaved()) workspaceActions.setEditingState('saved')
     })
     const unregisterSaver = registerHmiDesignerSaver(async () => {
-      const file = openPLCStoreBase.getState().files[HMI_DESIGNER_TAB_NAME]
+      const file = store.getState().files[HMI_DESIGNER_TAB_NAME]
       if (file?.saved) return true
       const result = await device.saveHmiDesigner?.()
       return Boolean(result?.ok)
@@ -111,18 +115,18 @@ export const HmiDesignerEditor = () => {
     return () => {
       unsubscribeDirty?.()
       unregisterSaver()
-      openPLCStoreBase.getState().fileActions.removeFile({ name: HMI_DESIGNER_TAB_NAME })
+      store.getState().fileActions.removeFile({ name: HMI_DESIGNER_TAB_NAME })
     }
-  }, [device])
+  }, [device, store])
 
   // Variables edited in OpenPLC reach "Variable PLC" without reopening the tab.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
-    const unsubscribe = openPLCStoreBase.subscribe((state, previous) => {
+    const unsubscribe = store.subscribe((state, previous) => {
       if (state.project.data === previous.project.data) return
       clearTimeout(timer)
       timer = setTimeout(() => {
-        const variables = currentHmiVariables()
+        const variables = currentHmiVariables(store)
         const text = JSON.stringify(variables)
         if (text === lastVariables.current) return
         lastVariables.current = text
@@ -133,7 +137,7 @@ export const HmiDesignerEditor = () => {
       clearTimeout(timer)
       unsubscribe()
     }
-  }, [device])
+  }, [device, store])
 
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
 

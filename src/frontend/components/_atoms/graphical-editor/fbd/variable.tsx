@@ -1,6 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PLCVariable } from '../../../../../middleware/shared/ports/types'
 import { useDebugger } from '../../../../../middleware/shared/providers'
@@ -8,28 +7,29 @@ import { useDebugCompositeKey } from '../../../../hooks/use-debug-composite-key'
 import { useDebugValue, useIsDebuggerVisible } from '../../../../hooks/use-debug-value'
 import { forceDebugVariable, releaseDebugVariable } from '../../../../services/debug-force-variable'
 import { resolveScopeExpressionType } from '../../../../services/graphical-scope'
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { cn } from '../../../../utils/cn'
 import { resolveArrayVariableByName } from '../../../../utils/PLC/array-variable-utils'
-import {
-  floatToBuffer,
-  getVariableTypeInfo,
-  integerToBuffer,
-  parseFloatValue,
-  parseIntegerValue,
-  parseStringValue,
-  stringToBuffer,
-} from '../../../../utils/variable-types'
+import { encodeForceValue, isForcedValueHigh } from '../../../../utils/variable-sizes'
+import { toast } from '../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { Modal, ModalContent, ModalTitle } from '../../../_molecules/modal'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { Label } from '../../label'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../tooltip'
 import { DebugValueBadge } from '../debug-value-badge'
 import { BlockVariant } from '../types/block'
 import { validateVariableType } from '../utils'
 import { FBDBlockAutoComplete } from './autocomplete'
 import { CustomHandle } from './handle'
-import { BlockNode, VariableNode, VariableProps } from './utils'
+import {
+  BlockNode,
+  getVariableNodeWidth,
+  isVariableNameTruncated,
+  resizeVariableNodeToName,
+  VariableNode,
+  VariableProps,
+} from './utils'
 import {
   DEFAULT_VARIABLE_HEIGHT,
   DEFAULT_VARIABLE_WIDTH,
@@ -39,16 +39,14 @@ import {
 import { getFBDPouVariablesRungNodeAndEdges } from './utils/utils'
 
 const VariableElement = (block: VariableProps) => {
+  const store = useOpenPLCStoreApi()
   const { id, data, selected } = block
+  const elementWidth = getVariableNodeWidth(block)
+  const textAreaWidth = elementWidth - (VARIABLE_ELEMENT_SIZE - DEFAULT_VARIABLE_WIDTH)
   const pouName = useBoundPou()
-  const { updateModelFBD, fbdFlows, updateNode, pous } = useOpenPLCStore(
-    useShallow((s) => ({
-      updateModelFBD: s.editorActions.updateModelFBD,
-      fbdFlows: s.fbdFlows,
-      updateNode: s.fbdFlowActions.updateNode,
-      pous: s.project.data.pous,
-    })),
-  )
+  const updateModelFBD = useOpenPLCStore((state) => state.editorActions.updateModelFBD)
+  const updateNode = useOpenPLCStore((state) => state.fbdFlowActions.updateNode)
+  const pous = useOpenPLCStore((state) => state.project.data.pous)
 
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()
@@ -87,7 +85,7 @@ const VariableElement = (block: VariableProps) => {
   /**
    * Get the connection type
    */
-  const flow = useMemo(() => fbdFlows.find((flow) => flow.name === pouName), [fbdFlows, pouName])
+  const flow = useOpenPLCStore((state) => state.fbdFlows.find((flow) => flow.name === pouName))
 
   const connections = useMemo(() => {
     const rung = flow?.rung
@@ -277,7 +275,7 @@ const VariableElement = (block: VariableProps) => {
 
   const getVariableType = (): string | undefined => {
     if (!data.variable || !data.variable.name) return undefined
-    const { pou } = getFBDPouVariablesRungNodeAndEdges(pouName, pous, fbdFlows, { nodeId: id })
+    const pou = pous.find((pou) => pou.name === pouName)
     if (!pou) return undefined
     const variable = (pou.interface?.variables ?? []).find(
       (v: PLCVariable) => v.name.toLowerCase() === data.variable.name.toLowerCase(),
@@ -299,21 +297,23 @@ const VariableElement = (block: VariableProps) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await forceDebugVariable(debugger_, compositeKey, debugIndex, new Uint8Array([1]), true)
+    if (data.variable.name)
+      await forceDebugVariable(store, debugger_, compositeKey, debugIndex, new Uint8Array([1]), true)
   }
 
   const handleForceFalse = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await forceDebugVariable(debugger_, compositeKey, debugIndex, new Uint8Array([0]), false)
+    if (data.variable.name)
+      await forceDebugVariable(store, debugger_, compositeKey, debugIndex, new Uint8Array([0]), false)
   }
 
   const handleReleaseForce = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await releaseDebugVariable(debugger_, compositeKey, debugIndex)
+    if (data.variable.name) await releaseDebugVariable(store, debugger_, compositeKey, debugIndex)
   }
 
   const handleForceValue = (e: React.MouseEvent) => {
@@ -343,50 +343,29 @@ const VariableElement = (block: VariableProps) => {
       return
     }
 
-    const typeInfo = getVariableTypeInfo(varType)
-    if (!typeInfo) {
+    let valueBuffer: Uint8Array
+    try {
+      valueBuffer = encodeForceValue(forceValue, varType)
+    } catch (error) {
+      toast({
+        title: 'Cannot force value',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'fail',
+      })
       setForceValueModalOpen(false)
       setForceValue('')
       return
     }
 
-    const normalizedType = varType.toLowerCase()
-    const isFloatType = normalizedType === 'real' || normalizedType === 'lreal'
-    const isStringType = normalizedType === 'string'
-
-    let valueBuffer: Uint8Array
-    let forcedValueForState: boolean
-
-    if (isStringType) {
-      const parsedStringValue: string | null = parseStringValue(forceValue)
-      if (parsedStringValue === null) {
-        setForceValueModalOpen(false)
-        setForceValue('')
-        return
-      }
-      valueBuffer = stringToBuffer(parsedStringValue)
-      forcedValueForState = true
-    } else if (isFloatType) {
-      const parsedFloatValue = parseFloatValue(forceValue, typeInfo.byteSize)
-      if (parsedFloatValue === null) {
-        setForceValueModalOpen(false)
-        setForceValue('')
-        return
-      }
-      valueBuffer = floatToBuffer(parsedFloatValue, typeInfo.byteSize)
-      forcedValueForState = parsedFloatValue >= 0
-    } else {
-      const parsedIntValue = parseIntegerValue(forceValue, typeInfo)
-      if (parsedIntValue === null) {
-        setForceValueModalOpen(false)
-        setForceValue('')
-        return
-      }
-      valueBuffer = integerToBuffer(parsedIntValue, typeInfo.byteSize, typeInfo.signed)
-      forcedValueForState = parsedIntValue >= BigInt(0)
-    }
-
-    await forceDebugVariable(debugger_, compositeKey, debugIndex, valueBuffer, forcedValueForState, varType)
+    await forceDebugVariable(
+      store,
+      debugger_,
+      compositeKey,
+      debugIndex,
+      valueBuffer,
+      isForcedValueHigh(forceValue),
+      varType,
+    )
 
     setForceValueModalOpen(false)
     setForceValue('')
@@ -412,6 +391,8 @@ const VariableElement = (block: VariableProps) => {
     setIsContextMenuOpen(true)
   }
 
+  const isNameTruncated = isVariableNameTruncated(data.variable?.name ?? '', elementWidth)
+
   const variableType = getVariableType()
   const isBoolVariable = variableType?.toUpperCase() === 'BOOL'
 
@@ -421,11 +402,18 @@ const VariableElement = (block: VariableProps) => {
   const handleSubmitVariableValueOnTextareaBlur = (variableName?: string) => {
     const variableNameToSubmit = variableName || variableValue
 
-    const { pou, rung, node } = getFBDPouVariablesRungNodeAndEdges(pouName, pous, fbdFlows, {
+    const { project, fbdFlows } = store.getState()
+    const { pou, rung, node } = getFBDPouVariablesRungNodeAndEdges(pouName, project.data.pous, fbdFlows, {
       nodeId: id,
     })
     if (!pou || !rung || !node) return
     const variableNode = node as VariableNode
+    // This runs on every blur: leaving the box without changing the name must
+    // not rebuild the bound variable, which would read as an edit. Skipping the
+    // re-resolve loses nothing: compile, the debugger and the validation effect
+    // all resolve the variable by name, and `{ name }` alone is already stored
+    // for references such as `TON0.Q`.
+    if (variableNameToSubmit === variableNode.data.variable.name) return
 
     // Persist the typed value: enrich with the local variable (carrying its
     // type) when it's a plain local/array reference, otherwise store the raw
@@ -441,13 +429,16 @@ const VariableElement = (block: VariableProps) => {
     updateNode({
       editorName: pouName,
       nodeId: variableNode.id,
-      node: {
-        ...variableNode,
-        data: {
-          ...variableNode.data,
-          variable: variable,
+      node: resizeVariableNodeToName(
+        {
+          ...variableNode,
+          data: {
+            ...variableNode.data,
+            variable: variable,
+          },
         },
-      },
+        variable.name,
+      ),
     })
   }
 
@@ -473,10 +464,12 @@ const VariableElement = (block: VariableProps) => {
 
   return (
     <>
-      <div
-        title={inputError && errorDescription ? errorDescription : undefined}
-        style={{
-                width: VARIABLE_ELEMENT_SIZE,
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              style={{
+                width: elementWidth,
                 height: VARIABLE_ELEMENT_HEIGHT,
                 ...(debuggerColor
                   ? {
@@ -506,7 +499,7 @@ const VariableElement = (block: VariableProps) => {
               <div
                 className='relative flex items-center'
                 style={{
-                  width: DEFAULT_VARIABLE_WIDTH,
+                  width: textAreaWidth,
                   height: DEFAULT_VARIABLE_HEIGHT,
                 }}
               >
@@ -635,6 +628,23 @@ const VariableElement = (block: VariableProps) => {
                 </Popover.Root>
               )}
             </div>
+          </TooltipTrigger>
+          {(inputError || isNameTruncated) && (
+            <TooltipContent>
+              {isNameTruncated && (
+                <div className='flex items-center justify-center text-xs'>
+                  <span>{data.variable.name}</span>
+                </div>
+              )}
+              {inputError && errorDescription && (
+                <div className='flex items-center justify-center text-xs'>
+                  <span className='text-red-500'>{errorDescription}</span>
+                </div>
+              )}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
 
       <Modal open={forceValueModalOpen} onOpenChange={handleForceValueModalChange}>
         <ModalContent className='flex h-fit min-h-0 w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>
@@ -686,4 +696,6 @@ const VariableElement = (block: VariableProps) => {
   )
 }
 
-export { VariableElement }
+const exportVariableElement = memo(VariableElement)
+
+export { exportVariableElement as VariableElement }

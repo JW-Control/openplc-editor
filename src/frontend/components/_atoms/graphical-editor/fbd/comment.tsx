@@ -1,7 +1,7 @@
 import { NodeResizer } from '@xyflow/react'
 import { memo, useEffect, useRef, useState } from 'react'
 
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { cn } from '../../../../utils/cn'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
@@ -10,16 +10,11 @@ import { MINIMUM_ELEMENT_HEIGHT, MINIMUM_ELEMENT_WIDTH } from './utils/constants
 import { CommentNode, CommentProps } from './utils/types'
 
 const CommentElement = (block: CommentProps) => {
+  const store = useOpenPLCStoreApi()
   const { id, selected, data, width, height } = block
   const pouName = useBoundPou()
-  const {
-    editorActions: { updateModelFBD },
-    fbdFlows,
-    fbdFlowActions: { updateNode },
-    project: {
-      data: { pous },
-    },
-  } = useOpenPLCStore()
+  const updateModelFBD = useOpenPLCStore((state) => state.editorActions.updateModelFBD)
+  const updateNode = useOpenPLCStore((state) => state.fbdFlowActions.updateNode)
 
   const blockRef = useRef<HTMLDivElement>(null)
   const inputVariableRef = useRef<
@@ -48,7 +43,8 @@ const CommentElement = (block: CommentProps) => {
       return
     }
 
-    const { node: commentaryBlock } = getFBDPouVariablesRungNodeAndEdges(pouName, pous, fbdFlows, {
+    const { project, fbdFlows } = store.getState()
+    const { node: commentaryBlock } = getFBDPouVariablesRungNodeAndEdges(pouName, project.data.pous, fbdFlows, {
       nodeId: id,
     })
     if (!commentaryBlock) return
@@ -98,7 +94,8 @@ const CommentElement = (block: CommentProps) => {
   }, [commentFocused])
 
   const handleSubmitCommentaryValueOnTextareaBlur = () => {
-    const { node: commentaryBlock } = getFBDPouVariablesRungNodeAndEdges(pouName, pous, fbdFlows, {
+    const { project, fbdFlows } = store.getState()
+    const { node: commentaryBlock } = getFBDPouVariablesRungNodeAndEdges(pouName, project.data.pous, fbdFlows, {
       nodeId: id,
     })
     if (!commentaryBlock) return

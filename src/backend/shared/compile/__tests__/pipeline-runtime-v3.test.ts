@@ -10,7 +10,7 @@
  * core).  These tests lock that ordering in.
  *
  * Kept in a separate file from `pipeline.test.ts` (which is stale from
- * the xml2st→JSON-transpiler migration and references the removed
+ * the XML→JSON-transpiler migration and references the removed
  * `transpileXmlToSt` port method) so the v3 coverage compiles + runs
  * against the current `transpileToSt` contract.
  */
@@ -22,7 +22,6 @@ import type {
   PlatformDeviceContext,
 } from '../../../../middleware/shared/ports/compiler-platform-port'
 
-jest.mock('../../utils/PLC/xml-generator', () => ({ XmlGenerator: jest.fn() }))
 jest.mock('../../library/program-build-pipeline', () => ({ runProgramBuildPipeline: jest.fn() }))
 jest.mock('../../library/program-build-helpers', () => ({
   buildKnownPous: jest.fn(() => []),
@@ -36,7 +35,15 @@ jest.mock('../../firmware/runtime-version-gate', () => ({
   describeIncompatibleRuntime: jest.fn((v: string | null) => `Runtime ${String(v)} too old`),
 }))
 jest.mock('../steps/generate-confs', () => ({
-  generateRuntimeConfs: jest.fn(() => ({ modbusSlave: '', modbusMaster: '', s7Comm: '', opcUa: null, ethercat: '' })),
+  generateRuntimeConfs: jest.fn(() => ({
+    modbusSlave: '',
+    modbusMaster: '',
+    s7Comm: '',
+    opcUa: null,
+    ethercat: '',
+    ethercatBusconfig: null,
+    ethercatIomapping: null,
+  })),
 }))
 
 import { runProgramBuildPipeline } from '../../library/program-build-pipeline'
@@ -105,6 +112,7 @@ beforeEach(() => {
     md5Hash: 'a'.repeat(32),
     splitterFallbackMessage: null,
     debugMapSummary: null,
+    retainBlobSize: null,
   })
 })
 

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Per-instance context for graphical editors.
  *
@@ -27,7 +27,7 @@
  * isolated stories — under a real provider both fields are set.
  */
 
-import { createContext, type ReactNode, useContext } from 'react'
+import { createContext, type ReactNode, useContext, useMemo } from 'react'
 
 import { useOpenPLCStore } from '../../../../../store'
 import type { EditorModel } from '../../../../../store/slices/editor'
@@ -49,7 +49,8 @@ export function GraphicalEditorActiveProvider({
   isActive: boolean
   children: ReactNode
 }) {
-  return <GraphicalEditorContext.Provider value={{ pouName, isActive }}>{children}</GraphicalEditorContext.Provider>
+  const value = useMemo(() => ({ pouName, isActive }), [pouName, isActive])
+  return <GraphicalEditorContext.Provider value={value}>{children}</GraphicalEditorContext.Provider>
 }
 
 /**

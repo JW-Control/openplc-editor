@@ -19,6 +19,14 @@ type ScreenSection = {
   fields?: unknown[]
   actions?: unknown[]
   persistence?: string
+  /** io-table: `device-setup` lists the station an embedded configurator reported, read-only. */
+  source?: unknown
+  /** vendor-document: page inside the package that hosts the configurator. */
+  document?: unknown
+  /** vendor-document: device board name → controller type id passed to the configurator. */
+  controllers?: unknown
+  /** vendor-document: configurator bundle version, stored next to its archive. */
+  bundleVersion?: unknown
 }
 
 type ScreenDefinition = {
@@ -29,6 +37,8 @@ type ModuleDefinition = {
   id: string
   name: string
   hwId?: string
+  typeId?: string
+  processImage?: { inputBytes: number; outputBytes: number }
   image?: string
   description?: string
   specs?: Record<string, string>
@@ -53,6 +63,7 @@ type ModuleDefinition = {
 type ModuleSystem = {
   enabled: boolean
   maxSlots: number
+  discoverySupported?: boolean
   modules: ModuleDefinition[]
 } | null
 

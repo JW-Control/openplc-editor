@@ -2,7 +2,6 @@ import * as Popover from '@radix-ui/react-popover'
 import { Monitor } from 'lucide-react'
 import { ComponentPropsWithoutRef, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useCapabilities, useProject } from '../../../../middleware/shared/providers'
 import { ArrowIcon } from '../../../assets/icons/interface/Arrow'
 import { CloseIcon } from '../../../assets/icons/interface/Close'
 import { ConfigIcon } from '../../../assets/icons/interface/Config'
@@ -10,6 +9,7 @@ import { DeviceTransferIcon } from '../../../assets/icons/interface/DeviceTransf
 import { DuplicateIcon } from '../../../assets/icons/interface/Duplicate'
 import { MoreOptionsIcon } from '../../../assets/icons/interface/MoreOptions'
 import { PencilIcon } from '../../../assets/icons/interface/Pencil'
+import { SoftMotionIcon } from '../../../assets/icons/interface/SoftMotion'
 import { ArrayIcon } from '../../../assets/icons/project/Array'
 import { CppIcon } from '../../../assets/icons/project/Cpp'
 import { DataTypeIcon } from '../../../assets/icons/project/DataType'
@@ -18,6 +18,7 @@ import { EnumIcon } from '../../../assets/icons/project/Enum'
 import { FBDIcon } from '../../../assets/icons/project/FBD'
 import { FunctionIcon } from '../../../assets/icons/project/Function'
 import { FunctionBlockIcon } from '../../../assets/icons/project/FunctionBlock'
+import { GlobalVariableListIcon } from '../../../assets/icons/project/GlobalVariableList'
 import { ILIcon } from '../../../assets/icons/project/IL'
 import { LDIcon } from '../../../assets/icons/project/LD'
 import { LibraryManifestIcon } from '../../../assets/icons/project/LibraryManifest'
@@ -31,11 +32,13 @@ import { ServerIcon } from '../../../assets/icons/project/Server'
 import { SFCIcon } from '../../../assets/icons/project/SFC'
 import { STIcon } from '../../../assets/icons/project/ST'
 import { StructureIcon } from '../../../assets/icons/project/Structure'
-import { executeSaveProject } from '../../../services/save-actions'
-import { useOpenPLCStore } from '../../../store'
+import { UsersIcon } from '../../../assets/icons/project/Users'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../store'
+import { elementNameCollision, type NamedElementKind } from '../../../store/slices/shared/name-collision'
 import { WorkspaceProjectTreeLeafType } from '../../../store/slices/workspace/types'
 import { cn } from '../../../utils/cn'
 import { isUnsaved, unsavedLabel } from '../../../utils/unsaved-label'
+import { HighlightedText } from '../../_atoms/highlighted-text'
 import { toast } from '../../_features/[app]/toast/use-toast'
 
 const pousAllLanguages = ['il', 'st', 'python', 'cpp', 'ld', 'sfc', 'fbd'] as const
@@ -88,6 +91,7 @@ const ProjectTreeRoot = ({ children, label, ...res }: IProjectTreeRootProps) => 
 type ProjectTreeBranchProps = ComponentPropsWithoutRef<'li'> & {
   branchTarget:
     | 'data-type'
+    | 'global-variable-list'
     | 'function'
     | 'function-block'
     | 'program'
@@ -100,6 +104,10 @@ type ProjectTreeBranchProps = ComponentPropsWithoutRef<'li'> & {
 
 const BranchSources = {
   'data-type': { BranchIcon: DataTypeIcon, label: 'Data Types' },
+  // CODESYS groups Global Variable Lists under their own tree node; the lists inside are
+  // named by the user (`GVL` by default), which is also the name their members are
+  // qualified with in code.
+  'global-variable-list': { BranchIcon: GlobalVariableListIcon, label: 'Global Variables' },
   function: { BranchIcon: FunctionIcon, label: 'Functions' },
   'function-block': { BranchIcon: FunctionBlockIcon, label: 'Function Blocks' },
   program: { BranchIcon: ProgramIcon, label: 'Programs' },
@@ -111,7 +119,7 @@ const BranchSources = {
 const ProjectTreeBranch = ({ branchTarget, children, ...res }: ProjectTreeBranchProps) => {
   const {
     project: {
-      data: { pous, dataTypes, servers, remoteDevices },
+      data: { pous, dataTypes, globalVariableLists, servers, remoteDevices },
     },
     fileActions: { getFile },
   } = useOpenPLCStore()
@@ -122,6 +130,7 @@ const ProjectTreeBranch = ({ branchTarget, children, ...res }: ProjectTreeBranch
     pous.some((pou) => pou.pouType === branchTarget) ||
     branchTarget === 'device' ||
     (branchTarget === 'data-type' && dataTypes.length > 0) ||
+    (branchTarget === 'global-variable-list' && (globalVariableLists?.length ?? 0) > 0) ||
     (branchTarget === 'server' && servers !== undefined && servers.length > 0) ||
     (branchTarget === 'remote-device' && remoteDevices !== undefined && remoteDevices.length > 0)
   useEffect(() => setBranchIsOpen(hasAssociatedPou), [hasAssociatedPou])
@@ -246,6 +255,12 @@ type IProjectTreeExpandableLeafProps = ComponentPropsWithoutRef<'li'> & {
   leafLang: IProjectTreeLeafProps['leafLang']
   leafType: WorkspaceProjectTreeLeafType
   label?: string
+  /**
+   * Search query used only to highlight matches in the displayed label.
+   * Kept separate from `label`, which must stay the element's real name:
+   * rename/duplicate/delete and selection all use `label` as identity.
+   */
+  highlightQuery?: string
   children?: ReactNode
 }
 
@@ -253,6 +268,7 @@ const ProjectTreeExpandableLeaf = ({
   leafLang,
   leafType,
   label,
+  highlightQuery,
   children,
   onClick: handleLeafClick,
   ...res
@@ -266,9 +282,6 @@ const ProjectTreeExpandableLeaf = ({
     remoteDeviceActions: { deleteRequest: deleteRemoteDeviceRequest, rename: renameRemoteDevice },
     fileActions: { getFile },
   } = useOpenPLCStore()
-  const projectPort = useProject()
-  const capabilities = useCapabilities()
-  const { hasVersionControl } = capabilities
 
   const [isExpanded, setIsExpanded] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -287,24 +300,18 @@ const ProjectTreeExpandableLeaf = ({
     setSelectedProjectTreeLeaf({ label, type: leafType })
   }
 
-  const handleRenameFile = async (renamed: string) => {
+  const handleRenameFile = (renamed: string) => {
     setIsEditing(false)
     if (!renamed || !label) return
     if (renamed === label) return
     const res = renameRemoteDevice(label, renamed)
     if (!res.ok) {
       setNewLabel(label || '')
+      toast({ title: 'Rename failed', description: res.message ?? `"${label}" could not be renamed.`, variant: 'fail' })
       return
     }
-    // Only auto-persist on platforms that track per-file changes — otherwise
-    // the user's first action on a fresh project triggers a full save with
-    // no version-control benefit. Local editor users keep the existing
-    // "save on Ctrl+S" mental model.
-    if (hasVersionControl) {
-      // Persist immediately so refresh doesn't show the old name (rename
-      // queues the old path's deletion in `pendingDeletions`, save propagates).
-      await executeSaveProject(projectPort, capabilities)
-    }
+    // Soft, unsaved change: renameElement flags the workspace dirty; the rename
+    // persists on the next save, consistently on web and desktop.
   }
 
   const handleDeleteFile = () => {
@@ -384,7 +391,7 @@ const ProjectTreeExpandableLeaf = ({
               )}
               onDoubleClick={() => !isDebuggerVisible && setIsEditing(true)}
             >
-              {handleLabel(label) || ''}
+              <HighlightedText text={handleLabel(label) || ''} searchQuery={highlightQuery} />
             </span>
           )}
         </div>
@@ -453,6 +460,7 @@ type IProjectTreeLeafProps = ComponentPropsWithoutRef<'li'> & {
     | 'arr'
     | 'enum'
     | 'str'
+    | 'gvl'
     | 'res'
     | 'devConfig'
     | 'devPin'
@@ -462,11 +470,25 @@ type IProjectTreeLeafProps = ComponentPropsWithoutRef<'li'> & {
     | 'vendorScreen'
     | 'hmiDesigner'
     | 'ethercatDevice'
+    | 'softMotionDrive'
     | 'libraryManifest'
+    | 'userManagement'
+    | 'persistentStorage'
   leafType: WorkspaceProjectTreeLeafType
   label?: string
+  /**
+   * Search query used only to highlight matches in the displayed label.
+   * Kept separate from `label`, which must stay the element's real name:
+   * rename/duplicate/delete and selection all use `label` as identity.
+   */
+  highlightQuery?: string
   busName?: string
   deviceId?: string
+  /**
+   * Carried on an EtherCAT module leaf so Delete can remove that one module
+   * without touching the parent coupler or the other modules on it.
+   */
+  moduleId?: string
 }
 
 const LeafSources = {
@@ -480,6 +502,7 @@ const LeafSources = {
   arr: { LeafIcon: ArrayIcon },
   enum: { LeafIcon: EnumIcon },
   str: { LeafIcon: StructureIcon },
+  gvl: { LeafIcon: GlobalVariableListIcon },
   res: { LeafIcon: ResourceIcon },
   devConfig: { LeafIcon: ConfigIcon },
   devPin: { LeafIcon: DeviceTransferIcon },
@@ -493,21 +516,29 @@ const LeafSources = {
     ),
   },
   ethercatDevice: { LeafIcon: DeviceTransferIcon },
+  // A recognized CiA 402 SoftMotion drive gets a distinct rotary-axis icon so
+  // it reads as an axis (usable in MC_* blocks), not a plain EtherCAT slave.
+  softMotionDrive: { LeafIcon: SoftMotionIcon },
   // Library manifest gets its own document-with-bookmark icon so
   // the explorer leaf, the workspace tab, and the breadcrumb all
   // render the same glyph — the manifest is the user's entry point
   // into a library project, so it earns a dedicated mark.
   libraryManifest: { LeafIcon: LibraryManifestIcon },
+  userManagement: { LeafIcon: UsersIcon },
+  persistentStorage: { LeafIcon: ConfigIcon },
 }
 const ProjectTreeLeaf = ({
   leafLang,
   leafType,
   label,
+  highlightQuery,
   busName,
   deviceId,
+  moduleId,
   onClick: handleLeafClick,
   ...res
 }: IProjectTreeLeafProps) => {
+  const store = useOpenPLCStoreApi()
   const {
     editor: {
       meta: { name },
@@ -516,14 +547,24 @@ const ProjectTreeLeaf = ({
     workspaceActions: { setSelectedProjectTreeLeaf },
     pouActions: { deleteRequest: deletePouRequest, rename: renamePou, duplicate: duplicatePou },
     datatypeActions: { deleteRequest: deleteDatatypeRequest, rename: renameDatatype, duplicate: duplicateDatatype },
-    serverActions: { deleteRequest: deleteServerRequest, rename: renameServer },
-    remoteDeviceActions: { deleteRequest: deleteRemoteDeviceRequest, rename: renameRemoteDevice },
-    ethercatDeviceActions: { delete: deleteEthercatDevice, rename: renameEthercatDevice },
+    globalVariableListActions: {
+      deleteRequest: deleteGlobalVariableListRequest,
+      rename: renameGlobalVariableList,
+      duplicate: duplicateGlobalVariableList,
+    },
+    serverActions: { deleteRequest: deleteServerRequest, rename: renameServer, duplicate: duplicateServer },
+    remoteDeviceActions: {
+      deleteRequest: deleteRemoteDeviceRequest,
+      rename: renameRemoteDevice,
+      duplicate: duplicateRemoteDevice,
+    },
+    ethercatDeviceActions: {
+      delete: deleteEthercatDevice,
+      deleteModule: deleteEthercatModule,
+      rename: renameEthercatDevice,
+    },
     fileActions: { getFile },
   } = useOpenPLCStore()
-  const projectPort = useProject()
-  const capabilities = useCapabilities()
-  const { hasVersionControl } = capabilities
 
   const [isEditing, setIsEditing] = useState(false)
   const [newLabel, setNewLabel] = useState(label || '')
@@ -533,9 +574,16 @@ const ProjectTreeLeaf = ({
 
   const isAPou = useMemo(() => pousAllLanguages.includes(leafLang as (typeof pousAllLanguages)[number]), [leafLang])
   const isDatatype = useMemo(() => leafLang === 'arr' || leafLang === 'enum' || leafLang === 'str', [leafLang])
+  const isGlobalVariableList = useMemo(() => leafLang === 'gvl', [leafLang])
   const isServer = useMemo(() => leafLang === 'server', [leafLang])
   const isRemoteDevice = useMemo(() => leafLang === 'remoteDevice', [leafLang])
-  const isEthercatDevice = useMemo(() => leafLang === 'ethercatDevice', [leafLang])
+  // A SoftMotion drive is an EtherCAT child device too (cia402.enabled) — it
+  // shares every EtherCAT device action (rename/delete), just a distinct icon.
+  const isEthercatDevice = useMemo(() => leafLang === 'ethercatDevice' || leafLang === 'softMotionDrive', [leafLang])
+  // A module slotted into a modular coupler. Delete must remove only this
+  // module, not the parent coupler — the module leaf carries `moduleId` for
+  // exactly that reason.
+  const isEthercatModule = useMemo(() => leafType === 'ethercat-module', [leafType])
 
   const { LeafIcon } = LeafSources[leafLang]
   const { file: associatedFile } = getFile({ name: label || '' })
@@ -557,13 +605,16 @@ const ProjectTreeLeaf = ({
     setSelectedProjectTreeLeaf({ label, type: leafType })
   }
 
-  const handleRenameFile = async (newLabel: string) => {
+  const handleRenameFile = (newLabel: string) => {
     setIsEditing(false)
 
-    if (!isAPou && !isDatatype && !isServer && !isRemoteDevice && !isEthercatDevice) {
+    // Keep this list in step with the dispatch below — a type handled there but
+    // missing here bails out at the guard, which makes its branch dead code and
+    // the tree's own Rename entry a no-op.
+    if (!isAPou && !isDatatype && !isGlobalVariableList && !isServer && !isRemoteDevice && !isEthercatDevice) {
       toast({
         title: 'Error',
-        description: 'Only POU, datatype, server, or remote device files can be renamed.',
+        description: 'Only POU, datatype, global variable list, server, or remote device files can be renamed.',
         variant: 'fail',
       })
       return
@@ -578,67 +629,64 @@ const ProjectTreeLeaf = ({
       return
     }
 
-    // No-op: user blurred or hit Enter without changing anything. Skip the
-    // auto-save below so we don't persist a phantom rename event.
+    // No-op: user blurred or hit Enter without changing anything.
     if (newLabel === label) return
 
-    // Auto-save on rename only matters on platforms that track per-file
-    // changes (web). Local editor users would otherwise eat a full project
-    // save on every rename with no version-control payoff — so gate the
-    // persist behind the capability and let the editor follow the regular
-    // Ctrl+S flow.
-    const persist = async () => {
-      if (hasVersionControl) await executeSaveProject(projectPort, capabilities)
+    // Snapping the label back is not an explanation: element names share one
+    // namespace, so a refusal usually names a POU, data type or list the user
+    // cannot see from here. A cancelled data type rename is the user's own
+    // choice and reports nothing.
+    const reportFailedRename = (res: { message?: string; cancelled?: boolean }) => {
+      setNewLabel(label || '')
+      if (res.cancelled) return
+      toast({
+        title: 'Rename failed',
+        description: res.message ?? `"${label}" could not be renamed.`,
+        variant: 'fail',
+      })
     }
 
+    // Renames are soft, unsaved changes: renameElement flags the workspace
+    // dirty and queues the old path in `pendingDeletions`. Nothing is written
+    // to disk until the user saves — identical on web and desktop.
     if (isAPou) {
       const res = renamePou(label, newLabel)
-      if (!res.ok) {
-        setNewLabel(label || '')
-        return
-      }
-      // Persist immediately: rename creates a new file in S3 and removes
-      // the old, plus updates the badge correctly via pendingDeletions.
-      await persist()
+      if (!res.ok) reportFailedRename(res)
       return
     }
 
     if (isDatatype) {
-      const res = renameDatatype(label, newLabel)
-      if (!res.ok) {
-        setNewLabel(label || '')
-        return
-      }
-      // Datatype lives inside project.json — saving rewrites it with the
-      // renamed entry. No separate file deletion needed.
-      await persist()
+      // Async: a referenced type awaits the impact modal before renaming.
+      void renameDatatype(label, newLabel)
+        .then((res) => {
+          if (!res.ok) reportFailedRename(res)
+        })
+        .catch(() => reportFailedRename({}))
+      return
+    }
+
+    if (isGlobalVariableList) {
+      const res = renameGlobalVariableList(label, newLabel)
+      if (!res.ok) reportFailedRename(res)
       return
     }
 
     if (isServer) {
       const res = renameServer(label, newLabel)
-      if (!res.ok) {
-        setNewLabel(label || '')
-        return
-      }
-      await persist()
+      if (!res.ok) reportFailedRename(res)
       return
     }
 
     if (isRemoteDevice) {
       const res = renameRemoteDevice(label, newLabel)
-      if (!res.ok) {
-        setNewLabel(label || '')
-        return
-      }
-      await persist()
+      if (!res.ok) reportFailedRename(res)
       return
     }
 
     if (isEthercatDevice && busName && deviceId) {
       const res = renameEthercatDevice(busName, deviceId, newLabel)
       if (!res.ok) {
-        setNewLabel(label || '')
+        reportFailedRename(res)
       }
       // Ethercat device lives inside its parent bus file — the parent will
       // be re-serialized on the next regular save. Skipping auto-save here
@@ -648,11 +696,36 @@ const ProjectTreeLeaf = ({
     }
   }
 
-  const handleDuplicateFile = async () => {
-    if (!isAPou && !isDatatype) {
+  const copyKind = (): NamedElementKind => {
+    if (isAPou) return 'pou'
+    if (isDatatype) return 'data-type'
+    if (isGlobalVariableList) return 'global-variable-list'
+    if (isServer) return 'server'
+    return 'remote-device'
+  }
+
+  /**
+   * `<label>_copy`, then `_copy_2`, `_copy_3`… — the first name the gate accepts
+   * for this kind, so the duplicate lands on the first try instead of failing on
+   * a name the menu could not know was taken.
+   */
+  const nextCopyName = (base: string): string => {
+    const state = store.getState()
+    const kind = copyKind()
+    const free = (candidate: string) => elementNameCollision(state, candidate, kind) === null
+    const first = `${base}_copy`
+    if (free(first)) return first
+    for (let n = 2; ; n++) {
+      const candidate = `${first}_${n}`
+      if (free(candidate)) return candidate
+    }
+  }
+
+  const handleDuplicateFile = () => {
+    if (!isAPou && !isDatatype && !isGlobalVariableList && !isServer && !isRemoteDevice) {
       toast({
         title: 'Error',
-        description: 'Only POU or datatype files can be duplicated.',
+        description: 'Only POU, datatype, global variable list, server, or remote device files can be duplicated.',
         variant: 'fail',
       })
       return
@@ -661,41 +734,48 @@ const ProjectTreeLeaf = ({
     if (!label) {
       toast({
         title: 'Error',
-        description: 'Pou or datatype label is required to select.',
+        description: 'Label is required to duplicate.',
         variant: 'fail',
       })
       return
     }
 
-    if (isAPou) {
-      duplicatePou(label, `${label}_copy`)
-      // Persist the new POU file to S3 immediately. Without this, the duplicate
-      // exists only in editor memory and disappears on refresh — same class of
-      // bug as the delete flow we fixed in delete-confirmation-modal.
-      await executeSaveProject(projectPort, capabilities)
-      return
-    }
+    // Duplicating is a soft, unsaved change: the shared duplicate actions flag
+    // the new element dirty; it persists on the next save, like create.
+    //
+    // Every branch reports its failure. Discarding the result is how a duplicate
+    // that could not be made looks identical to one that was.
+    const copyName = nextCopyName(label)
+    const duplicated = ((): { ok: boolean; message?: string } => {
+      if (isAPou) return duplicatePou(label, copyName)
+      if (isDatatype) return duplicateDatatype(label, copyName)
+      if (isGlobalVariableList) return duplicateGlobalVariableList(label, copyName)
+      if (isServer) return duplicateServer(label, copyName)
+      return duplicateRemoteDevice(label, copyName)
+    })()
 
-    if (isDatatype) {
-      duplicateDatatype(label, `${label}_copy`)
-      // Datatypes live inside project.json; saving the project rewrites it
-      // with the new datatype included.
-      await executeSaveProject(projectPort, capabilities)
-      return
+    if (!duplicated.ok) {
+      toast({
+        title: 'Duplicate failed',
+        description: duplicated.message ?? `"${label}" could not be duplicated.`,
+        variant: 'fail',
+      })
     }
-
-    toast({
-      title: 'Error',
-      description: 'Only POU or datatype files can be duplicated.',
-      variant: 'fail',
-    })
   }
 
   const handleDeleteFile = () => {
-    if (!isAPou && !isDatatype && !isServer && !isRemoteDevice && !isEthercatDevice) {
+    if (
+      !isAPou &&
+      !isDatatype &&
+      !isGlobalVariableList &&
+      !isServer &&
+      !isRemoteDevice &&
+      !isEthercatDevice &&
+      !isEthercatModule
+    ) {
       toast({
         title: 'Error',
-        description: 'Only POU, datatype, server, or remote device files can be deleted.',
+        description: 'Only POU, datatype, global variable list, server, or remote device files can be deleted.',
         variant: 'fail',
       })
       return
@@ -720,6 +800,11 @@ const ProjectTreeLeaf = ({
       return
     }
 
+    if (isGlobalVariableList) {
+      deleteGlobalVariableListRequest(label)
+      return
+    }
+
     if (isServer) {
       deleteServerRequest(label)
       return
@@ -727,6 +812,13 @@ const ProjectTreeLeaf = ({
 
     if (isRemoteDevice) {
       deleteRemoteDeviceRequest(label)
+      return
+    }
+
+    if (isEthercatModule && busName && deviceId && moduleId) {
+      // Must route to deleteModule, NOT deleteEthercatDevice — the latter
+      // would take the whole coupler and every other module slotted into it.
+      deleteEthercatModule(busName, deviceId, moduleId)
       return
     }
 
@@ -807,11 +899,14 @@ const ProjectTreeLeaf = ({
           )}
           onDoubleClick={() => !isDebuggerVisible && setIsEditing(true)}
         >
-          {handleLabel(label) || ''}
+          <HighlightedText text={handleLabel(label) || ''} searchQuery={highlightQuery} />
         </span>
       )}
 
-      {leafLang === 'devPin' || leafLang === 'devConfig' ? null : (
+      {leafLang === 'devPin' ||
+      leafLang === 'devConfig' ||
+      leafLang === 'userManagement' ||
+      leafLang === 'persistentStorage' ? null : (
         <Popover.Root open={isPopoverOpen && !isDebuggerVisible} onOpenChange={setPopoverOpen}>
           <Popover.Trigger
             disabled={isDebuggerVisible}

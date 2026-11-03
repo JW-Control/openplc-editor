@@ -73,7 +73,8 @@ describe('ModbusRtuClient.disconnect — graceful close', () => {
 
     const md5 = client.getMd5Hash()
     await jest.advanceTimersByTimeAsync(1) // request written
-    const closing = client.disconnect()
+    client.disconnect()
+    const closing = client.closed()
 
     // The port must not close while the PLC is still answering.
     expect(port.calls).toEqual([])
@@ -89,7 +90,8 @@ describe('ModbusRtuClient.disconnect — graceful close', () => {
   it('fails requests queued after the close started instead of writing them', async () => {
     const { client, port } = await connectedClient()
 
-    const closing = client.disconnect()
+    client.disconnect()
+    const closing = client.closed()
     const late = client.getVariablesList([0])
     await jest.advanceTimersByTimeAsync(10)
     await closing
@@ -106,7 +108,8 @@ describe('ModbusRtuClient.disconnect — graceful close', () => {
     await jest.advanceTimersByTimeAsync(1)
 
     let done = false
-    const closing = client.disconnect().then(() => {
+    client.disconnect()
+    const closing = client.closed().then(() => {
       done = true
     })
     await jest.advanceTimersByTimeAsync(1500 + 1000 + 10)
@@ -137,12 +140,14 @@ describe('ModbusRtuClient.disconnect — graceful close', () => {
     })
     await client.connect()
 
-    await client.disconnect()
+    client.disconnect()
+    await client.closed()
     expect(injected.close).toHaveBeenCalledTimes(1)
   })
 
   it('is a no-op when never connected', async () => {
     const client = new ModbusRtuClient({ port: 'COM3', baudRate: 115200, slaveId: 1, timeout: 5000 })
-    await expect(client.disconnect()).resolves.toBeUndefined()
+    client.disconnect()
+    await expect(client.closed()).resolves.toBeUndefined()
   })
 })

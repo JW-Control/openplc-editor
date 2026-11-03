@@ -5,6 +5,7 @@ import { StateCreator } from 'zustand'
 import type {
   ModbusIOPoint,
   OpcUaServerConfig,
+  PLCPou,
   PLCServer,
   PLCVariable,
   S7CommLogging,
@@ -12,41 +13,56 @@ import type {
   S7CommServerSettings,
 } from '../../../../middleware/shared/ports/types'
 import {
+  type AddressPool,
   buildAddressPool,
   buildAliasRegistry,
-  describeSource,
+  describeAliasRejection,
   nextFreeAddress,
+  resolveProjectAliases,
   validateAliasEdit,
 } from '../../../../middleware/shared/utils/iec-address'
+import { planAliasNormalization } from '../../../../middleware/shared/utils/iec-address/normalize-aliases'
 import {
+  activeKindsFor,
   buildAliasIndex,
   channelKey,
   ethercatConsumerId,
   type IecAddressRegistry,
   migrateToRegistry,
   modbusConsumerId,
+  moduleRegistryChannelId,
   recalculate as recalculateRegistry,
-  resolveLocation,
   restoreAliasesFromMemory,
   unpinAllocatableChannels,
 } from '../../../../middleware/shared/utils/iec-address/registry'
-import type { TargetCapabilities } from '../../../../middleware/shared/utils/target-capabilities'
-import { resolveTargetCapabilities } from '../../../../middleware/shared/utils/target-capabilities'
-import {
-  duplicateVariableNameMessage,
-  findDuplicateVariableName,
-  parseIecStringToVariables,
-} from '../../../utils/generate-iec-string-to-variables'
+import type {
+  AddressProducerCapabilities,
+  BoardInfoLike,
+} from '../../../../middleware/shared/utils/target-capabilities'
+import { resolveAddressProducerCapabilities } from '../../../../middleware/shared/utils/target-capabilities'
+import { renameDataTypeInDataType, renameDataTypeInVariableType } from '../../../utils/data-type-references'
+import { buildTypeContext, parseIecStringToVariables } from '../../../utils/generate-iec-string-to-variables'
 import { generateIecVariablesToString } from '../../../utils/generate-iec-variables-to-string'
 import { isLegalIdentifier } from '../../../utils/keywords'
-import { DEFAULT_BUFFER_MAPPING } from '../../../utils/modbus/generate-modbus-slave-config'
+import { clampIOGroupLength, resolveIOGroupErrorHandling } from '../../../utils/modbus/io-group'
+import { parseDataTypeFromText } from '../../../utils/PLC/data-type-declarations'
+import { serializeDataTypeToText } from '../../../utils/PLC/data-type-serializer'
+import { renameGlobalVariableListInPou } from '../../../utils/PLC/global-variable-list-references'
+import { serializeGlobalVariableListToText } from '../../../utils/PLC/global-variable-list-serializer'
+import { parseGlobalVariableListFromText } from '../../../utils/PLC/global-variable-list-text-parser'
 import { getExtensionFromLanguage, getFolderFromPouType } from '../../../utils/PLC/pou-file-extensions'
-import type { ProjectResponse, ProjectSlice, ProjectSliceRoot } from './types'
+import { parseVariableDeclarations } from '../../../utils/PLC/variable-declarations'
+import { applyVariablesToText } from '../../../utils/variable-text-edits'
+import { elementNameCollision } from '../shared/name-collision'
+import type { ProjectResponse, ProjectSlice, ProjectSliceRoot, VariableScope } from './types'
 import { getVariableBasedOnRowIdOrVariableId } from './utils'
-import { createVariableValidation, updateVariableValidation } from './validation/variables'
+import { createVariableValidation, updateVariableValidation, validateVariableSet } from './validation/variables'
 
 const ok = (data?: unknown): ProjectResponse => ({ ok: true, data })
 const fail = (message: string, title?: string): ProjectResponse => ({ ok: false, message, title })
+
+/** IEC identifiers are case-insensitive — the rule every element-name lookup folds by. */
+const nameMatches = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
 
 // Default S7Comm configurations
 const DEFAULT_S7COMM_SERVER_SETTINGS: S7CommServerSettings = {
@@ -94,6 +110,7 @@ const DEFAULT_OPCUA_SERVER_CONFIG: OpcUaServerConfig = {
       securityPolicy: 'None',
       securityMode: 'None',
       authMethods: ['Anonymous'],
+      anonymousRole: 'viewer',
     },
   ],
   security: {
@@ -110,11 +127,32 @@ const DEFAULT_OPCUA_SERVER_CONFIG: OpcUaServerConfig = {
   },
 }
 
-function initializeServerProtocolConfig(serverData: PLCServer): PLCServer {
+/**
+ * What a new Modbus server answers on, decided by the target it is created for.
+ *
+ * A microcontroller gets RTU: nearly every VPP board has a UART and most have no
+ * network at all, so RTU is the transport that is almost always there. A Runtime
+ * v4 target gets TCP, which is the only one it serves.
+ *
+ * Seeding `['tcp']` everywhere is what made a board with no network carrier
+ * compile `MBTCP` into a firmware with no stack the moment the user switched the
+ * server on -- the screen offered only RTU while the store still said TCP. The
+ * build narrows transports to what the board can carry regardless, so this is
+ * the choice that keeps the common case from ever reaching that narrowing.
+ */
+function seedTransports(live: ProjectSliceRoot): ('rtu' | 'tcp')[] {
+  return resolveBoardInfo(live)?.compiler === 'arduino-cli' ? ['rtu'] : ['tcp']
+}
+
+function initializeServerProtocolConfig(serverData: PLCServer, transports: ('rtu' | 'tcp')[]): PLCServer {
   if (serverData.protocol === 'modbus-tcp' && !serverData.modbusSlaveConfig) {
     return {
       ...serverData,
-      modbusSlaveConfig: { enabled: false, networkInterface: '0.0.0.0', port: 502 },
+      // `transports` has to be a real array from the start. `selectModbusServer`
+      // only considers a server that declares one, so seeding nothing made a
+      // newly created server invisible to the build while the screen, defaulting
+      // the same field, said it was serving.
+      modbusSlaveConfig: { enabled: false, transports, networkInterface: '0.0.0.0', port: 502 },
     }
   }
   if (serverData.protocol === 's7comm' && !serverData.s7commSlaveConfig) {
@@ -197,6 +235,27 @@ function generateIOPoints(
   return points
 }
 
+/**
+ * Points for a bulk import, each seeded with the first address of its class.
+ * The registry reads only the class from that seed; `recalculateIecAddresses`
+ * then places the whole batch in one pass.
+ */
+function seedIOPoints(
+  functionCode: '1' | '2' | '3' | '4' | '5' | '6' | '15' | '16',
+  length: number,
+  groupName: string,
+): ModbusIOPoint[] {
+  const { type, iecPrefix, isBit } = getFunctionCodeInfo(functionCode)
+  const iecLocation = isBit ? `${iecPrefix}0.0` : `${iecPrefix}0`
+  return Array.from({ length }, (_, i) => ({
+    id: `${groupName}_${i}`,
+    name: `${groupName}_${i}`,
+    type,
+    iecLocation,
+    alias: '',
+  }))
+}
+
 // ---------------------------------------------------------------------------
 // Variables-text ⇄ variables-table reconcile helpers
 // ---------------------------------------------------------------------------
@@ -265,18 +324,131 @@ function readVppEntries(live: ProjectSliceRoot): VppMappingEntry[] {
   )
 }
 
-/** Map the active target's capabilities to the set of consumer kinds that
- *  participate in allocation. A target without pin mapping / VPP simply
- *  omits those kinds, so their addresses free up and the still-active
- *  producers recompact into the space (project-wide recalc on target
- *  switch). */
-function activeKindsFromCapabilities(caps: TargetCapabilities): Set<string> {
-  const kinds = new Set<string>()
-  if (caps.pinMapping) kinds.add('pin-mapping')
-  if (caps.vppIo) kinds.add('vpp-io')
-  if (caps.modbusTcpRemote) kinds.add('modbus-tcp-remote')
-  if (caps.ethercat) kinds.add('ethercat')
-  return kinds
+/** The active target's BoardInfo, or `undefined` when the board id doesn't
+ *  resolve — a VPP board whose package isn't installed, a project authored on
+ *  another machine, or the catalogue not having loaded yet. */
+function resolveBoardInfo(live: ProjectSliceRoot): BoardInfoLike | undefined {
+  return live.deviceAvailableOptions.availableBoards.get(live.deviceDefinitions.configuration.deviceBoard ?? '')
+}
+
+/**
+ * Capabilities for ADDRESS ALLOCATION. Never use for UI / feature gating.
+ *
+ * A target that answered is honoured exactly as declared. A target that did
+ * NOT resolve is permissive instead of empty: `resolveTargetCapabilities`
+ * returns `EMPTY_CAPABILITIES` for an unknown board, which is the safe answer
+ * for gating and the wrong one here — it reads as "this target supports no
+ * producers", so every consumer drops out of allocation and the recompaction
+ * silently keeps whatever stale addresses each point already had (DOPE-440).
+ */
+function allocationCapabilities(live: ProjectSliceRoot): AddressProducerCapabilities {
+  return resolveAddressProducerCapabilities(resolveBoardInfo(live))
+}
+
+/**
+ * Allocating against an unresolved target is a legitimate fallback but an
+ * invisible one, and this class of bug survived months precisely because it
+ * was silent.
+ *
+ * Reported only once the catalogue has actually loaded. An EMPTY
+ * `availableBoards` means board discovery hasn't finished — an ordinary
+ * startup state where permissive allocation is simply correct, and where the
+ * board may yet resolve. A board missing from a POPULATED catalogue is the
+ * actionable case: the VPP package isn't installed, or the project came from
+ * another machine.
+ *
+ * Deliberately NOT deduplicated. An earlier version latched the last reported
+ * board in module scope to keep a never-resolving project from repeating
+ * itself. That bought almost nothing — the empty-catalogue guard is what
+ * removes the noise — and cost real correctness: module state outlives the
+ * store, so a second project on the same unresolved board went silent, and
+ * test outcomes depended on execution order. One line per recalculation, all
+ * of them user-initiated mutations, is the honest signal.
+ *
+ * Called from `recalculateIecAddresses` only, never from the memoized
+ * alias-index path, which is hot.
+ */
+function warnIfTargetUnresolved(live: ProjectSliceRoot): void {
+  const board = live.deviceDefinitions.configuration.deviceBoard
+  if (resolveBoardInfo(live)) return
+  if (live.deviceAvailableOptions.availableBoards.size === 0) return
+  console.warn(
+    `[iec-address] Target "${board}" did not resolve — allocating with every producer active. ` +
+      'Addresses may recompact once the target resolves (e.g. after installing its VPP package).',
+  )
+}
+
+/**
+ * Consumer kinds to scope allocation to, or `undefined` for "every kind" —
+ * exactly how `allocateAddresses` reads a missing `activeKinds`.
+ *
+ * Only an UNRESOLVED target gets `undefined`. A resolved board that declares
+ * `modbusTcpRemote: false` must still deactivate that kind, so its space frees
+ * up and the still-active producers compact into it — that's the deliberate
+ * target-switch behaviour documented on `activeKindsFor`, and the
+ * empty Set an unresolved board used to produce is indistinguishable from it.
+ */
+function activeKindsForAllocation(live: ProjectSliceRoot): Set<string> | undefined {
+  const boardInfo = resolveBoardInfo(live)
+  /* `resolveAddressProducerCapabilities`, the same resolver
+     `allocationCapabilities` uses, and NOT `resolveTargetCapabilities`.
+     Those two answer differently for a board that IS in the catalogue but
+     declares neither a capability block nor a recognised `compiler`: the
+     producer resolver is permissive, the target resolver answers
+     EMPTY_CAPABILITIES. Using the target resolver here made
+     `buildAddressPool` see every producer while `recalculateRegistry` saw
+     none — two answers to the same question, which is the drift
+     `activeKindsFor` was extracted to prevent.
+
+     `undefined` is kept for a genuinely ABSENT boardInfo, because a missing
+     Set means "every kind" to `allocateAddresses` while an empty one means
+     "no producers", and those must not be confused. */
+  return boardInfo ? activeKindsFor(resolveAddressProducerCapabilities(boardInfo)) : undefined
+}
+
+/**
+ * Provisional address pool for a Modbus IO-group edit — the claims a new or
+ * resized group must not land on. The final addresses come from
+ * `recalculateIecAddresses`; this only seeds the point structure.
+ *
+ * Capability scoping stays the single authority on which producers are active
+ * — no kind is forced on here. `allocationCapabilities` already turns Modbus
+ * on for an unresolved target, and on a target that resolved and declared no
+ * remote I/O the creation paths are gated in the UI, so a group can't be
+ * seeded against a target the allocator won't manage afterwards.
+ *
+ * `clearGroup` drops one group's own points from the pool so a resize can
+ * reuse the addresses it is about to give up.
+ */
+function buildModbusProducerPool(
+  live: ProjectSliceRoot,
+  clearGroup?: { deviceName: string; groupId: string },
+): AddressPool {
+  const board = live.deviceDefinitions.configuration.deviceBoard
+  const remoteDevices = clearGroup
+    ? live.project.data.remoteDevices?.map((d) =>
+        d.name !== clearGroup.deviceName || !d.modbusTcpConfig
+          ? d
+          : {
+              ...d,
+              modbusTcpConfig: {
+                ...d.modbusTcpConfig,
+                ioGroups: d.modbusTcpConfig.ioGroups.map((g) =>
+                  g.id === clearGroup.groupId ? { ...g, ioPoints: [] } : g,
+                ),
+              },
+            },
+      )
+    : live.project.data.remoteDevices
+
+  return buildAddressPool(
+    {
+      pinMapping: { pins: live.deviceDefinitions.pinMapping.pinsByBoard[board] ?? [] },
+      vendorIoMapping: { entries: readVppEntries(live) },
+      remoteDevices,
+    },
+    allocationCapabilities(live),
+  )
 }
 
 /**
@@ -288,15 +460,64 @@ function activeKindsFromCapabilities(caps: TargetCapabilities): Set<string> {
  */
 function buildIecRegistry(live: ProjectSliceRoot): IecAddressRegistry {
   const board = live.deviceDefinitions.configuration.deviceBoard
-  const boardInfo = live.deviceAvailableOptions.availableBoards.get(board ?? '')
   const seeded = migrateToRegistry({
     pinMapping: { pins: live.deviceDefinitions.pinMapping.pinsByBoard[board] ?? [] },
     vendorIoMapping: { entries: readVppEntries(live) },
     remoteDevices: live.project.data.remoteDevices,
   })
   const restored = restoreAliasesFromMemory(seeded, live.iecAliasMemory ?? {})
-  const activeKinds = activeKindsFromCapabilities(resolveTargetCapabilities(boardInfo))
-  return recalculateRegistry(unpinAllocatableChannels(restored, ALLOCATED_KINDS), { activeKinds }).registry
+  const activeKinds = activeKindsForAllocation(live)
+  const unpinned = unpinAllocatableChannels(restored, ALLOCATED_KINDS)
+  return recalculateRegistry(unpinned, activeKinds ? { activeKinds } : {}).registry
+}
+
+/**
+ * Single-entry memo for the `alias → address` index.
+ *
+ * The LSP asks for this index on every project reconcile — which fires on
+ * every POU mutation, i.e. every keystroke in an ST editor — while
+ * `buildIecRegistry` does a full migrate + reallocate over every producer.
+ * The index depends only on producer state (pins, VPP entries, remote
+ * devices, active board, alias memory), none of which a POU edit touches, so
+ * an identity-keyed cache turns the hot path into a handful of `===` checks.
+ *
+ * Zustand/Immer guarantee reference stability when a slice didn't change, so
+ * identity comparison is sound; when any input's identity moves, the next
+ * call rebuilds and replaces the entry.
+ */
+interface AliasIndexCache {
+  /** Raw `pinsByBoard[board]` — NOT defaulted to `[]`, which would mint a new
+   *  array identity on every call and defeat the cache. */
+  pins: ProjectSliceRoot['deviceDefinitions']['pinMapping']['pinsByBoard'][string] | undefined
+  vendorScreenData: ProjectSliceRoot['deviceDefinitions']['configuration']['vendorScreenData']
+  remoteDevices: ProjectSliceRoot['project']['data']['remoteDevices']
+  board: ProjectSliceRoot['deviceDefinitions']['configuration']['deviceBoard']
+  aliasMemory: ProjectSliceRoot['iecAliasMemory']
+  index: ReadonlyMap<string, string>
+}
+let aliasIndexCache: AliasIndexCache | null = null
+
+function getMemoizedAliasIndex(live: ProjectSliceRoot): ReadonlyMap<string, string> {
+  const board = live.deviceDefinitions.configuration.deviceBoard
+  const pins = live.deviceDefinitions.pinMapping.pinsByBoard[board]
+  const vendorScreenData = live.deviceDefinitions.configuration.vendorScreenData
+  const remoteDevices = live.project.data.remoteDevices
+  const aliasMemory = live.iecAliasMemory
+
+  if (
+    aliasIndexCache &&
+    aliasIndexCache.pins === pins &&
+    aliasIndexCache.vendorScreenData === vendorScreenData &&
+    aliasIndexCache.remoteDevices === remoteDevices &&
+    aliasIndexCache.board === board &&
+    aliasIndexCache.aliasMemory === aliasMemory
+  ) {
+    return aliasIndexCache.index
+  }
+
+  const index = buildAliasIndex(buildIecRegistry(live))
+  aliasIndexCache = { pins, vendorScreenData, remoteDevices, board, aliasMemory, index }
+  return index
 }
 
 /** Flatten the registry into a `channelKey -> { address, alias }` index for
@@ -356,6 +577,17 @@ function applyEthercatAddresses(
         if (info.address) mapping.iecLocation = info.address
         mapping.alias = info.alias
       }
+      // Module channels live under the same slave consumer, keyed by the
+      // prefixed registry channel id — mirror the migrate side so the
+      // recomputed address + alias flow back onto the on-disk mapping.
+      for (const module of slave.modules ?? []) {
+        for (const mapping of module.channelMappings ?? []) {
+          const info = index.get(channelKey(consumerId, moduleRegistryChannelId(module.id, mapping.channelId)))
+          if (!info) continue
+          if (info.address) mapping.iecLocation = info.address
+          mapping.alias = info.alias
+        }
+      }
     }
   }
 }
@@ -371,6 +603,31 @@ function applyVppEntries(
     if (!info) return entry
     return { ...entry, iecAddress: info.address ?? entry.iecAddress, alias: info.alias }
   })
+}
+
+/**
+ * Mirror a shared global's debug (watch) flag across every reference to it.
+ *
+ * A VAR_EXTERNAL is a pointer to one CONFIGURATION VAR_GLOBAL, so "watch this
+ * global in the debugger" is a property of the global, not of any single
+ * reference. Toggling the debug icon on the global's own definition or on any
+ * POU's VAR_EXTERNAL therefore updates them all in lockstep — so every table
+ * shows the same icon state and the global polls/displays as one entity
+ * (matching the canonical Config0:<name> key used by the debug tree and poller).
+ *
+ * Mutates the produce draft in place. Case-insensitive on the global name,
+ * consistent with global-variable lookup elsewhere in this slice.
+ */
+function syncGlobalDebugFlag(slice: ProjectSlice, globalName: string, debug: boolean): void {
+  const lower = globalName.toLowerCase()
+  for (const g of slice.project.data.configurations.resource.globalVariables) {
+    if (g.name.toLowerCase() === lower) g.debug = debug
+  }
+  for (const pou of slice.project.data.pous) {
+    for (const v of pou.interface?.variables ?? []) {
+      if (v.class === 'external' && v.name.toLowerCase() === lower) v.debug = debug
+    }
+  }
 }
 
 const reconcileVariablesText = (
@@ -397,8 +654,16 @@ const reconcileVariablesText = (
 
   const pou = state.project.data.pous.find((p) => p.name === pouName)
   const currentVariables = pou?.interface?.variables ?? []
-  // Buffer is a verbatim serialisation of the current variables —
-  // user hasn't typed since the last sync, nothing to reconcile.
+  // Nothing typed since the last sync, so there is nothing to fold in.
+  //
+  // Against the POU's own text first, because that is what the buffer holds now
+  // (DOPE-650): it used to be a re-canonicalisation of the model, and comparing
+  // only against that left this early-out unreachable the moment the buffer
+  // started carrying the user's formatting — so every table edit paid for a
+  // parse it did not need. The serialisation is still compared for a POU that
+  // has no text yet.
+  // Unparsed text must still reach the parser below, or a batch of creates fails halfway.
+  if (code === pou?.variablesText && pou?.variablesTextUnparsed !== true) return ok()
   if (code === generateIecVariablesToString(currentVariables)) return ok()
 
   try {
@@ -408,12 +673,44 @@ const reconcileVariablesText = (
       state.project.data.dataTypes,
       state.libraries,
     )
-    const duplicate = findDuplicateVariableName(parsed)
-    if (duplicate) return fail(duplicateVariableNameMessage(duplicate), 'Variable already exists')
+    // This is the IMPLICIT fold-in: it runs at the start of an ordinary table
+    // mutation, on whatever the code view happens to hold. It refuses only what
+    // would make the fold-in itself wrong — a duplicate name, which makes the
+    // match between text and model ambiguous and lets one declaration overwrite
+    // another.
+    //
+    // Everything else the validator checks is a property of the declaration the
+    // user is looking at, not of this edit. Refusing those here meant a legacy
+    // POU carrying one bad declaration — a located VAR_OUTPUT, say — blocked
+    // every other edit in the POU, citing a variable the user never touched and
+    // could not reach from the table. The full set is still gated where the user
+    // asked for that text to be taken: the code view's explicit commit, the
+    // project load, and the reload from disk.
+    const validation = validateVariableSet(parsed)
+    if (!validation.ok) {
+      const duplicate = validation.errors.find((error) => error.title === 'Variable already exists')
+      if (duplicate) return fail(duplicate.message, duplicate.title)
+    }
+    // `debug` and `id` are editor metadata: the declaration text has nowhere to
+    // put them, so a re-parse always comes back with `debug: false` and no id.
+    // Replacing wholesale therefore cleared every Debug tick in the POU — tick
+    // two variables, drop a block on the ladder canvas, and the debugger
+    // silently stopped showing them. Carry them across by name.
+    const carried = new Map(currentVariables.map((variable) => [variable.name.toLowerCase(), variable]))
+    const merged = parsed.map((variable) => {
+      const previous = carried.get(variable.name.toLowerCase())
+      if (!previous) return variable
+      return {
+        ...variable,
+        debug: previous.debug ?? false,
+        ...(previous.id !== undefined ? { id: previous.id } : {}),
+      }
+    })
+
     setState(
       produce((slice: ProjectSlice) => {
         const target = slice.project.data.pous.find((p) => p.name === pouName)
-        if (target?.interface) target.interface.variables = parsed
+        if (target?.interface) target.interface.variables = merged
       }),
     )
     return ok()
@@ -423,17 +720,269 @@ const reconcileVariablesText = (
   }
 }
 
+/**
+ * Fold a variables mutation back into the declaration text.
+ *
+ * The text is the source of truth (DOPE-650), so this PATCHES it rather than
+ * regenerating it. It used to call `generateIecVariablesToString` over the
+ * whole model and overwrite the buffer, which meant the first cell edit after
+ * the user typed a comment deleted that comment, along with their blank lines
+ * and alignment. `applyVariablesToText` splices only the fields that changed.
+ *
+ * It also no longer returns early when the editor is in table display. Under
+ * the old contract the text existed only while it failed to parse, so there
+ * was nothing to keep current outside code mode; now it is the artifact that
+ * gets written to disk, and a table edit that did not reach it would be lost
+ * on save.
+ */
+/**
+ * A POU's declaration text, the artifact the project file actually stores.
+ *
+ * Optional on the type because it is absent only for a POU built in memory
+ * this session and never yet serialised; everything loaded from disk has it,
+ * because the loader keeps the block it read (DOPE-650). `undefined` means
+ * "no text yet", which is the one case that has to be serialised from the
+ * model rather than patched.
+ */
+/**
+ * Rewrite `AT <oldAlias>` to `AT <newAlias>` in a POU's declaration text.
+ *
+ * The one repair that cannot go through the parser, because it exists for text
+ * the parser cannot read: an alias like `Motor Start` is two identifiers to
+ * STruC++, so the POU's declarations fail, its variable list comes back empty,
+ * and a cascade over the model has nothing to walk. The binding lives only in
+ * the text until the name is legal again.
+ *
+ * Deliberately narrow — it matches the `AT` keyword, the alias exactly as the
+ * producer spells it, and a clause terminator behind it, so it cannot touch a
+ * variable that merely shares the name or a mention inside a comment that is
+ * not a location.
+ */
+const renameAliasInText = (text: string, oldAlias: string, newAlias: string): string => {
+  const escaped = oldAlias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
+  // The KEYWORD is case-insensitive, the alias is not. The alias registry keys
+  // on the exact name, so a variable bound to `PUMP` does not resolve to a
+  // producer called `Pump` — and the model cascade above matches exactly for
+  // that reason. A case-insensitive rename here rebound occurrences the model
+  // had deliberately left alone, and the two then disagreed.
+  return text.replace(new RegExp(`(\\b[Aa][Tt]\\s+)${escaped}(?=\\s*(?:;|:=))`, 'g'), `$1${newAlias}`)
+}
+
+const readPouVariablesText = (pou: PLCPou): string | undefined => pou.variablesText
+
+const writePouVariablesText = (pouName: string, text: string, getState: ProjectGetState): void => {
+  getState().projectActions.setPouVariablesText(pouName, text)
+}
+
 const regenerateVariablesText = (pouName: string | undefined, getState: ProjectGetState): void => {
   /* istanbul ignore if -- same callsite guarantees as reconcileVariablesText */
   if (!pouName) return
   const state = getState()
+  const pou = state.project.data.pous.find((p) => p.name === pouName)
+  if (!pou) return
+
+  const variables = pou.interface?.variables ?? []
+  const context = buildTypeContext(state.project.data.pous, state.project.data.dataTypes, state.libraries)
+
   const editorModel =
     state.editor.meta.name === pouName ? state.editor : state.editors.find((e) => e.meta.name === pouName)
-  if (!editorModel || (editorModel.type !== 'plc-textual' && editorModel.type !== 'plc-graphical')) return
-  if (editorModel.variable.display !== 'code') return
-  const pou = state.project.data.pous.find((p) => p.name === pouName)
-  const newText = generateIecVariablesToString(pou?.interface?.variables ?? [])
-  state.editorActions.updateModelVariablesForName(pouName, { display: 'code', code: newText })
+  const variableView =
+    editorModel !== undefined && (editorModel.type === 'plc-textual' || editorModel.type === 'plc-graphical')
+      ? editorModel.variable
+      : undefined
+  const inCodeView = variableView?.display === 'code'
+  const buffer =
+    variableView?.display === 'code' && typeof variableView.code === 'string' ? variableView.code : undefined
+
+  // Patch whichever text is the most current statement of what the user wrote.
+  //
+  // The open code-view buffer when there is one, because it is what the user is
+  // looking at and it is ahead of the POU in exactly the window that matters:
+  // `commitCode` calls `setPouVariables` BEFORE `setPouVariablesText`, so during
+  // a commit the POU still holds the pre-edit text. Reading the POU first meant
+  // the comment the user had just typed was patched out and then pushed back
+  // over the buffer below — the very destruction the old comment here claimed
+  // this line prevented, which `?? buffer` never actually did (the POU's text is
+  // `undefined` only for a POU never yet serialised).
+  //
+  // A buffer mid-keystroke may not parse. `applyVariablesToText` falls back to a
+  // canonical re-serialisation when it cannot scan, which would silently discard
+  // the user's formatting, so an unparseable buffer is skipped and the POU's own
+  // text is patched instead.
+  const stored = readPouVariablesText(pou)
+  const usableBuffer =
+    buffer !== undefined && parseVariableDeclarations(buffer, context).errors.length === 0 ? buffer : undefined
+  const current = usableBuffer ?? stored
+  const nextText =
+    current === undefined ? generateIecVariablesToString(variables) : applyVariablesToText(current, variables, context)
+
+  if (nextText !== stored) writePouVariablesText(pouName, nextText, getState)
+
+  if (!inCodeView || nextText === buffer) return
+  // A buffer that does not parse is a declaration the user is still typing. The
+  // stored text above is kept current either way, but pushing it over the buffer
+  // would delete the half-written line they are looking at — which is what an
+  // undo, or an alias cascade on project open, used to do to them mid-keystroke.
+  if (buffer !== undefined && usableBuffer === undefined) return
+  state.editorActions.updateModelVariablesForName(pouName, { display: 'code', code: nextText })
+}
+
+// Same contract as the variables pair above, for the `.dt` code view.
+
+const findDatatypeEditorCode = (name: string, getState: ProjectGetState): string | undefined => {
+  const state = getState()
+  const editorModel = state.editor.meta.name === name ? state.editor : state.editors.find((e) => e.meta.name === name)
+  if (editorModel?.type !== 'plc-datatype') return undefined
+  if (editorModel.structure.display !== 'code') return undefined
+  return editorModel.structure.code
+}
+
+const reconcileDatatypeText = (name: string, getState: ProjectGetState, setState: ProjectSetState): ProjectResponse => {
+  const code = findDatatypeEditorCode(name, getState)
+  if (typeof code !== 'string') return ok()
+
+  const current = getState().project.data.dataTypes.find((d) => d.name === name)
+  if (!current) return ok()
+  // Buffer is a verbatim serialisation of the current type — nothing to fold in.
+  if (code === serializeDataTypeToText(current)) return ok()
+
+  const { dataType, error } = parseDataTypeFromText(code, name)
+  if (!dataType) return fail(error ?? 'Unknown parse error.', 'Data type text is invalid')
+
+  setState(
+    produce((slice: ProjectSlice) => {
+      const idx = slice.project.data.dataTypes.findIndex((d) => d.name === name)
+      if (idx !== -1) slice.project.data.dataTypes[idx] = dataType
+    }),
+  )
+  return ok()
+}
+
+const regenerateDatatypeText = (name: string, getState: ProjectGetState): void => {
+  if (findDatatypeEditorCode(name, getState) === undefined) return
+  const state = getState()
+  const dataType = state.project.data.dataTypes.find((d) => d.name === name)
+  if (!dataType) return
+  state.editorActions.updateModelStructureForName(name, {
+    display: 'code',
+    code: serializeDataTypeToText(dataType),
+  })
+}
+
+// Same contract again, for the Global Variable List code view.
+//
+// A GVL is only ever edited as text, so its editor model IS the draft: the component
+// mirrors every keystroke into `structure.code` and this pair folds that buffer into the
+// project. Without it a save landing while the caret is still in the editor serialises
+// the variables from before the user started typing — the buffer had no way in, because
+// nothing but a blur committed it.
+
+/**
+ * The variables array a scoped action works on.
+ *
+ * Every variable action resolved this the same way inline, which is how the three scopes
+ * drifted: a Global Variable List's members are variables like a POU's locals and the
+ * resource globals are, so they belong on the same actions rather than on a parallel set.
+ *
+ * `local` without a POU falls through to the resource globals, which is what the inline
+ * ternaries did and what their callers rely on.
+ */
+const scopedVariables = (
+  data: ProjectSlice['project']['data'],
+  scope: VariableScope,
+  associatedPou?: string,
+  associatedList?: string,
+): PLCVariable[] | undefined => {
+  if (scope === 'local' && associatedPou) return data.pous.find((p) => p.name === associatedPou)?.interface?.variables
+  if (scope === 'global-variable-list')
+    return (data.globalVariableLists ?? []).find((l) => nameMatches(l.name, associatedList ?? ''))?.variables
+  return data.configurations.resource.globalVariables
+}
+
+/**
+ * Drop a list's preserved declaration text after its members change.
+ *
+ * `text` is the verbatim declaration kept when it could not be parsed, and it is what the
+ * editor SHOWS while it is set. Editing a member through the table means the declaration
+ * reads again, so leaving the old text would keep showing the broken version the user just
+ * fixed — the same reason `updateGlobalVariableList` drops it.
+ */
+const clearGlobalVariableListText = (data: ProjectSlice['project']['data'], listName?: string): void => {
+  const list = (data.globalVariableLists ?? []).find((l) => nameMatches(l.name, listName ?? ''))
+  if (list) delete list.text
+}
+
+const findGlobalVariableListEditorCode = (name: string, getState: ProjectGetState): string | undefined => {
+  const state = getState()
+  const editorModel = state.editor.meta.name === name ? state.editor : state.editors.find((e) => e.meta.name === name)
+  if (editorModel?.type !== 'plc-global-variable-list') return undefined
+  if (editorModel.structure.display !== 'code') return undefined
+  return editorModel.structure.code
+}
+
+/**
+ * Fold the code view's buffer into the list.
+ *
+ * A buffer that does NOT parse is preserved verbatim on `text` rather than refused —
+ * the same contract a POU's `variablesText` and an unparsed `.dt` file already follow.
+ * Refusing would block the save on a half-finished declaration and lose it on reload,
+ * which is the one outcome none of these editors is allowed to produce. The text comes
+ * back in the code view on load, where it can be corrected.
+ *
+ * `variables` is left at its last good parse so the project still compiles; `text` is
+ * what the editor shows while it is set, so the two can never disagree in front of the
+ * user. Parsing again clears `text` and makes `variables` authoritative once more.
+ */
+const reconcileGlobalVariableListText = (
+  name: string,
+  getState: ProjectGetState,
+  setState: ProjectSetState,
+): ProjectResponse => {
+  const code = findGlobalVariableListEditorCode(name, getState)
+  if (typeof code !== 'string') return ok()
+
+  const current = (getState().project.data.globalVariableLists ?? []).find((l) => nameMatches(l.name, name))
+  if (!current) return ok()
+  // Buffer is a verbatim serialisation of the current list — nothing to fold in.
+  if (current.text === undefined && code === serializeGlobalVariableListToText(current)) return ok()
+  if (code === current.text) return ok()
+
+  const { globalVariableList } = parseGlobalVariableListFromText(code, current.name)
+
+  setState(
+    produce((slice: ProjectSlice) => {
+      const lists = slice.project.data.globalVariableLists
+      const idx = (lists ?? []).findIndex((l) => nameMatches(l.name, name))
+      if (idx === -1 || !lists) return
+      if (globalVariableList) {
+        // Merged, not replaced: the parser only knows what the declaration text
+        // carries, so a wholesale swap would drop `documentation` — and every
+        // list-level field added later — on the first successful edit.
+        //
+        // `text` and `qualifier` are dropped first rather than merged over. Both
+        // are absent from a successful parse when the text no longer has them, so
+        // spreading onto them would keep a `CONSTANT` the user just deleted.
+        const { text: _staleText, qualifier: _staleQualifier, ...kept } = lists[idx]
+        lists[idx] = { ...kept, ...globalVariableList }
+        return
+      }
+      lists[idx] = { ...lists[idx], text: code }
+    }),
+  )
+  return ok()
+}
+
+const regenerateGlobalVariableListText = (name: string, getState: ProjectGetState): void => {
+  if (findGlobalVariableListEditorCode(name, getState) === undefined) return
+  const state = getState()
+  const list = (state.project.data.globalVariableLists ?? []).find((l) => nameMatches(l.name, name))
+  if (!list) return
+  state.editorActions.updateModelStructureForName(name, {
+    display: 'code',
+    // A list still carrying unparsed text shows that text — regenerating from
+    // `variables` here would overwrite what the user has yet to fix.
+    code: list.text ?? serializeGlobalVariableListToText(list),
+  })
 }
 
 const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> = (setState, getState) => ({
@@ -449,6 +998,8 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
     },
   },
   pendingDeletions: [],
+  unparsedDataTypeFiles: [],
+  dataTypesNeedMigration: false,
   iecAliasMemory: {},
 
   projectActions: {
@@ -484,6 +1035,8 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
             },
           }
           slice.pendingDeletions = []
+          slice.unparsedDataTypeFiles = []
+          slice.dataTypesNeedMigration = false
           // Session alias-memory is per-project; drop it on a fresh slate so
           // one project's remembered aliases can't leak into the next.
           slice.iecAliasMemory = {}
@@ -583,10 +1136,27 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
         }),
       )
     },
+    /**
+     * Record the POU's declaration text. This is the artifact the project file
+     * stores and the thing the variables table is a view of (DOPE-650), so it
+     * is written on every change rather than only while the text fails to
+     * parse, which was the old contract.
+     */
+    setPouVariablesText: (name, text, unparsed = false) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          const pou = slice.project.data.pous.find((p) => p.name === name)
+          if (!pou) return
+          pou.variablesText = text
+          if (unparsed) pou.variablesTextUnparsed = true
+          else delete pou.variablesTextUnparsed
+        }),
+      )
+    },
     clearPouVariablesText: (name) => {
       setState(
         produce((slice: ProjectSlice) => {
-          const pou = slice.project.data.pous.find((p) => p.name === name) as { variablesText?: string } | undefined
+          const pou = slice.project.data.pous.find((p) => p.name === name)
           if (pou) delete pou.variablesText
         }),
       )
@@ -648,6 +1218,10 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           if (pou.interface) pou.interface.variables = variables
         }),
       )
+      // Undo/redo and the external-file reload both land here. Without this the
+      // table reverted and the text did not, and since the text is what gets
+      // written to disk, the undo was silently discarded on the next save.
+      regenerateVariablesText(name, getState)
     },
 
     // -----------------------------------------------------------------------
@@ -672,31 +1246,33 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // variable as a template, so the validator walks the location forward
       // to the next free slot to avoid duplicate-address compile errors
       // (forum thread "openplc-420-teething-bugs", v4.2.0).
-      const sourceVariables =
-        scope === 'local' && associatedPou
-          ? (getState().project.data.pous.find((p) => p.name === associatedPou)?.interface?.variables ?? [])
-          : getState().project.data.configurations.resource.globalVariables
-      const validated = createVariableValidation(sourceVariables, data)
+      const sourceVariables = scopedVariables(getState().project.data, scope, associatedPou, dto.associatedList) ?? []
+      // A global is a top-level symbol next to POUs and types, so its clone has
+      // to step over those names too, not only its own table.
+      const nameTaken =
+        scope === 'global'
+          ? (name: string) => elementNameCollision(getState(), name, 'resource-global') !== null
+          : undefined
+      const validated = createVariableValidation(sourceVariables, data, nameTaken)
       // Single-field location model: `location` is the binding itself — an
       // alias name OR a literal `%addr`. It is stored verbatim (no
       // address→alias auto-adoption); alias→address resolution happens at
       // compile time. The legacy `alias` field is unused.
       data = { ...data, ...validated }
 
+      if (scope === 'global') {
+        const collision = elementNameCollision(getState(), data.name, 'resource-global')
+        /* istanbul ignore next -- only when every auto-increment candidate is taken */
+        if (collision) return fail(collision, 'Variable already exists')
+      }
+
       let response: ProjectResponse = { ok: true }
       setState(
         produce((slice: ProjectSlice) => {
-          // Resolve the target variables array (local POU or global)
-          let variables: PLCVariable[] | undefined
-          if (scope === 'local' && associatedPou) {
-            const pou = slice.project.data.pous.find((p) => p.name === associatedPou)
-            if (!pou?.interface) {
-              response = fail('POU not found')
-              return
-            }
-            variables = pou.interface.variables
-          } else {
-            variables = slice.project.data.configurations.resource.globalVariables
+          const variables = scopedVariables(slice.project.data, scope, associatedPou, dto.associatedList)
+          if (!variables) {
+            response = fail(scope === 'global-variable-list' ? 'Global variable list not found' : 'POU not found')
+            return
           }
 
           // Insert or append
@@ -710,6 +1286,7 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           } else {
             variables.push(data)
           }
+          if (scope === 'global-variable-list') clearGlobalVariableListText(slice.project.data, dto.associatedList)
           response.data = data
         }),
       )
@@ -723,6 +1300,7 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           if (pou?.interface) pou.interface.variables = variables
         }),
       )
+      regenerateVariablesText(pouName, getState)
       return ok()
     },
     setGlobalVariables: ({ variables }) => {
@@ -733,10 +1311,19 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       )
       return ok()
     },
-    updateVariable: ({ scope, associatedPou, rowId, variableId, data: updates }) => {
+    updateVariable: ({ scope, associatedPou, associatedList, rowId, variableId, data: updates }) => {
       if (scope === 'local') {
         const reconcile = reconcileVariablesText(associatedPou, getState, setState)
         if (!reconcile.ok) return reconcile
+      }
+
+      if (scope === 'global' && updates.name !== undefined) {
+        const globals = getState().project.data.configurations.resource.globalVariables
+        const current = getVariableBasedOnRowIdOrVariableId(globals, rowId, variableId)
+        if (current) {
+          const collision = elementNameCollision(getState(), updates.name, 'resource-global', current.variable.name)
+          if (collision) return fail(collision, 'Variable already exists')
+        }
       }
 
       let response: ProjectResponse = { ok: true }
@@ -747,17 +1334,10 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // address; alias→address resolution happens at compile time.
       setState(
         produce((slice: ProjectSlice) => {
-          // Resolve the target variables array (local POU or global)
-          let variables: PLCVariable[] | undefined
-          if (scope === 'local' && associatedPou) {
-            const pou = slice.project.data.pous.find((p) => p.name === associatedPou)
-            if (!pou?.interface) {
-              response = fail('POU not found')
-              return
-            }
-            variables = pou.interface.variables
-          } else {
-            variables = slice.project.data.configurations.resource.globalVariables
+          const variables = scopedVariables(slice.project.data, scope, associatedPou, associatedList)
+          if (!variables) {
+            response = fail(scope === 'global-variable-list' ? 'Global variable list not found' : 'POU not found')
+            return
           }
 
           const found = getVariableBasedOnRowIdOrVariableId(variables, rowId, variableId)
@@ -778,51 +1358,69 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
             ...(validationResponse.data ? validationResponse.data : {}),
           }
           response.data = variables[found.index]
+
+          if (scope === 'global-variable-list') clearGlobalVariableListText(slice.project.data, associatedList)
+
+          // A shared global's watch flag belongs to the global, not to any one
+          // reference — keep the global's definition and every VAR_EXTERNAL to it
+          // in sync so the debug icon toggles everywhere at once. A list member is
+          // reached as `<list>.<member>` and never through a VAR_EXTERNAL of its own,
+          // so there is nothing to keep in sync for one.
+          if (updates.debug !== undefined && scope !== 'global-variable-list') {
+            const target = variables[found.index]
+            if (scope === 'global' || target.class === 'external') {
+              syncGlobalDebugFlag(slice, target.name, updates.debug)
+            }
+          }
         }),
       )
       if (scope === 'local' && response.ok) regenerateVariablesText(associatedPou, getState)
       return response
     },
-    getVariable: ({ scope, associatedPou, rowId, variableId }) => {
-      const variables =
-        scope === 'local' && associatedPou
-          ? getState().project.data.pous.find((p) => p.name === associatedPou)?.interface?.variables
-          : getState().project.data.configurations.resource.globalVariables
+    getVariable: ({ scope, associatedPou, associatedList, rowId, variableId }) => {
+      const variables = scopedVariables(getState().project.data, scope, associatedPou, associatedList)
       if (!variables) return undefined
 
       const found = getVariableBasedOnRowIdOrVariableId(variables, rowId, variableId)
       return found?.variable
     },
-    deleteVariable: ({ scope, associatedPou, rowId, variableId, variableName }) => {
+    deleteVariable: ({ scope, associatedPou, associatedList, rowId, variableId, variableName, force }) => {
       if (scope === 'local') {
         const reconcile = reconcileVariablesText(associatedPou, getState, setState)
         if (!reconcile.ok) return reconcile
       }
 
+      // Deleting a global that POUs declare as `VAR_EXTERNAL` must handle those
+      // references too. Without `force`, refuse and report the referencing POUs
+      // (the editor surfaces a confirmation). With `force`, cascade-delete: drop
+      // the global AND the matching external declaration from every such POU.
+      let cascade: { globalName: string; pous: string[] } | null = null
       if (scope === 'global') {
         const state = getState()
         const globalVars = state.project.data.configurations.resource.globalVariables
-
-        let variableToDelete: PLCVariable | undefined
-        if (variableName) {
-          variableToDelete = globalVars.find((v) => v.name.toLowerCase() === variableName.toLowerCase())
-        } else {
-          variableToDelete = getVariableBasedOnRowIdOrVariableId(globalVars, rowId, variableId)?.variable
-        }
+        const variableToDelete = variableName
+          ? globalVars.find((v) => v.name.toLowerCase() === variableName.toLowerCase())
+          : getVariableBasedOnRowIdOrVariableId(globalVars, rowId, variableId)?.variable
 
         if (variableToDelete) {
-          const externalReferences = state.project.data.pous.filter((pou) =>
-            pou.interface?.variables?.some(
-              (v) => v.class === 'external' && v.name.toLowerCase() === variableToDelete.name.toLowerCase(),
-            ),
-          )
-
-          if (externalReferences.length > 0) {
-            const pouNames = externalReferences.map((pou) => pou.name).join(', ')
-            return fail(
-              `The global variable "${variableToDelete.name}" is referenced by external variables in the following POUs: ${pouNames}. Please remove these references before deleting the global variable.`,
-              'Cannot Delete Global Variable',
+          const referencingPous = state.project.data.pous
+            .filter((pou) =>
+              pou.interface?.variables?.some(
+                (v) => v.class === 'external' && v.name.toLowerCase() === variableToDelete.name.toLowerCase(),
+              ),
             )
+            .map((pou) => pou.name)
+
+          if (referencingPous.length > 0) {
+            if (!force) {
+              return {
+                ok: false,
+                title: 'Cannot Delete Global Variable',
+                message: `The global variable "${variableToDelete.name}" is used as an external variable in the following POUs: ${referencingPous.join(', ')}.`,
+                data: { referencingPous },
+              }
+            }
+            cascade = { globalName: variableToDelete.name, pous: referencingPous }
           }
         }
       }
@@ -830,10 +1428,7 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       let response: ProjectResponse = { ok: true }
       setState(
         produce((slice: ProjectSlice) => {
-          const variables =
-            scope === 'local' && associatedPou
-              ? slice.project.data.pous.find((p) => p.name === associatedPou)?.interface?.variables
-              : slice.project.data.configurations.resource.globalVariables
+          const variables = scopedVariables(slice.project.data, scope, associatedPou, associatedList)
           if (!variables) {
             response = fail('Variable container not found')
             return
@@ -846,34 +1441,56 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
               return
             }
             variables.splice(idx, 1)
-            return
+          } else {
+            const found = getVariableBasedOnRowIdOrVariableId(variables, rowId, variableId)
+            if (!found) {
+              response = fail('Variable not found')
+              return
+            }
+            variables.splice(found.index, 1)
           }
-          const found = getVariableBasedOnRowIdOrVariableId(variables, rowId, variableId)
-          if (!found) {
-            response = fail('Variable not found')
-            return
+
+          if (scope === 'global-variable-list') clearGlobalVariableListText(slice.project.data, associatedList)
+
+          // Cascade: remove the matching VAR_EXTERNAL from every referencing POU.
+          if (cascade) {
+            const { globalName, pous } = cascade
+            for (const pouName of pous) {
+              const pouVars = slice.project.data.pous.find((p) => p.name === pouName)?.interface?.variables
+              const extIdx =
+                pouVars?.findIndex(
+                  (v) => v.class === 'external' && v.name.toLowerCase() === globalName.toLowerCase(),
+                ) ?? -1
+              if (pouVars && extIdx !== -1) pouVars.splice(extIdx, 1)
+            }
           }
-          variables.splice(found.index, 1)
         }),
       )
       if (scope === 'local' && response.ok) regenerateVariablesText(associatedPou, getState)
+      // Refresh the vars-text of every POU whose external declaration we removed.
+      if (response.ok && cascade) {
+        for (const pouName of cascade.pous) regenerateVariablesText(pouName, getState)
+      }
       return response
     },
-    rearrangeVariables: ({ scope, associatedPou, rowId, variableId, newIndex }) => {
+    rearrangeVariables: ({ scope, associatedPou, associatedList, rowId, variableId, newIndex }) => {
       setState(
         produce((slice: ProjectSlice) => {
-          const variables =
-            scope === 'local' && associatedPou
-              ? slice.project.data.pous.find((p) => p.name === associatedPou)?.interface?.variables
-              : slice.project.data.configurations.resource.globalVariables
+          const variables = scopedVariables(slice.project.data, scope, associatedPou, associatedList)
           if (!variables) return
 
           const found = getVariableBasedOnRowIdOrVariableId(variables, rowId, variableId)
           if (!found) return
           const [item] = variables.splice(found.index, 1)
           variables.splice(newIndex, 0, item)
+          if (scope === 'global-variable-list') clearGlobalVariableListText(slice.project.data, associatedList)
         }),
       )
+      // Reordering is a change to the declarations like any other, and the text
+      // is what the file holds. Without this the table showed the new order, the
+      // text kept the old one, and the next toggle to code view and back —
+      // which re-parses the text — put the rows back where they were.
+      if (scope === 'local') regenerateVariablesText(associatedPou, getState)
     },
 
     /**
@@ -905,8 +1522,19 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // cascade — the alias registry is case-sensitive, so `location` has to
       // match the producer alias exactly to resolve at compile time.
       if (trimmedOld === trimmedNew) return { renamed: 0 }
+      // An alias is an identifier; a `%` location is the other kind of value the
+      // same field carries. `validateAliasEdit` refuses a `%` alias at every
+      // producer editor, so a rename naming one is a caller mistake — and acting
+      // on it would rebind every variable manually located at that address.
+      if (trimmedOld.startsWith('%') || trimmedNew.startsWith('%')) return { renamed: 0 }
 
       let renamed = 0
+      // Which POUs actually moved. Regenerating every POU's text on every
+      // rename made a project-open repair O(aliases x POUs) parses — 20 legacy
+      // aliases over 50 POUs measured 1.2s of parsing on the UI thread before
+      // the workspace was interactive. A POU whose variables did not change has
+      // nothing to fold into its text.
+      const touched = new Set<string>()
       const cascade = (variable: PLCVariable): PLCVariable => {
         // `location` is the binding: a variable bound to this alias holds the
         // alias NAME in `location`. Manual literal locations start with `%`
@@ -925,7 +1553,10 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
             /* istanbul ignore if -- schema guarantees `interface.variables`; defensive */
             if (!pou.interface?.variables) continue
             for (let i = 0; i < pou.interface.variables.length; i++) {
-              pou.interface.variables[i] = cascade(pou.interface.variables[i])
+              const before = pou.interface.variables[i]
+              const after = cascade(before)
+              if (after !== before) touched.add(pou.name)
+              pou.interface.variables[i] = after
             }
           }
           const globals = slice.project.data.configurations.resource.globalVariables
@@ -937,12 +1568,138 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
         }),
       )
 
+      // Every bound variable's `location` just changed, so every POU's text has
+      // to follow. Without this the producer said `NewAlias` and the text still
+      // said `AT OldAlias`; the text is what gets saved, so on reopen the
+      // variable was bound to an alias no producer declares — unlocated at
+      // compile time, which is the exact failure `renameAlias` exists to
+      // prevent.
+      for (const pouName of touched) {
+        regenerateVariablesText(pouName, getState)
+      }
+
+      // A POU the cascade could not reach, because its declarations do not
+      // parse and its variable list is therefore empty. That is precisely the
+      // project this repair exists for, so the rename has to reach the text
+      // itself — otherwise the producer takes its new name and the declaration
+      // is left bound to a name no producer holds.
+      for (const pou of getState().project.data.pous) {
+        if (touched.has(pou.name)) continue
+        const text = pou.variablesText
+        if (text === undefined) continue
+        const rewritten = renameAliasInText(text, trimmedOld, trimmedNew)
+        if (rewritten !== text) {
+          getState().projectActions.setPouVariablesText(pou.name, rewritten, pou.variablesTextUnparsed)
+        }
+      }
+
       return { renamed }
     },
 
     // -----------------------------------------------------------------------
-    // Data types
+    // Global variable lists
     // -----------------------------------------------------------------------
+    // A list's name becomes an IEC identifier the moment it is compiled, and IEC
+    // identifiers are case-insensitive — `GVL` and `gvl` are one symbol there. So
+    // every lookup below folds case, not just the uniqueness check: a lookup that
+    // did not would miss the list it was handed and return silently, throwing the
+    // user's edit away with no error anywhere.
+    createGlobalVariableList: (name) => {
+      const lists = getState().project.data.globalVariableLists ?? []
+      // Caught here rather than at the struct instance, where the collision would
+      // surface as a compiler message about a symbol the user never wrote.
+      if (lists.some((list) => nameMatches(list.name, name))) {
+        return fail('Global variable list already exists')
+      }
+
+      setState(
+        produce((slice: ProjectSlice) => {
+          slice.project.data.globalVariableLists = [
+            ...(slice.project.data.globalVariableLists ?? []),
+            { name, variables: [] },
+          ]
+        }),
+      )
+      return ok()
+    },
+    deleteGlobalVariableList: (name) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          // No `pendingDeletions` entry: a list has no file of its own. It is
+          // persisted inside `project.json`, so dropping it from the model is the
+          // whole deletion — queuing a `globals/<name>.gvl` path would name a file
+          // no writer in this codebase ever creates.
+          slice.project.data.globalVariableLists = (slice.project.data.globalVariableLists ?? []).filter(
+            (list) => !nameMatches(list.name, name),
+          )
+        }),
+      )
+    },
+    updateGlobalVariableList: (name, variables) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          const list = (slice.project.data.globalVariableLists ?? []).find((l) => nameMatches(l.name, name))
+          if (!list) return
+          list.variables = variables
+          // Members arriving means the declaration reads again, so the preserved
+          // text is stale — leaving it would keep showing the broken version the
+          // user just fixed.
+          delete list.text
+        }),
+      )
+    },
+    updateGlobalVariableListQualifier: (name, qualifier) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          const list = (slice.project.data.globalVariableLists ?? []).find((l) => nameMatches(l.name, name))
+          if (!list) return
+          if (qualifier) list.qualifier = qualifier
+          else delete list.qualifier
+        }),
+      )
+    },
+    updateGlobalVariableListName: (oldName, newName) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          const list = (slice.project.data.globalVariableLists ?? []).find((l) => nameMatches(l.name, oldName))
+          if (!list) return
+          list.name = newName
+        }),
+      )
+    },
+    duplicateGlobalVariableList: (sourceName, newName) => {
+      const lists = getState().project.data.globalVariableLists ?? []
+      const source = lists.find((l) => nameMatches(l.name, sourceName))
+      if (!source) return fail('Global variable list not found')
+      if (lists.some((l) => nameMatches(l.name, newName))) return fail('Global variable list already exists')
+
+      // Cloned whole and renamed, so nothing on the record can be forgotten: members,
+      // the header qualifier, the documentation and a preserved unparsed `text` all
+      // come along. Spelling the fields out is what dropped `documentation` and `text`
+      // from the duplicate before.
+      //
+      // Cloned from LIVE state, never from inside `produce` — a draft is a proxy and
+      // `structuredClone` throws `DataCloneError` on one.
+      const clone = { ...structuredClone(source), name: newName }
+
+      setState(
+        produce((slice: ProjectSlice) => {
+          slice.project.data.globalVariableLists = [...(slice.project.data.globalVariableLists ?? []), clone]
+        }),
+      )
+      return ok()
+    },
+    propagateGlobalVariableListRename: (oldName, newName) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          slice.project.data.pous = slice.project.data.pous.map(
+            (pou) => renameGlobalVariableListInPou(pou, oldName, newName) ?? pou,
+          )
+        }),
+      )
+    },
+    reconcileGlobalVariableListText: (name) => reconcileGlobalVariableListText(name, getState, setState),
+    regenerateGlobalVariableListText: (name) => regenerateGlobalVariableListText(name, getState),
     createDatatype: (dto) => {
       const existing = getState().project.data.dataTypes.find((d) => d.name === dto.data.name)
       if (existing) return fail('Data type already exists')
@@ -961,6 +1718,10 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
     deleteDatatype: (name) => {
       setState(
         produce((slice: ProjectSlice) => {
+          // Harmless when the file was never written (a type created and
+          // deleted before any save): the editor's deletion pass is
+          // existence-checked, the web's relies on delete-by-omission.
+          slice.pendingDeletions.push(`datatypes/${name}.dt`)
           slice.project.data.dataTypes = slice.project.data.dataTypes.filter((d) => d.name !== name)
         }),
       )
@@ -973,6 +1734,46 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           if (data) {
             slice.project.data.dataTypes[idx] = data
           }
+        }),
+      )
+    },
+    updateDatatypeName: (oldName, newName) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          const dt = slice.project.data.dataTypes.find((d) => d.name === oldName)
+          if (!dt) return
+          // Queue the OLD path — the next save serializes the type
+          // under its new name (model: updatePouName).
+          slice.pendingDeletions.push(`datatypes/${oldName}.dt`)
+          dt.name = newName
+        }),
+      )
+    },
+    propagateDatatypeRename: (oldName, newName) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          for (const pou of slice.project.data.pous) {
+            for (const variable of pou.interface?.variables ?? []) {
+              const nextType = renameDataTypeInVariableType(variable.type, oldName, newName)
+              if (nextType) variable.type = nextType
+            }
+          }
+          for (const variable of slice.project.data.configurations.resource.globalVariables) {
+            const nextType = renameDataTypeInVariableType(variable.type, oldName, newName)
+            if (nextType) variable.type = nextType
+          }
+          // A Global Variable List member is typed exactly like any other variable, so
+          // it can name a user data type and go stale on that type's rename like the
+          // rest. Its members are not in `globalVariables` — the list holds its own.
+          for (const list of slice.project.data.globalVariableLists ?? []) {
+            for (const variable of list.variables) {
+              const nextType = renameDataTypeInVariableType(variable.type, oldName, newName)
+              if (nextType) variable.type = nextType
+            }
+          }
+          slice.project.data.dataTypes = slice.project.data.dataTypes.map(
+            (dataType) => renameDataTypeInDataType(dataType, oldName, newName) ?? dataType,
+          )
         }),
       )
     },
@@ -1002,6 +1803,31 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
         produce((slice: ProjectSlice) => {
           const idx = slice.project.data.dataTypes.findIndex((d) => d.name === name)
           if (idx !== -1) slice.project.data.dataTypes[idx] = data
+        }),
+      )
+      regenerateDatatypeText(name, getState)
+    },
+    reconcileDatatypeText: (name) => reconcileDatatypeText(name, getState, setState),
+    regenerateDatatypeText: (name) => regenerateDatatypeText(name, getState),
+    regeneratePouVariablesText: (name) => regenerateVariablesText(name, getState),
+    setUnparsedDataTypeFiles: (files) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          slice.unparsedDataTypeFiles = files
+        }),
+      )
+    },
+    setDataTypesNeedMigration: (needsMigration) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          slice.dataTypesNeedMigration = needsMigration
+        }),
+      )
+    },
+    removeUnparsedDataTypeFile: (relativePath) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          slice.unparsedDataTypeFiles = slice.unparsedDataTypeFiles.filter((f) => f.relativePath !== relativePath)
         }),
       )
     },
@@ -1127,10 +1953,23 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       const servers = getState().project.data.servers ?? []
       if (servers.some((s) => s.name === dto.data.name)) return fail('Server already exists')
 
+      // ONE SERVER PER PROTOCOL. Each emitter ships one config file built from
+      // the first server of its protocol, so a second one never reaches the
+      // device -- it was only ever refused at build time, after the user had
+      // configured it. A project that already holds two is left alone: the
+      // rule governs creation, and rewriting someone's project on load is not
+      // this editor's call.
+      const sameProtocol = servers.find((s) => s.protocol === dto.data.protocol)
+      if (sameProtocol) {
+        return fail(
+          `A ${dto.data.protocol} server already exists: "${sameProtocol.name}". Only one reaches the device.`,
+        )
+      }
+
       setState(
         produce((slice: ProjectSlice) => {
           if (!slice.project.data.servers) slice.project.data.servers = []
-          slice.project.data.servers.push(initializeServerProtocolConfig(dto.data))
+          slice.project.data.servers.push(initializeServerProtocolConfig(dto.data, seedTransports(getState())))
         }),
       )
       return ok()
@@ -1169,17 +2008,81 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           const server = slice.project.data.servers?.find((s) => s.name === name)
           if (!server?.modbusSlaveConfig) return
           if (config.enabled !== undefined) server.modbusSlaveConfig.enabled = config.enabled
+          if (config.transports !== undefined) server.modbusSlaveConfig.transports = config.transports
           if (config.networkInterface !== undefined) server.modbusSlaveConfig.networkInterface = config.networkInterface
           if (config.port !== undefined) server.modbusSlaveConfig.port = config.port
+          if (config.slaveId !== undefined) server.modbusSlaveConfig.slaveId = config.slaveId
+          if (config.serialPort !== undefined) server.modbusSlaveConfig.serialPort = config.serialPort
+          if (config.baudRate !== undefined) server.modbusSlaveConfig.baudRate = config.baudRate
+          if (config.parity !== undefined) server.modbusSlaveConfig.parity = config.parity
+          if (config.stopBits !== undefined) server.modbusSlaveConfig.stopBits = config.stopBits
+          if (config.dataBits !== undefined) server.modbusSlaveConfig.dataBits = config.dataBits
           if (config.bufferMapping) {
-            const base = server.modbusSlaveConfig.bufferMapping ?? DEFAULT_BUFFER_MAPPING
+            /* MERGE OVER WHAT IS STORED, NEVER OVER THE DEFAULTS.
+             *
+             * This used to start from DEFAULT_BUFFER_MAPPING when the server
+             * had no mapping yet, so editing ONE field persisted all eight --
+             * the other seven silently materialised at the old fixed sizes
+             * (8192 bits, 1024 registers). A project that had never asked for
+             * an exposure then carried a full one, and `compute-io-image`
+             * reads a persisted count as a request: the image came back to the
+             * constant this task exists to remove, and BR10 ("the image may
+             * end up smaller, and that is one of the main gains") could never
+             * hold for such a project.
+             *
+             * Absent stays absent. It means "expose whatever the image turns
+             * out to be", which is also what FR16 asks of the server. */
+            const base = server.modbusSlaveConfig.bufferMapping ?? {}
+            const patch = config.bufferMapping
             server.modbusSlaveConfig.bufferMapping = {
-              holdingRegisters: { ...base.holdingRegisters, ...config.bufferMapping.holdingRegisters },
-              coils: { ...base.coils, ...config.bufferMapping.coils },
-              discreteInputs: { ...base.discreteInputs, ...config.bufferMapping.discreteInputs },
-              inputRegisters: { ...base.inputRegisters, ...config.bufferMapping.inputRegisters },
+              ...base,
+              ...(base.holdingRegisters || patch.holdingRegisters
+                ? { holdingRegisters: { ...base.holdingRegisters, ...patch.holdingRegisters } }
+                : {}),
+              ...(base.coils || patch.coils ? { coils: { ...base.coils, ...patch.coils } } : {}),
+              ...(base.discreteInputs || patch.discreteInputs
+                ? { discreteInputs: { ...base.discreteInputs, ...patch.discreteInputs } }
+                : {}),
+              ...(base.inputRegisters || patch.inputRegisters
+                ? { inputRegisters: { ...base.inputRegisters, ...patch.inputRegisters } }
+                : {}),
             }
           }
+        }),
+      )
+      return ok()
+    },
+    clearServerBufferCount: (name, group, field) => {
+      setState(
+        produce((slice: ProjectSlice) => {
+          const config = slice.project.data.servers?.find((s) => s.name === name)?.modbusSlaveConfig
+          const mapping = config?.bufferMapping
+          if (!config || !mapping) return
+          // Enumerated rather than indexed by string: the shape is eight known
+          // fields and a cast would hide a typo in one of them.
+          if (group === 'holdingRegisters' && mapping.holdingRegisters) {
+            if (field === 'qwCount') delete mapping.holdingRegisters.qwCount
+            if (field === 'mwCount') delete mapping.holdingRegisters.mwCount
+            if (field === 'mdCount') delete mapping.holdingRegisters.mdCount
+            if (field === 'mlCount') delete mapping.holdingRegisters.mlCount
+            if (Object.keys(mapping.holdingRegisters).length === 0) delete mapping.holdingRegisters
+          }
+          if (group === 'coils' && mapping.coils) {
+            if (field === 'qxBits') delete mapping.coils.qxBits
+            if (field === 'mxBits') delete mapping.coils.mxBits
+            if (Object.keys(mapping.coils).length === 0) delete mapping.coils
+          }
+          if (group === 'discreteInputs' && mapping.discreteInputs) {
+            if (field === 'ixBits') delete mapping.discreteInputs.ixBits
+            if (Object.keys(mapping.discreteInputs).length === 0) delete mapping.discreteInputs
+          }
+          if (group === 'inputRegisters' && mapping.inputRegisters) {
+            if (field === 'iwCount') delete mapping.inputRegisters.iwCount
+            if (Object.keys(mapping.inputRegisters).length === 0) delete mapping.inputRegisters
+          }
+          // An empty mapping is not the same as no mapping: the first reads as
+          // a server that was configured and the second as one that never was.
+          if (Object.keys(mapping).length === 0) delete config.bufferMapping
         }),
       )
       return ok()
@@ -1509,6 +2412,104 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       )
       return ok()
     },
+    /**
+     * Repair I/O aliases saved before they had to be identifiers (DOPE-650).
+     *
+     * `AT <alias>` is read back by STruC++ as an identifier, so `Motor Start`
+     * and `relay-1` are not names it can read. The editor used to accept them,
+     * so projects carrying them exist and must keep working: they are renamed
+     * on load, and every variable bound to the old name follows through
+     * `renameAlias`.
+     *
+     * Renamed rather than dropped. Dropping the alias would leave its bound
+     * variables pointing at a name no producer declares, which resolves to
+     * unlocated at compile time — a silent wrong answer, and the precise
+     * failure the alias machinery exists to prevent.
+     *
+     * Returns the repairs so the caller can report them; an untouched project
+     * returns an empty list and nothing is written.
+     */
+    normalizeProjectAliases: () => {
+      const live = getState()
+      const board = live.deviceDefinitions.configuration.deviceBoard
+      const pins = live.deviceDefinitions.pinMapping.pinsByBoard[board] ?? []
+      const vppEntries = readVppEntries(live)
+      const remoteDevices = live.project.data.remoteDevices ?? []
+
+      const aliases: string[] = [
+        ...pins.map((pin) => pin.alias ?? ''),
+        ...vppEntries.map((entry) => entry.alias ?? ''),
+        ...remoteDevices.flatMap((device) => [
+          ...(device.modbusTcpConfig?.ioGroups ?? []).flatMap((group) =>
+            (group.ioPoints ?? []).map((point) => point.alias ?? ''),
+          ),
+          ...(device.ethercatConfig?.devices ?? []).flatMap((slave) => [
+            ...(slave.channelMappings ?? []).map((channel) => channel.alias ?? ''),
+            ...(slave.modules ?? []).flatMap((module) => module.channelMappings.map((channel) => channel.alias ?? '')),
+          ]),
+        ]),
+      ].filter((alias) => alias.trim() !== '')
+
+      const plan = planAliasNormalization(aliases)
+      if (plan.length === 0) return { repairs: [] }
+
+      // Two producers can carry the SAME illegal alias, and the plan gives each
+      // its own replacement (`Motor_Start`, `Motor_Start2`) precisely so they do
+      // not both land on one name. Keying a Map by `from` collapsed those two
+      // entries and rewrote both producers to the second replacement — leaving a
+      // duplicate alias behind and, because the cascade below still walked the
+      // full plan, moving every bound variable onto `Motor_Start`, a name no
+      // producer held any more. Replacements are handed out in plan order
+      // instead, which is the order the aliases were collected in just above.
+      const queued = new Map<string, string[]>()
+      for (const entry of plan) queued.set(entry.from, [...(queued.get(entry.from) ?? []), entry.to])
+      const remap = (alias: string | undefined): string | undefined => {
+        if (alias === undefined) return alias
+        const pending = queued.get(alias)
+        if (pending === undefined || pending.length === 0) return alias
+        return pending.shift()
+      }
+
+      setState(
+        produce((slice: ProjectSliceRoot) => {
+          for (const pin of slice.deviceDefinitions.pinMapping.pinsByBoard[board] ?? []) {
+            pin.alias = remap(pin.alias)
+          }
+          for (const entry of readVppEntries(slice)) {
+            entry.alias = remap(entry.alias)
+          }
+          for (const device of slice.project.data.remoteDevices ?? []) {
+            for (const group of device.modbusTcpConfig?.ioGroups ?? []) {
+              for (const point of group.ioPoints ?? []) point.alias = remap(point.alias)
+            }
+            for (const slave of device.ethercatConfig?.devices ?? []) {
+              for (const channel of slave.channelMappings ?? []) channel.alias = remap(channel.alias)
+              for (const module of slave.modules ?? []) {
+                for (const channel of module.channelMappings) channel.alias = remap(channel.alias)
+              }
+            }
+          }
+        }),
+      )
+
+      // Cascade after the producers are written, so a variable that already
+      // held the new name (impossible today, but cheap to be safe about) is
+      // not renamed twice.
+      //
+      // Only the FIRST replacement for a given name cascades. A variable bound
+      // to an alias two producers shared cannot say which one it meant — that
+      // ambiguity is why the registry resolves duplicates first-wins — so it
+      // follows the first, and cascading the second afterwards would move it
+      // again, onto a producer it was never bound to.
+      const cascaded = new Set<string>()
+      for (const entry of plan) {
+        if (cascaded.has(entry.from)) continue
+        cascaded.add(entry.from)
+        getState().projectActions.renameAlias(entry.from, entry.to)
+      }
+
+      return { repairs: plan }
+    },
     recalculateIecAddresses: () => {
       // Central, capability-scoped recalculation via the IEC address
       // registry. Build the registry from live producer state (VPP + Modbus
@@ -1521,6 +2522,7 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // compile time. Only a producer *rename* touches variables — via
       // `renameAlias`, called by the alias editors.
       const live = getState()
+      warnIfTargetUnresolved(live)
       const registry = buildIecRegistry(live)
       const index = indexRegistry(registry)
 
@@ -1528,7 +2530,12 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // the device action so the layouts (which render from the store) update.
       const vppEntries = readVppEntries(live)
       if (vppEntries.length > 0) {
-        getState().deviceActions.setVendorScreenData('io-mapping', { entries: applyVppEntries(vppEntries, index) })
+        // Other fields stored with the mapping are kept; only the addresses move.
+        const stored = live.deviceDefinitions.configuration.vendorScreenData?.['io-mapping']
+        getState().deviceActions.setVendorScreenData('io-mapping', {
+          ...(stored && typeof stored === 'object' ? stored : {}),
+          entries: applyVppEntries(vppEntries, index),
+        })
       }
 
       // Modbus ioPoints + EtherCAT channelMappings live in project.data —
@@ -1557,49 +2564,21 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
     },
     getCompileReadyProjectData: () => {
       // Compile-time alias resolution (editor-side; the compiler/runtime never
-      // see aliases). Returns a COPY of the project data with every variable's
-      // `location` resolved: an alias name → its current IEC address, a
-      // literal `%addr` → verbatim, a missing/orphaned alias → '' (unlocated).
-      // The store keeps the alias-name form for display; only this snapshot is
-      // resolved.
+      // see aliases). The resolution RULES live in `resolveProjectAliases`, a
+      // pure function shared with openplc-web and with the headless CLI, which
+      // compiles without a store. This action's only job is to pair the live
+      // project data with the memoized alias index — so a project compiled
+      // from the terminal resolves identically to one compiled from the GUI.
       const live = getState()
-      const aliasIndex = buildAliasIndex(buildIecRegistry(live))
-      const data = structuredClone(live.project.data)
-      const resolveAll = (variables: PLCVariable[] | undefined): void => {
-        if (!variables) return
-        for (const variable of variables) variable.location = resolveLocation(variable.location, aliasIndex)
-      }
-      for (const pou of data.pous) resolveAll(pou.interface?.variables)
-      resolveAll(data.configurations?.resource?.globalVariables)
-      return data
+      return resolveProjectAliases(live.project.data, getMemoizedAliasIndex(live))
     },
+    getAliasIndex: () => getMemoizedAliasIndex(getState()),
     addIOGroup: (deviceName, group) => {
       // Read producer state from the live store before entering produce
       // so the pool reflects every active source (pin-mapping, VPP,
       // every Modbus / EtherCAT remote device — including this one's
-      // existing groups, which must not be reclaimed) under the
-      // current target's capabilities.
-      const live = getState()
-      const boardInfo = live.deviceAvailableOptions.availableBoards.get(
-        live.deviceDefinitions.configuration.deviceBoard ?? '',
-      )
-      const ioMapping =
-        (
-          live.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
-            | { entries?: Array<{ iecAddress: string; alias?: string; slot: number; channelName: string }> }
-            | undefined
-        )?.entries ?? []
-
-      const pool = buildAddressPool(
-        {
-          pinMapping: {
-            pins: live.deviceDefinitions.pinMapping.pinsByBoard[live.deviceDefinitions.configuration.deviceBoard] ?? [],
-          },
-          vendorIoMapping: { entries: ioMapping },
-          remoteDevices: live.project.data.remoteDevices,
-        },
-        resolveTargetCapabilities(boardInfo),
-      )
+      // existing groups, which must not be reclaimed).
+      const pool = buildModbusProducerPool(getState())
 
       setState(
         produce((slice: ProjectSlice) => {
@@ -1607,8 +2586,13 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           if (!device?.modbusTcpConfig) return
 
           const pending = new Set<string>()
-          const ioPoints = generateIOPoints(group.functionCode, group.length, group.name, pool, pending)
-          device.modbusTcpConfig.ioGroups.push({ ...group, ioPoints })
+          // The UI validates and blocks; the store GUARANTEES the invariant,
+          // because a zero-point group emits a malformed runtime config
+          // (`len` is shipped verbatim by generate-modbus-master-config).
+          const length = clampIOGroupLength(group.functionCode, group.length)
+          const errorHandling = resolveIOGroupErrorHandling(group.functionCode, group.errorHandling)
+          const ioPoints = generateIOPoints(group.functionCode, length, group.name, pool, pending)
+          device.modbusTcpConfig.ioGroups.push({ ...group, length, errorHandling, ioPoints })
         }),
       )
       // Central recalculation is the authority for final addresses: it
@@ -1629,42 +2613,7 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // group's current points (all other Modbus groups, pin-mapping, VPP
       // and EtherCAT claims are still honoured). Existing aliases are
       // carried over positionally.
-      const live = getState()
-      const boardInfo = live.deviceAvailableOptions.availableBoards.get(
-        live.deviceDefinitions.configuration.deviceBoard ?? '',
-      )
-      const ioMapping =
-        (
-          live.deviceDefinitions.configuration.vendorScreenData?.['io-mapping'] as
-            | { entries?: Array<{ iecAddress: string; alias?: string; slot: number; channelName: string }> }
-            | undefined
-        )?.entries ?? []
-
-      // Clone remoteDevices with the edited group's points cleared so its
-      // own addresses are free for re-allocation without disturbing the
-      // rest of the project.
-      const remoteDevicesForPool = live.project.data.remoteDevices?.map((d) =>
-        d.name !== deviceName || !d.modbusTcpConfig
-          ? d
-          : {
-              ...d,
-              modbusTcpConfig: {
-                ...d.modbusTcpConfig,
-                ioGroups: d.modbusTcpConfig.ioGroups.map((g) => (g.id === groupId ? { ...g, ioPoints: [] } : g)),
-              },
-            },
-      )
-
-      const pool = buildAddressPool(
-        {
-          pinMapping: {
-            pins: live.deviceDefinitions.pinMapping.pinsByBoard[live.deviceDefinitions.configuration.deviceBoard] ?? [],
-          },
-          vendorIoMapping: { entries: ioMapping },
-          remoteDevices: remoteDevicesForPool,
-        },
-        resolveTargetCapabilities(boardInfo),
-      )
+      const pool = buildModbusProducerPool(getState(), { deviceName, groupId })
 
       setState(
         produce((slice: ProjectSlice) => {
@@ -1674,6 +2623,12 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
           if (!group) return
           const existingPoints = group.ioPoints ?? []
           Object.assign(group, updates)
+          // Normalize the PERSISTED field, not just the point count: `length`
+          // is what reaches the runtime as `len`. Two wins fall out — switching
+          // a group to FC 5/6 forces 1 even if the caller forgets, and a bad
+          // length loaded from an old project file self-heals on first edit.
+          group.length = clampIOGroupLength(group.functionCode, group.length)
+          group.errorHandling = resolveIOGroupErrorHandling(group.functionCode, group.errorHandling)
           const pending = new Set<string>()
           group.ioPoints = generateIOPoints(group.functionCode, group.length, group.name, pool, pending, existingPoints)
         }),
@@ -1693,6 +2648,44 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       getState().projectActions.recalculateIecAddresses()
       return ok()
     },
+    importIOGroups: (deviceName, groups, options) => {
+      const replace = options?.replace ?? false
+      const live = getState()
+      const target = live.project.data.remoteDevices?.find((d) => d.name === deviceName)
+      if (!target?.modbusTcpConfig) {
+        return { ok: false, title: 'Import failed', message: `Remote device "${deviceName}" was not found.` }
+      }
+
+      // Point ids are `<groupName>_<index>`: a duplicate name on one device
+      // would collide. IEC identifiers are case-insensitive, hence the fold.
+      const names = [...(replace ? [] : target.modbusTcpConfig.ioGroups), ...groups].map((g) => g.name.toLowerCase())
+      const duplicate = names.find((name, index) => names.indexOf(name) !== index)
+      if (duplicate !== undefined) {
+        return {
+          ok: false,
+          title: 'Import failed',
+          message: `More than one IO group would be named "${duplicate}". IO group names must be unique per device.`,
+        }
+      }
+
+      setState(
+        produce((slice: ProjectSlice) => {
+          const device = slice.project.data.remoteDevices?.find((d) => d.name === deviceName)
+          if (!device?.modbusTcpConfig) return
+          if (replace) device.modbusTcpConfig.ioGroups = []
+
+          for (const group of groups) {
+            const length = clampIOGroupLength(group.functionCode, group.length)
+            const errorHandling = resolveIOGroupErrorHandling(group.functionCode, group.errorHandling)
+            const ioPoints = seedIOPoints(group.functionCode, length, group.name)
+            device.modbusTcpConfig.ioGroups.push({ ...group, length, errorHandling, ioPoints })
+          }
+        }),
+      )
+      // One project-wide allocation assigns every address of the batch.
+      getState().projectActions.recalculateIecAddresses()
+      return ok({ imported: groups.length })
+    },
     updateIOPointAlias: (deviceName, groupId, pointId, alias) => {
       // Phase 1 — write-time alias-uniqueness gate (global, across
       // all producers).  Build a fresh registry from the live state
@@ -1701,36 +2694,11 @@ const createProjectSlice: StateCreator<ProjectSliceRoot, [], [], ProjectSlice> =
       // rationale.
       const live = getState()
       const sourceRef = { kind: 'modbus-tcp-remote' as const, ref: `${deviceName}:${pointId}` }
-      const boardInfo = live.deviceAvailableOptions?.availableBoards?.get(
-        live.deviceDefinitions?.configuration?.deviceBoard ?? '',
-      )
-      const ioMapping =
-        (
-          live.deviceDefinitions?.configuration?.vendorScreenData?.['io-mapping'] as
-            | { entries?: Array<{ iecAddress: string; alias?: string; slot: number; channelName: string }> }
-            | undefined
-        )?.entries ?? []
-      const pool = buildAddressPool(
-        {
-          pinMapping: {
-            pins:
-              live.deviceDefinitions?.pinMapping?.pinsByBoard[
-                live.deviceDefinitions?.configuration?.deviceBoard ?? ''
-              ] ?? [],
-          },
-          vendorIoMapping: { entries: ioMapping },
-          remoteDevices: live.project.data.remoteDevices,
-        },
-        resolveTargetCapabilities(boardInfo),
-      )
-      const registry = buildAliasRegistry(pool)
+      const registry = buildAliasRegistry(buildModbusProducerPool(live))
       const validation = validateAliasEdit(registry, alias, sourceRef)
       if (!validation.ok) {
-        return {
-          ok: false,
-          title: 'Alias already in use',
-          message: `"${alias}" is already assigned to ${describeSource(validation.conflict.source)} (${validation.conflict.address}). Alias names must be unique across all I/O channels.`,
-        }
+        const rejection = describeAliasRejection(validation, alias)
+        return { ok: false, title: rejection.title, message: rejection.description }
       }
 
       // Phase 2 — capture the old alias and cascade rename onto

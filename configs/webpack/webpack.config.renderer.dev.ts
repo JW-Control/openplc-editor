@@ -1,7 +1,5 @@
 /**
- * Webpack dev config for the src/ renderer.
- *
- * Usage: npm run start:dev
+ * Webpack dev config for the src/ renderer. Usage: npm run start:dev
  */
 
 import 'webpack-dev-server'
@@ -166,13 +164,12 @@ const configuration: webpack.Configuration = {
 
     new webpack.EnvironmentPlugin({
       NODE_ENV: 'development',
-      // Override for the editor's VPP catalog backend host.  Falsy
-      // (empty string) when the dev shell doesn't set it — the
-      // adapter (`package-adapter.ts`) then falls back to the
-      // production default hardcoded there.  Set the env BEFORE
-      // `npm run dev` to point at staging or localhost:
-      //   `VPP_CATALOG_URL=http://localhost:3333 npm run dev`
+      // Empty falls back to the production host in package-adapter.ts; set before
+      // `npm run dev` to override, e.g. VPP_CATALOG_URL=http://localhost:3333.
       VPP_CATALOG_URL: '',
+      // Same mechanism for the Edge WEB app (`/buy` license page), a different origin;
+      // falls back to the host in system-adapter.ts, e.g. OPENPLC_EDGE_WEB_URL=http://localhost:5173.
+      OPENPLC_EDGE_WEB_URL: '',
     }),
 
     new webpack.DefinePlugin({
@@ -184,7 +181,13 @@ const configuration: webpack.Configuration = {
       debug: true,
     }),
 
-    new ReactRefreshWebpackPlugin(),
+    // Refresh, but no error overlay of its own. Its listeners register ahead of ours
+    // and never read `defaultPrevented`, so Monaco's routine cancellation rejection —
+    // disposing an inline-completion session with a request in flight — filled the
+    // screen with a "Canceled" crash. Compile errors still surface through
+    // `devServer.client.overlay`, which is also where this repo already said runtime
+    // errors should not raise one.
+    new ReactRefreshWebpackPlugin({ overlay: false }),
 
     new HtmlWebpackPlugin({
       filename: 'index.html',
@@ -201,11 +204,8 @@ const configuration: webpack.Configuration = {
     }),
 
     new MonacoEditorWebpackPlugin({
-      // `python` covers the Python POU editor; `json` covers the
-      // Library Project's manifest tab (`library.json`).  Without
-      // `json` here, opening the manifest tab spawns a worker with
-      // no asset registered, which surfaces as an unhandled Worker
-      // `error` event in the renderer console.
+      // `json` covers the Library Project's manifest tab; without it, opening that
+      // tab spawns a worker with no asset registered, erroring in the console.
       languages: ['python', 'json'],
     }),
   ],
@@ -222,6 +222,14 @@ const configuration: webpack.Configuration = {
     headers: { 'Access-Control-Allow-Origin': '*' },
     static: { publicPath: '/' },
     historyApiFallback: { verbose: true },
+    client: {
+      overlay: {
+        errors: true,
+        warnings: true,
+        // Must be a boolean, not a filter fn: a filter is serialized into the dev-server client URL and revived with `new Function`, which the renderer CSP blocks.
+        runtimeErrors: false,
+      },
+    },
   },
 }
 

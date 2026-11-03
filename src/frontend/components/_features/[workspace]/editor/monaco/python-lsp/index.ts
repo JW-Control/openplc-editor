@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Autonomy®
 /**
  * Monaco-side adapter for the shared Python LSP service.
  *
@@ -26,7 +26,8 @@
  */
 
 import { type PythonLspService, startPythonLsp } from '@root/frontend/services/python-lsp'
-import type { PLCVariable } from '@root/middleware/shared/ports/types'
+import type { OpenPLCStore } from '@root/frontend/store'
+import type { PLCDataType, PLCVariable } from '@root/middleware/shared/ports/types'
 import type { editor as MonacoEditor, IDisposable } from 'monaco-editor'
 import type * as monaco from 'monaco-editor'
 
@@ -66,14 +67,14 @@ export function setPythonLspWorkerUrl(url: string): void {
  * fails to start — the editor still renders, just without
  * language-server diagnostics or completions.
  */
-export async function initPythonLSP(monacoModule: typeof monaco): Promise<void> {
+export async function initPythonLSP(store: OpenPLCStore, monacoModule: typeof monaco): Promise<void> {
   if (service) return
   if (!configuredWorkerUrl) {
     console.warn('[python-lsp] worker URL not registered; LSP will not start. Call setPythonLspWorkerUrl from App.tsx.')
     return
   }
   monacoApi = monacoModule
-  service = startPythonLsp({ workerUrl: configuredWorkerUrl, monaco: monacoModule })
+  service = startPythonLsp({ store, workerUrl: configuredWorkerUrl, monaco: monacoModule })
   try {
     await service.ready
   } catch (err) {
@@ -89,7 +90,7 @@ export async function initPythonLSP(monacoModule: typeof monaco): Promise<void> 
  */
 export function setupPythonLSPForEditor(
   editor: MonacoEditor.IStandaloneCodeEditor,
-  ctx: { pouName: string; variables: PLCVariable[] },
+  ctx: { pouName: string; variables: PLCVariable[]; dataTypes?: readonly PLCDataType[] },
 ): void {
   if (!service) return
   const model = editor.getModel()
@@ -105,7 +106,7 @@ export function setupPythonLSPForEditor(
   // twice on every keystroke.
   wiringByUri.get(uri)?.contentSubscription.dispose()
 
-  service.attachPou(uri, ctx.pouName, ctx.variables, model.getValue())
+  service.attachPou(uri, ctx.pouName, ctx.variables, model.getValue(), ctx.dataTypes ?? [])
 
   const contentSubscription = model.onDidChangeContent(() => {
     service?.notifyBodyChange(uri, model.getValue())
@@ -120,13 +121,17 @@ export function setupPythonLSPForEditor(
  * document so Pyright sees the updated globals.  No-op if no editor
  * is currently attached for the POU.
  */
-export function updatePythonLspContext(pouName: string, variables: PLCVariable[]): void {
+export function updatePythonLspContext(
+  pouName: string,
+  variables: PLCVariable[],
+  dataTypes: readonly PLCDataType[] = [],
+): void {
   if (!service || !monacoApi) return
   for (const [uri, wiring] of wiringByUri.entries()) {
     if (wiring.pouName !== pouName) continue
     const model = monacoApi.editor.getModels().find((m) => m.uri.toString() === uri)
     if (!model) continue
-    service.notifyVariablesChange(uri, variables, model.getValue())
+    service.notifyVariablesChange(uri, variables, model.getValue(), dataTypes)
   }
 }
 

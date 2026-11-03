@@ -1,11 +1,12 @@
 import { getErrorMessage } from '@root/frontend/utils/get-error-message'
 import { exec } from 'child_process'
 import { app } from 'electron'
-import { access, constants, mkdir, rename, rm, writeFile } from 'fs/promises'
+import { access, constants, mkdir, readFile, rename, rm, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 import { promisify } from 'util'
 
-import { ARDUINO_DATA, HISTORY_DATA, SETTINGS_DATA } from './data/types'
+import { reconcileArduinoCliConfig } from './data/arduino-cli-config'
+import { ARDUINO_DATA, defaultSketchbookLibrariesPath, HISTORY_DATA, SETTINGS_DATA } from './data/types'
 import type { ArduinoListOutput } from './types'
 
 /**
@@ -15,8 +16,37 @@ import type { ArduinoListOutput } from './types'
  * This approach is taken to avoid the need for a singleton instance and to leave room for future changes in the class structure.
  */
 class UserService {
+  /**
+   * The scaffolding run, started in the constructor and awaited by `initialize`.
+   *
+   * Held so the two entry points share ONE run. `initialize()` used to start a
+   * second one, which duplicated every "file already exists" warning and, worse,
+   * spawned `arduino-cli core list` and `lib list` twice on every single CLI
+   * invocation — four processes to answer `--help`.
+   */
+  readonly #ready: Promise<void>
+
   constructor() {
-    void this.#initializeUserSettingsAndHistory()
+    this.#ready = this.#initializeUserSettingsAndHistory()
+    // The GUI never awaits it. Attaching a handler here keeps a scaffolding
+    // failure from surfacing as an unhandled rejection; `#ready` itself still
+    // rejects, so an `initialize()` caller sees the error.
+    void this.#ready.catch(() => undefined)
+  }
+
+  /**
+   * The same scaffolding the constructor starts, but awaitable.
+   *
+   * The constructor is fire-and-forget, which is harmless for the GUI — a window
+   * takes far longer to appear than these few files take to create. A CLI has no
+   * such gap: it can reach the compiler in the same tick, and the compiler reads
+   * `User/Runtime/arduino-core-control.json` eagerly. On a machine where the
+   * editor had run before, the files already existed and nothing showed; in a
+   * fresh CI container the compile failed with a bare
+   * `ENOENT … arduino-core-control.json`.
+   */
+  async initialize(): Promise<void> {
+    await this.#ready
   }
 
   /**
@@ -26,8 +56,6 @@ class UserService {
   static DEFAULT_SETTINGS = SETTINGS_DATA
 
   static DEFAULT_HISTORY = HISTORY_DATA
-
-  static ARDUINO_FILE_CONTENT = ARDUINO_DATA
 
   static async createDirectoryIfNotExists(path: string): Promise<void> {
     /**
@@ -144,21 +172,74 @@ class UserService {
   }
 
   /**
-   * Checks if the Arduino CLI configuration file exists and creates it if it doesn't.
+   * Create the Arduino CLI configuration file, or bring an existing one up to
+   * date with what the editor ships.
+   *
+   * This used to write with `{ flag: 'wx' }` and swallow `EEXIST`, which made
+   * the file effectively write-once: an install that had launched an older
+   * build kept a stale config forever, and the only fix was deleting it by
+   * hand. Two things went stale that way — board-manager URLs added to
+   * board-manager URLs added to the shipped template never reached existing
+   * users, and `output.no_color` stayed
+   * on, which would keep the console monochrome even though it renders SGR
+   * colour itself now.
+   *
+   * Merge, never overwrite: users add their own indexes and change other
+   * settings in this file, and clobbering it would silently discard them.
+   * See `reconcileArduinoCliConfig` for the (deliberately narrow) rules.
    */
+  /**
+   * The sketchbook libraries folder arduino-cli would have used by default, and
+   * which the Arduino IDE uses too. Read-only for us: it is where a user's own
+   * libraries live, so that a C++ block can still call the display driver or the
+   * W5500 stack they installed through the IDE.
+   *
+   * Platform split is arduino-cli's own: `{HOME}/Arduino` on Linux,
+   * `{HOME}/Documents/Arduino` on macOS, `{DOCUMENTS}/Arduino` on Windows, where
+   * Documents can be redirected and only Electron knows where to.
+   *
+   * A sketchbook the user moved in the IDE's preferences, or an IDE confined by
+   * snap or flatpak, is not found here. Making that configurable is its own
+   * piece of work; the default covers a stock install.
+   */
+  static defaultUserLibrariesPath(): string {
+    return defaultSketchbookLibrariesPath(app.getPath('documents'))
+  }
+
   async #checkIfArduinoCliConfigExists(): Promise<void> {
     const pathToArduinoCliConfig = join(app.getPath('userData'), 'User', 'arduino-cli.yaml')
+    // JWPLC: no `directories` -- arduino-cli keeps the standard Arduino15 and
+    // sketchbook, where the `jwplc_local` developer-mode package lives.
+    const shipped = ARDUINO_DATA.trimStart()
+
     try {
-      await writeFile(pathToArduinoCliConfig, UserService.ARDUINO_FILE_CONTENT, { flag: 'wx' })
+      await writeFile(pathToArduinoCliConfig, shipped, { flag: 'wx' })
+      return
     } catch (err) {
-      // If the error is due to the file already existing, log a warning and continue.
-      if (err instanceof Error && err.message.includes('EEXIST')) {
-        console.warn(`File already exists at ${pathToArduinoCliConfig}.\nSkipping creation.`)
-      } else if (err instanceof Error) {
+      if (!(err instanceof Error && err.message.includes('EEXIST'))) {
         console.error(`Error creating Arduino CLI config at ${pathToArduinoCliConfig}: ${getErrorMessage(err)}`)
-      } else {
-        console.error(`Error creating Arduino CLI config at ${pathToArduinoCliConfig}: ${getErrorMessage(err)}`)
+        return
       }
+    }
+
+    // File already exists — reconcile it with what we ship.
+    try {
+      const existing = await readFile(pathToArduinoCliConfig, 'utf-8')
+      const updated = reconcileArduinoCliConfig(existing, shipped)
+      if (!updated) return
+
+      // Write via a sibling temp file and rename over the original. This runs
+      // on every start against a file the user owns and arduino-cli must be
+      // able to parse; a crash midway through a direct write would leave it
+      // truncated and break every build until the user deleted it by hand.
+      // `rename` within the same directory is atomic, so the config is either
+      // the old one or the new one, never half of each.
+      const tempPath = `${pathToArduinoCliConfig}.tmp`
+      await writeFile(tempPath, updated, 'utf-8')
+      await rename(tempPath, pathToArduinoCliConfig)
+      console.warn(`Updated Arduino CLI config at ${pathToArduinoCliConfig}.`)
+    } catch (err) {
+      console.error(`Error updating Arduino CLI config at ${pathToArduinoCliConfig}: ${getErrorMessage(err)}`)
     }
   }
 
@@ -245,8 +326,26 @@ class UserService {
     await this.#checkIfLogFolderExists()
     await this.#checkIfUserHistoryFolderExists()
     await this.#checkIfArduinoCliConfigExists()
-    await this.#checkIfArduinoCoreControlFileExists()
-    await this.#checkIfArduinoLibraryControlFileExists()
+    // The last two SHELL OUT to arduino-cli, so they fail on a machine where it
+    // is not installed — and they are the least essential steps here: they
+    // refresh a cache of which cores and libraries arduino-cli has. Losing that
+    // degrades the install; it does not stop the editor, and it must not stop a
+    // command that never compiles anything (`--version`, `devices`, a debug
+    // session over websocket). The GUI already behaved this way by accident,
+    // its rejection swallowed by a fire-and-forget constructor; making it
+    // explicit is what lets the CLI await this call without inheriting a fatal
+    // dependency on a compiler toolchain it may not need.
+    await this.#tolerate('refresh the installed-core list', () => this.#checkIfArduinoCoreControlFileExists())
+    await this.#tolerate('refresh the installed-library list', () => this.#checkIfArduinoLibraryControlFileExists())
+  }
+
+  /** Run a non-essential scaffolding step; report a failure without raising it. */
+  async #tolerate(what: string, step: () => Promise<void>): Promise<void> {
+    try {
+      await step()
+    } catch (err) {
+      console.warn(`Could not ${what}: ${getErrorMessage(err)}`)
+    }
   }
 }
 

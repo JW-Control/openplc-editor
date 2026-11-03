@@ -19,4 +19,3 @@ function LocationWarningGlyph({ label, tooltip }: { label: string; tooltip: stri
 }
 
 export { LocationWarningGlyph }
-

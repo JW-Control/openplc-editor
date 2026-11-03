@@ -4,6 +4,7 @@ import type { DebugLeafInfo } from '../../debug-parser'
 import {
   OpcUaConfigError,
   resolveArrayAddress,
+  resolveArrayElementFields,
   resolveStructureAddresses,
   resolveVariableAddress,
 } from '../resolve-indices'
@@ -83,8 +84,10 @@ describe('resolveVariableAddress', () => {
     expect(resolveVariableAddress(node, pmap(['TEMP', 1, 12]), [])).toMatchObject({ arr: 1, elem: 12 })
   })
 
-  it('matches case-insensitively', () => {
-    const node = makeNode({ pouName: 'gvl', variablePath: 'b' })
+  it('uppercases the variable path for lookup (debug map is upper end-to-end)', () => {
+    // The GVL sentinel is emitted uppercase by the picker; the variable NAME is
+    // matched case-insensitively because buildGlobalDebugPath uppercases it.
+    const node = makeNode({ pouName: 'GVL', variablePath: 'b' })
     expect(resolveVariableAddress(node, pmap(['B', 0, 7]), [])).toMatchObject({ arr: 0, elem: 7 })
   })
 
@@ -346,5 +349,269 @@ describe('resolveArrayAddress', () => {
     expect(() => resolveArrayAddress(node, leaves, [inst('INSTANCE0', 'MAIN')])).toThrow(
       'Cannot resolve OPC-UA array address',
     )
+  })
+})
+
+// An ARRAY OF <user-defined type> has no leaf of its own, so it can only
+// be published as a structure whose fields are the elements. The picker
+// pre-expands those elements only for small 1-D arrays, so the resolver
+// has to be able to rebuild them from the debug map alone.
+describe('resolveArrayElementFields', () => {
+  it('returns [] for a plain array of base types (no sub-element leaves)', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'PROFILE', arrayLength: 2 })
+    const leaves = pmap(['INSTANCE0.PROFILE[0]', 0, 10], ['INSTANCE0.PROFILE[1]', 0, 11])
+    expect(resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')])).toEqual([])
+  })
+
+  it('returns [] when the array has no leaves at all', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'GHOST', arrayLength: 2 })
+    expect(resolveArrayElementFields(node, pmap(), [inst('INSTANCE0', 'MAIN')])).toEqual([])
+  })
+
+  it('builds one container field per element with canonical leaf type/size/address', () => {
+    const node = makeNode({
+      nodeType: 'array',
+      variablePath: 'TANKS',
+      variableType: 'ARRAY[1..2] OF TANK',
+      elementType: 'TANK',
+      arrayLength: 2,
+    })
+    const leaves = pmap(
+      ['INSTANCE0.TANKS[1].LEVEL', 0, 20, 'INT', 2],
+      ['INSTANCE0.TANKS[1].FLOW', 0, 21, 'DINT', 4],
+      ['INSTANCE0.TANKS[2].LEVEL', 0, 22, 'INT', 2],
+      ['INSTANCE0.TANKS[2].FLOW', 0, 23, 'DINT', 4],
+    )
+    expect(resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')])).toEqual([
+      {
+        name: '[1]',
+        datatype: 'TANK',
+        size: null,
+        arr: null,
+        elem: null,
+        permissions: perm,
+        fields: [
+          { name: 'LEVEL', datatype: 'INT', size: 2, arr: 0, elem: 20, permissions: perm },
+          { name: 'FLOW', datatype: 'DINT', size: 4, arr: 0, elem: 21, permissions: perm },
+        ],
+      },
+      {
+        name: '[2]',
+        datatype: 'TANK',
+        size: null,
+        arr: null,
+        elem: null,
+        permissions: perm,
+        fields: [
+          { name: 'LEVEL', datatype: 'INT', size: 2, arr: 0, elem: 22, permissions: perm },
+          { name: 'FLOW', datatype: 'DINT', size: 4, arr: 0, elem: 23, permissions: perm },
+        ],
+      },
+    ])
+  })
+
+  it('falls back to UNKNOWN for the element container when elementType is unset', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'A', arrayLength: 1 })
+    const fields = resolveArrayElementFields(node, pmap(['INSTANCE0.A[1].X', 0, 1]), [inst('INSTANCE0', 'MAIN')])
+    expect(fields[0]).toMatchObject({ name: '[1]', datatype: 'UNKNOWN' })
+  })
+
+  it('falls back to UNKNOWN when a leaf carries an empty type', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'A', arrayLength: 1 })
+    const fields = resolveArrayElementFields(node, pmap(['INSTANCE0.A[1].X', 0, 1, '']), [inst('INSTANCE0', 'MAIN')])
+    expect(fields[0].fields?.[0]).toMatchObject({ name: 'X', datatype: 'UNKNOWN' })
+  })
+
+  it('orders elements by IEC index, including negative lower bounds', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'SIGNED', arrayLength: 3 })
+    // Intentionally unsorted in the map — output must be [-1], [0], [1].
+    const leaves = pmap(
+      ['INSTANCE0.SIGNED[1].V', 0, 3],
+      ['INSTANCE0.SIGNED[-1].V', 0, 1],
+      ['INSTANCE0.SIGNED[0].V', 0, 2],
+    )
+    expect(resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')]).map((f) => f.name)).toEqual([
+      '[-1]',
+      '[0]',
+      '[1]',
+    ])
+  })
+
+  it('orders multi-dimensional elements dimension by dimension', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'GRID', arrayLength: 4 })
+    const leaves = pmap(
+      ['INSTANCE0.GRID[2][1].V', 0, 4],
+      ['INSTANCE0.GRID[1][2].V', 0, 2],
+      ['INSTANCE0.GRID[1][1].V', 0, 1],
+    )
+    expect(resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')]).map((f) => f.name)).toEqual([
+      '[1][1]',
+      '[1][2]',
+      '[2][1]',
+    ])
+  })
+
+  it('nests deeper members (struct inside the element) as container fields', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'CELLS', elementType: 'CELL', arrayLength: 1 })
+    const leaves = pmap(
+      ['INSTANCE0.CELLS[1].ID', 0, 5, 'INT', 2],
+      ['INSTANCE0.CELLS[1].LIMITS.MIN', 0, 6, 'INT', 2],
+      ['INSTANCE0.CELLS[1].LIMITS.MAX', 0, 7, 'INT', 2],
+    )
+    const fields = resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')])
+    expect(fields[0].fields).toEqual([
+      { name: 'ID', datatype: 'INT', size: 2, arr: 0, elem: 5, permissions: perm },
+      {
+        name: 'LIMITS',
+        datatype: 'UNKNOWN',
+        size: null,
+        arr: null,
+        elem: null,
+        permissions: perm,
+        fields: [
+          { name: 'MIN', datatype: 'INT', size: 2, arr: 0, elem: 6, permissions: perm },
+          { name: 'MAX', datatype: 'INT', size: 2, arr: 0, elem: 7, permissions: perm },
+        ],
+      },
+    ])
+  })
+
+  it('keeps an inner array of base types as one leaf per element', () => {
+    const node = makeNode({ nodeType: 'array', variablePath: 'ROWS', arrayLength: 1 })
+    const leaves = pmap(['INSTANCE0.ROWS[1].SAMPLES[0]', 0, 8], ['INSTANCE0.ROWS[1].SAMPLES[1]', 0, 9])
+    expect(resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')])[0].fields).toEqual([
+      { name: 'SAMPLES[0]', datatype: 'INT', size: 2, arr: 0, elem: 8, permissions: perm },
+      { name: 'SAMPLES[1]', datatype: 'INT', size: 2, arr: 0, elem: 9, permissions: perm },
+    ])
+  })
+
+  it('resolves a global (GVL) array of structs via the bare path', () => {
+    const node = makeNode({ nodeType: 'array', pouName: 'GVL', variablePath: 'RECIPES', arrayLength: 1 })
+    const fields = resolveArrayElementFields(node, pmap(['RECIPES[1].STEP', 0, 40]), [])
+    expect(fields[0]).toMatchObject({ name: '[1]' })
+    expect(fields[0].fields?.[0]).toMatchObject({ name: 'STEP', arr: 0, elem: 40 })
+  })
+
+  it('prefers a member own leaf over its deeper leaves', () => {
+    // Defensive: a debug map that carries both `A[1].M` and `A[1].M.X`
+    // must not produce a field that is a leaf and a container at once.
+    const node = makeNode({ nodeType: 'array', variablePath: 'A', arrayLength: 1 })
+    const leaves = pmap(['INSTANCE0.A[1].M.X', 0, 2], ['INSTANCE0.A[1].M', 0, 1])
+    expect(resolveArrayElementFields(node, leaves, [inst('INSTANCE0', 'MAIN')])[0].fields).toEqual([
+      { name: 'M', datatype: 'INT', size: 2, arr: 0, elem: 1, permissions: perm },
+    ])
+  })
+
+  it('throws when the program has no instance in Resources', () => {
+    const node = makeNode({ nodeType: 'array', pouName: 'NOPE', variablePath: 'A' })
+    expect(() => resolveArrayElementFields(node, pmap(['INSTANCE0.A[1].X', 0, 1]), [])).toThrow(
+      'Cannot find instance for program',
+    )
+  })
+})
+
+// A VAR_EXTERNAL is a reference to a CONFIGURATION VAR_GLOBAL, so STruC++ emits
+// it under its bare name and never under the referencing instance. The picker
+// now stamps `GVL` on those, but address spaces saved before that carry the
+// declaring program's name and must still resolve.
+describe('VAR_EXTERNAL / global scope', () => {
+  const instances = [inst('INSTANCE0', 'MAIN')]
+
+  it('resolves a global picked under the GVL group', () => {
+    const addr = resolveVariableAddress(
+      makeNode({ pouName: 'GVL', variablePath: 'TEST_GLOBAL' }),
+      pmap(['TEST_GLOBAL', 0, 7, 'DINT', 4]),
+      instances,
+    )
+    expect(addr).toEqual({ arr: 0, elem: 7, type: 'DINT', size: 4 })
+  })
+
+  it('resolves the CONFIG sentinel (exact) as the global scope', () => {
+    const addr = resolveVariableAddress(
+      makeNode({ pouName: 'CONFIG', variablePath: 'TEST_GLOBAL' }),
+      pmap(['TEST_GLOBAL', 0, 7, 'DINT', 4]),
+      instances,
+    )
+    expect(addr).toEqual({ arr: 0, elem: 7, type: 'DINT', size: 4 })
+  })
+
+  it('does NOT treat a user program named "Config" as the global scope', () => {
+    // A real POU keeps its instance-prefixed address. `Config` is not the
+    // reserved CONFIG sentinel, and case-folding it used to misroute it.
+    const addr = resolveVariableAddress(
+      makeNode({ pouName: 'Config', variablePath: 'X' }),
+      pmap(['INSTANCE0.X', 3, 9, 'INT', 2]),
+      [inst('INSTANCE0', 'Config')],
+    )
+    expect(addr).toEqual({ arr: 3, elem: 9, type: 'INT', size: 2 })
+  })
+
+  it('falls back to the global path for a config saved with the program as pouName', () => {
+    // INSTANCE0.TEST_GLOBAL is deliberately absent — that is what a
+    // VAR_EXTERNAL looks like in a debug map, and what used to abort the build.
+    const addr = resolveVariableAddress(
+      makeNode({ pouName: 'MAIN', variablePath: 'TEST_GLOBAL' }),
+      pmap(['TEST_GLOBAL', 0, 7, 'DINT', 4]),
+      instances,
+    )
+    expect(addr).toEqual({ arr: 0, elem: 7, type: 'DINT', size: 4 })
+  })
+
+  it('warns on every global-fallback hit so a mis-bind is never silent', () => {
+    const warnings: string[] = []
+    resolveVariableAddress(
+      makeNode({ pouName: 'MAIN', variablePath: 'TEST_GLOBAL' }),
+      pmap(['TEST_GLOBAL', 0, 7, 'DINT', 4]),
+      instances,
+      warnings,
+    )
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('MAIN:TEST_GLOBAL')
+    expect(warnings[0]).toContain('global')
+  })
+
+  it('does not warn when the program-scoped leaf resolves directly', () => {
+    const warnings: string[] = []
+    resolveVariableAddress(
+      makeNode({ pouName: 'MAIN', variablePath: 'OWNED' }),
+      pmap(['INSTANCE0.OWNED', 1, 2]),
+      instances,
+      warnings,
+    )
+    expect(warnings).toHaveLength(0)
+  })
+
+  it('prefers the program-scoped address when the POU owns a variable of that name', () => {
+    const addr = resolveVariableAddress(
+      makeNode({ pouName: 'MAIN', variablePath: 'SHADOWED' }),
+      pmap(['INSTANCE0.SHADOWED', 1, 2, 'INT', 2], ['SHADOWED', 9, 9, 'DINT', 4]),
+      instances,
+    )
+    expect(addr).toEqual({ arr: 1, elem: 2, type: 'INT', size: 2 })
+  })
+
+  it('still throws when the name is in neither scope', () => {
+    expect(() =>
+      resolveVariableAddress(
+        makeNode({ pouName: 'MAIN', variablePath: 'GONE' }),
+        pmap(['INSTANCE0.STILL_HERE', 1, 2]),
+        instances,
+      ),
+    ).toThrow(OpcUaConfigError)
+  })
+
+  it('falls back for a field of a global struct saved under the program', () => {
+    const resolved = resolveStructureAddresses(
+      makeNode({
+        pouName: 'MAIN',
+        variablePath: 'GLOBAL_STRUCT',
+        nodeType: 'structure',
+        fields: [makeField({ fieldPath: 'FIELD1' })],
+      }),
+      pmap(['GLOBAL_STRUCT.FIELD1', 3, 4, 'REAL', 4]),
+      instances,
+    )
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0]).toMatchObject({ name: 'FIELD1', arr: 3, elem: 4, datatype: 'REAL' })
   })
 })

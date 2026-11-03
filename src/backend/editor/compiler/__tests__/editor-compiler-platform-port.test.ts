@@ -199,11 +199,13 @@ describe('createEditorCompilerPlatformPort', () => {
     )
     expect(handleLibraryInstallation).toHaveBeenCalledTimes(1)
     // The per-board library list is the first argument; the output
-    // callback follows.  Asserting the exact list catches accidental
-    // drops in plumbing between port → handler.
+    // callback follows, then the git-installed third-party list.
+    // Asserting the exact list catches accidental drops in plumbing
+    // between port → handler.
     expect(handleLibraryInstallation).toHaveBeenCalledWith(
       ['Arduino_Opta_Blueprint', 'P1AM'],
       expect.any(Function),
+      [],
       true,
     )
     expect(result).toEqual({ ok: true })
@@ -213,7 +215,7 @@ describe('createEditorCompilerPlatformPort', () => {
     const handleLibraryInstallation = jest.fn(async () => undefined)
     const port = createEditorCompilerPlatformPort(makeHandlers({ handleLibraryInstallation }), makeContext())
     await port.installArduinoLib({ libId: '' }, () => undefined)
-    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), true)
+    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), [], true)
   })
 
   it('installArduinoLib skips legacy global libraries for VPP targets', async () => {
@@ -223,7 +225,31 @@ describe('createEditorCompilerPlatformPort', () => {
       { libId: '', extraLibraries: [], includeLegacyGlobalLibraries: false },
       () => undefined,
     )
-    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), false)
+    expect(handleLibraryInstallation).toHaveBeenCalledWith([], expect.any(Function), [], false)
+  })
+
+  it('installArduinoLib forwards third-party libraries as a separate list', async () => {
+    // Index-installed and git-installed libraries travel separately all the way
+    // down, because they are installed by different arduino-cli invocations:
+    // `lib install <name>` versus `lib install --git-url`.
+    const handleLibraryInstallation = jest.fn(async () => undefined)
+    const port = createEditorCompilerPlatformPort(makeHandlers({ handleLibraryInstallation }), makeContext())
+    await port.installArduinoLib(
+      {
+        libId: '',
+        extraLibraries: ['P1AM'],
+        thirdPartyLibraries: [
+          { name: 'open62541', gitUrl: 'https://example.invalid/open62541.git', reason: 'OPC-UA server' },
+        ],
+      },
+      () => undefined,
+    )
+    expect(handleLibraryInstallation).toHaveBeenCalledWith(
+      ['P1AM'],
+      expect.any(Function),
+      [{ name: 'open62541', gitUrl: 'https://example.invalid/open62541.git', reason: 'OPC-UA server' }],
+      true,
+    )
   })
 
   it('installArduinoLib warns and returns ok:true when the install machinery throws', async () => {
@@ -245,7 +271,7 @@ describe('createEditorCompilerPlatformPort', () => {
   // ---- uploadArduinoBoard — port wiring (regression for issue #5) ----
 
   it('uploadArduinoBoard forwards args.port to the handler as communicationPort', async () => {
-    const handleUploadProgram = jest.fn(async () => undefined)
+    const handleUploadProgram = jest.fn(async () => ({ success: true, data: '' }))
     const port = createEditorCompilerPlatformPort(makeHandlers({ handleUploadProgram }), makeContext())
     await port.uploadArduinoBoard(
       { compilationPath: '', fqbn: 'arduino:avr:mega', port: '/dev/cu.usbmodem1101' },
@@ -259,12 +285,33 @@ describe('createEditorCompilerPlatformPort', () => {
     )
   })
 
+  it('uploadArduinoBoard forwards uploadMethod and ipAddress for an ethernet upload', async () => {
+    // These two were "declared but never populated" before the ethernet-upload
+    // work — an ethernet build ignored the address the caller gave and used
+    // whatever the project file remembered. Pin that they now reach the handler.
+    const handleUploadProgram = jest.fn(async () => ({ success: true, data: '' }))
+    const port = createEditorCompilerPlatformPort(makeHandlers({ handleUploadProgram }), makeContext())
+    await port.uploadArduinoBoard(
+      {
+        compilationPath: '',
+        fqbn: 'autonomylogic:tm4c:logo8',
+        port: '',
+        uploadMethod: 'ethernet',
+        ipAddress: '10.0.0.9',
+      },
+      () => undefined,
+    )
+    expect(handleUploadProgram).toHaveBeenCalledWith(
+      expect.objectContaining({ uploadMethod: 'ethernet', ipAddress: '10.0.0.9' }),
+    )
+  })
+
   it('uploadArduinoBoard passes communicationPort=undefined to the handler when args.port is empty', async () => {
     // Empty string means "no explicit port from the renderer" — the
     // handler must fall back to the disk-persisted value rather than
     // call arduino-cli with `--port ""`.  The undefined sentinel
     // signals "fall through" to the handler's legacy code path.
-    const handleUploadProgram = jest.fn(async () => undefined)
+    const handleUploadProgram = jest.fn(async () => ({ success: true, data: '' }))
     const port = createEditorCompilerPlatformPort(makeHandlers({ handleUploadProgram }), makeContext())
     await port.uploadArduinoBoard({ compilationPath: '', fqbn: 'arduino:avr:mega', port: '' }, () => undefined)
     expect(handleUploadProgram).toHaveBeenCalledWith(expect.objectContaining({ communicationPort: undefined }))
@@ -291,7 +338,29 @@ describe('createEditorCompilerPlatformPort', () => {
     const port = createEditorCompilerPlatformPort(makeHandlers({ handleVendorPluginPackaging }), makeContext())
     const result = await port.packageVppPlugin({ boardTarget: 'SLM-RP4' }, () => undefined)
     expect(handleVendorPluginPackaging).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ files: {} })
+    // No `getVppRuntimeFloor` in the default context, so no floor is known —
+    // which the pipeline reads as "no constraint".
+    expect(result).toEqual({ files: {}, minRuntimeVersion: null })
+  })
+
+  it('packageVppPlugin surfaces the VPP runtime floor when the context can resolve one', async () => {
+    const getVppRuntimeFloor = jest.fn(() => '4.1.9')
+    const port = createEditorCompilerPlatformPort(makeHandlers(), makeContext({ getVppRuntimeFloor }))
+    const result = await port.packageVppPlugin({ boardTarget: 'SLM-RP4' }, () => undefined)
+    expect(getVppRuntimeFloor).toHaveBeenCalledWith('SLM-RP4')
+    expect(result.minRuntimeVersion).toBe('4.1.9')
+  })
+
+  it('packageVppPlugin reports no floor when the resolver throws', async () => {
+    // A gate that failed the build because it could not read its own metadata
+    // would be worse than the mismatch it exists to catch.
+    const getVppRuntimeFloor = jest.fn(() => {
+      throw new Error('registry unreadable')
+    })
+    const port = createEditorCompilerPlatformPort(makeHandlers(), makeContext({ getVppRuntimeFloor }))
+    const result = await port.packageVppPlugin({ boardTarget: 'SLM-RP4' }, () => undefined)
+    expect(result.minRuntimeVersion).toBeNull()
+    expect(result.errors).toBeUndefined()
   })
 
   it('packageVppPlugin returns an errors[] when the handler throws', async () => {
@@ -341,7 +410,48 @@ describe('createEditorCompilerPlatformPort', () => {
       { context: { kind: 'editor-https', ip: '10.0.0.1', jwt: 'token' } },
       () => undefined,
     )
-    expect(result).toEqual({ ok: true, version: '4.1.2' })
+    // This stub answers every endpoint with a `/api/version` body, so
+    // `/api/capabilities` yields no usable `runtimeVersion` and the probe
+    // falls back — the exact shape of a runtime predating the endpoint.
+    expect(result).toEqual({ ok: true, version: '4.1.2', minEditorVersion: null, supportsProjectSnapshot: false })
+  })
+
+  it('checkRuntimeVersion reads the editor floor from /api/capabilities when the device serves it', async () => {
+    const makeRuntimeApiRequest = jest.fn(async (_ip: string, endpoint: string) => {
+      if (endpoint === '/api/capabilities') {
+        return { success: true as const, data: { runtimeVersion: 'v4.2.0', minEditorVersion: '4.2.1' } }
+      }
+      return { success: true as const, data: { version: 'SHOULD-NOT-BE-USED' } }
+    }) as unknown as EditorCompilerPlatformPortContext['mainProcessBridge']['makeRuntimeApiRequest']
+    const port = createEditorCompilerPlatformPort(
+      makeHandlers(),
+      makeContext({ mainProcessBridge: { makeRuntimeApiRequest, makeRuntimeApiUpload: jest.fn() } }),
+    )
+    const result = await port.checkRuntimeVersion(
+      { context: { kind: 'editor-https', ip: '10.0.0.1', jwt: 'token' } },
+      () => undefined,
+    )
+    expect(result).toEqual({ ok: true, version: 'v4.2.0', minEditorVersion: '4.2.1', supportsProjectSnapshot: false })
+  })
+
+  it('checkRuntimeVersion falls back to /api/version when capabilities 404s', async () => {
+    const makeRuntimeApiRequest = jest.fn(async (_ip: string, endpoint: string) => {
+      if (endpoint === '/api/capabilities') return { success: false as const, error: '404 Not Found' }
+      return { success: true as const, data: { version: 'v4.1.7' } }
+    }) as unknown as EditorCompilerPlatformPortContext['mainProcessBridge']['makeRuntimeApiRequest']
+    const log = jest.fn()
+    const port = createEditorCompilerPlatformPort(
+      makeHandlers(),
+      makeContext({ mainProcessBridge: { makeRuntimeApiRequest, makeRuntimeApiUpload: jest.fn() } }),
+    )
+    const result = await port.checkRuntimeVersion(
+      { context: { kind: 'editor-https', ip: '10.0.0.1', jwt: 'token' } },
+      log,
+    )
+    expect(result).toEqual({ ok: true, version: 'v4.1.7', minEditorVersion: null, supportsProjectSnapshot: false })
+    // The 404 is the normal answer from every deployed runtime — it must not
+    // nag the user on every upload.
+    expect(log).not.toHaveBeenCalled()
   })
 
   it('checkRuntimeVersion returns version=null and logs a warning on probe failure', async () => {
@@ -358,7 +468,7 @@ describe('createEditorCompilerPlatformPort', () => {
       { context: { kind: 'editor-https', ip: '10.0.0.1', jwt: 'token' } },
       log,
     )
-    expect(result).toEqual({ ok: true, version: null })
+    expect(result).toEqual({ ok: true, version: null, minEditorVersion: null, supportsProjectSnapshot: false })
     expect(log).toHaveBeenCalledWith(expect.stringContaining('Could not reach runtime'), 'warning')
   })
 
@@ -375,7 +485,105 @@ describe('createEditorCompilerPlatformPort', () => {
       { context: { kind: 'editor-https', ip: '10.0.0.1', jwt: 'token' } },
       log,
     )
-    expect(result).toEqual({ ok: true, version: null })
+    expect(result).toEqual({ ok: true, version: null, minEditorVersion: null, supportsProjectSnapshot: false })
     expect(log).toHaveBeenCalledWith(expect.stringContaining('probe blew up'), 'warning')
+  })
+
+  // ---- uploadRuntimeV4: the project-snapshot capability --------------------
+  //
+  // The capability is read by the pre-upload probe and acted on here. These pin
+  // the behaviour rather than the plumbing: whether the archive gets built at
+  // all. Building one for a runtime that discards it costs the user upload time
+  // and leaves them a device they cannot retrieve from; not building one for a
+  // runtime that would have kept it silently loses the feature.
+
+  describe('uploadRuntimeV4 — project-snapshot capability', () => {
+    const deviceContext = { kind: 'editor-https' as const, ip: '10.0.0.1', jwt: 'token' }
+
+    function makeUploadContext(overrides?: Partial<EditorCompilerPlatformPortContext>) {
+      return makeContext({
+        compressSourceFolder: jest.fn().mockResolvedValue(Buffer.from('program')),
+        mainProcessBridge: {
+          makeRuntimeApiRequest: jest.fn(),
+          makeRuntimeApiUpload: jest.fn().mockResolvedValue({ success: true, data: '{}' }),
+        },
+        ...overrides,
+      })
+    }
+
+    it('builds and sends the project when the runtime stores them', async () => {
+      const buildUploadSnapshot = jest.fn().mockResolvedValue({
+        archive: Buffer.from('zip'),
+        metadata: '{"projectName":"Demo"}',
+        missingLibraries: [],
+      })
+      const context = makeUploadContext({ buildUploadSnapshot })
+      const port = createEditorCompilerPlatformPort(makeHandlers(), context)
+
+      await port.uploadRuntimeV4({ bundle: {}, context: deviceContext, supportsProjectSnapshot: true }, () => undefined)
+
+      expect(buildUploadSnapshot).toHaveBeenCalled()
+      const upload = (context.mainProcessBridge.makeRuntimeApiUpload as jest.Mock).mock.calls[0][0] as {
+        snapshotBuffer?: Buffer
+        snapshotMetadata?: string
+      }
+      expect(upload.snapshotBuffer).toEqual(Buffer.from('zip'))
+      expect(upload.snapshotMetadata).toBe('{"projectName":"Demo"}')
+    })
+
+    it('does not build one for a runtime that would discard it', async () => {
+      const buildUploadSnapshot = jest.fn()
+      const context = makeUploadContext({ buildUploadSnapshot })
+      const port = createEditorCompilerPlatformPort(makeHandlers(), context)
+
+      await port.uploadRuntimeV4(
+        { bundle: {}, context: deviceContext, supportsProjectSnapshot: false },
+        () => undefined,
+      )
+
+      expect(buildUploadSnapshot).not.toHaveBeenCalled()
+      const upload = (context.mainProcessBridge.makeRuntimeApiUpload as jest.Mock).mock.calls[0][0] as {
+        snapshotBuffer?: Buffer
+        snapshotMetadata?: string
+      }
+      expect(upload.snapshotBuffer).toBeUndefined()
+      expect(upload.snapshotMetadata).toBeUndefined()
+    })
+
+    it('tells the user the project will not be retrievable from that device', async () => {
+      // The skip is silent otherwise, and "I uploaded it, why can I not get it
+      // back?" is the question this exists to pre-empt.
+      const log = jest.fn()
+      const port = createEditorCompilerPlatformPort(
+        makeHandlers(),
+        makeUploadContext({ buildUploadSnapshot: jest.fn() }),
+      )
+
+      await port.uploadRuntimeV4({ bundle: {}, context: deviceContext, supportsProjectSnapshot: false }, log)
+
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('does not store source projects'), 'warning')
+    })
+
+    it('still uploads the program when the project cannot be prepared', async () => {
+      // The project is the optional half. A failure preparing it must never cost
+      // the user the program upload itself.
+      const context = makeUploadContext({
+        buildUploadSnapshot: jest.fn().mockRejectedValue(new Error('disk full')),
+      })
+      const log = jest.fn()
+      const port = createEditorCompilerPlatformPort(makeHandlers(), context)
+
+      await port.uploadRuntimeV4({ bundle: {}, context: deviceContext, supportsProjectSnapshot: true }, log)
+
+      // The program still goes, just without the project beside it. (The
+      // overall result is not asserted: the deploy flow polls the device for
+      // build status afterwards, which this harness does not stand up.)
+      expect(context.mainProcessBridge.makeRuntimeApiUpload).toHaveBeenCalled()
+      const upload = (context.mainProcessBridge.makeRuntimeApiUpload as jest.Mock).mock.calls[0][0] as {
+        snapshotBuffer?: Buffer
+      }
+      expect(upload.snapshotBuffer).toBeUndefined()
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('Could not prepare the project'), 'warning')
+    })
   })
 })

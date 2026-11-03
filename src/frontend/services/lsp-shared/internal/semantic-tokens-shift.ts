@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Translate the worker's delta-encoded semantic tokens (in
  * full-document coordinates) into Monaco's view-frame.
@@ -7,9 +7,14 @@
  *   1. Decode deltas to absolute (line, col) positions.
  *   2. Keep tokens whose line is in `[startLine, endLineExclusive)`.
  *      Both ends are LSP coordinates.
- *   3. Subtract `startLine` from each surviving token's line so the
+ *   3. Rebase each surviving token onto `outputStartLine` so the
  *      output is Monaco-relative.
  *   4. Re-encode as a delta stream Monaco can consume directly.
+ *
+ * `outputStartLine` exists so a view that renders its own framing
+ * above the window doesn't have to widen the window to compensate:
+ * doing that drags in the preceding line's tokens, whose columns can
+ * overrun the shorter frame line ("end character > line length").
  *
  * Used in two modes by the ST LSP today:
  *   - **Body view**: `startLine = bodyLineOffset` (preamble line count),
@@ -24,11 +29,17 @@
  * When `startLine === 0` and `endLineExclusive === ∞` (e.g. early
  * boot before the registry is populated) the function is a copy;
  * cheap enough that the dead branch isn't worth special-casing.
+ *
+ * `keepLine` drops the tokens of any line it rejects. A partial view
+ * whose buffer drifted from the document on some lines keeps colours
+ * only where the text still matches.
  */
 export function shiftSemanticTokensToBody(
   data: number[],
   startLine: number,
   endLineExclusive: number = Number.POSITIVE_INFINITY,
+  outputStartLine: number = 0,
+  keepLine?: (lspLine: number) => boolean,
 ): Uint32Array {
   // Decode to absolute positions.
   const abs: Array<{ line: number; col: number; len: number; type: number; mods: number }> = []
@@ -51,7 +62,8 @@ export function shiftSemanticTokensToBody(
   for (const t of abs) {
     if (t.line < startLine) continue
     if (t.line >= endLineExclusive) continue
-    const shiftedLine = t.line - startLine
+    if (keepLine && !keepLine(t.line)) continue
+    const shiftedLine = t.line - startLine + outputStartLine
     const dLine = shiftedLine - prevLine
     const dStart = dLine === 0 ? t.col - prevCol : t.col
     out.push(dLine, dStart, t.len, t.type, t.mods)

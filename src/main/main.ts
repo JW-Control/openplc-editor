@@ -6,40 +6,65 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
+import { hasOpenEditSessions, releaseAllEditSessions } from '@root/backend/editor/edge-edit-sessions'
+import { isWebUrl } from '@root/backend/editor/utils/is-web-url'
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import Installer from 'electron-devtools-installer'
 import log from 'electron-log'
-import { autoUpdater } from 'electron-updater'
 import { enableMapSet } from 'immer'
-import { platform, release } from 'os'
+import { homedir, platform, release } from 'os'
 import { join, resolve } from 'path'
 
+import { ensureCliShimInstalled, shimStatePath } from '../backend/editor/cli-shim/first-run'
 import { CompilerModule } from '../backend/editor/compiler'
 // TODO: Refactor this type declaration
 import { MainIpcModuleConstructor } from '../backend/editor/contracts/types/modules/ipc/main'
+import { adoptProviderTokens } from '../backend/editor/edge-account/edge-account-service'
+import { edgeOAuthProviderFromUrl, runOAuthFlow } from '../backend/editor/edge-account/oauth-browser-flow'
 import { HardwareModule } from '../backend/editor/hardware'
+import { PackageManagerModule } from '../backend/editor/package-manager'
+import { clearCloudBuildRoot } from '../backend/editor/project/cloud-build-workspace'
 import { logger, PouService, ProjectService, UserService } from '../backend/editor/services'
 import { resolveHtmlPath } from '../backend/editor/utils'
 import { getErrorMessage } from '../frontend/utils/get-error-message'
+import type { EdgeOAuthProviderId } from '../middleware/shared/ports/edge-account-port'
+import { VENDOR_DOCUMENT_SCHEME } from '../middleware/shared/vendor-document/document-url'
 import MenuBuilder from './menu'
 import { hmiDesignerHost } from './modules/hmi-designer'
 import MainProcessBridge from './modules/ipc/main'
+import { installBundledVpp } from './modules/jwplc-bundled-vpp'
+import { createQuitCoordinator } from './modules/lifecycle/quit-coordinator'
 import { store } from './modules/store'
+import { createElectronUpdateService } from './modules/updater'
+import { createVendorDocumentHandler, leavesVendorDocument } from './modules/vendor-document/serve'
 
 enableMapSet()
 
-class AppUpdater {
-  constructor() {
-    log.transports.file.level = 'info'
-    autoUpdater.logger = log
-    void autoUpdater.checkForUpdatesAndNotify()
-  }
-}
+// Must run before `ready`; `standard` + `secure` give the iframe a real URL base and a secure context.
+protocol.registerSchemesAsPrivileged([
+  { scheme: VENDOR_DOCUMENT_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+])
 
 Menu.setApplicationMenu(null)
 
 export let mainWindow: BrowserWindow | null = null
 export let splash: BrowserWindow | null = null
+
+let mainIpcModule: MainProcessBridge | undefined
+let packageManager: PackageManagerModule | undefined
+// One per process, not per window: macOS re-creates the window on activate.
+const updateService = createElectronUpdateService({
+  getWindow: () => mainWindow,
+  requestQuit: () => quitCoordinator.requestQuit(),
+})
+const quitCoordinator = createQuitCoordinator({
+  platform: process.platform,
+  getWindow: () => mainWindow,
+  // JWPLC: guardar el HMI Designer abierto antes de cerrar la app.
+  quitApp: () => void hmiDesignerHost.flush().finally(() => app.quit()),
+  stopSimulator: () => mainIpcModule?.stopSimulator(),
+  canPrompt: () => mainIpcModule?.canPromptQuit() ?? false,
+})
 
 if (process.env.NODE_ENV === 'production') {
   async function loadSourceMapSupport(): Promise<void> {
@@ -102,6 +127,54 @@ const installExtensions = async () => {
   } catch (error) {
     logger.warn(`Skipping development extension installation: ${getErrorMessage(error)}`)
     return []
+  }
+}
+
+/** The browser has the user's attention; once the session is in, the editor asks for it back. */
+function bringMainWindowToFront(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
+
+  mainWindow.show()
+  mainWindow.focus()
+  // On macOS a window's `focus()` does not take the app back from another one; `steal` does.
+  app.focus({ steal: true })
+}
+
+/**
+ * A provider sign-in runs in the system browser and lands here, not in the renderer:
+ * the tokens are adopted on this side, then the renderer is told there is a session to
+ * read. It would otherwise learn of it only at its next focus.
+ */
+async function completeProviderSignIn(provider: EdgeOAuthProviderId): Promise<void> {
+  try {
+    const outcome = await runOAuthFlow(provider)
+
+    if (outcome.status !== 'tokens') {
+      if (outcome.status === 'failed') {
+        log.warn(`[edge-account] provider sign-in did not finish: ${outcome.reason ?? 'unknown'}`)
+      }
+
+      return
+    }
+
+    const signIn = await adoptProviderTokens({ accessToken: outcome.accessToken, refreshToken: outcome.refreshToken })
+
+    if (signIn.status !== 'signed-in') {
+      log.warn(`[edge-account] provider tokens arrived but the session could not be read: ${signIn.status}`)
+
+      return
+    }
+
+    mainWindow?.webContents.send('edge-account:signed-in')
+    bringMainWindowToFront()
+  } catch (error: unknown) {
+    log.error(`[edge-account] provider sign-in failed: ${getErrorMessage(error)}`)
   }
 }
 
@@ -214,9 +287,10 @@ const createMainWindow = async () => {
    * Calling event.preventDefault() will cancel the close.
    */
   mainWindow.on('close', saveBounds)
-  mainWindow.on('close', () => {
+  mainWindow.on('close', (event) => {
     logger.info('mainWindow close')
-    mainWindow?.webContents.send('window-controls:is-closing')
+    quitCoordinator.handleWindowClose(event)
+    if (process.platform !== 'darwin') mainWindow?.webContents.send('window-controls:is-closing')
   })
 
   /**
@@ -267,9 +341,29 @@ const createMainWindow = async () => {
     mainWindow.webContents.openDevTools()
   }
 
+  mainWindow.webContents.on('will-frame-navigate', (details) => {
+    if (!details.isMainFrame && leavesVendorDocument(details.frame?.url, details.url)) details.preventDefault()
+  })
+
   // Open urls in the user's browser
   mainWindow.webContents.setWindowOpenHandler((edata) => {
-    void shell.openExternal(edata.url)
+    // A provider link reaches the system browser too, but through the OAuth flow, which
+    // is what listens for the browser to come back with the session.
+    const provider = edgeOAuthProviderFromUrl(edata.url)
+
+    if (provider) {
+      void completeProviderSignIn(provider)
+
+      return { action: 'deny' }
+    }
+
+    // Only web links leave the app: a `file:` or custom-scheme URL would run whatever the OS registers for it.
+    if (isWebUrl(edata.url)) {
+      void shell.openExternal(edata.url)
+    } else {
+      log.warn(`[main] refused to open external URL with scheme ${edata.url.split(':')[0] || '(none)'}`)
+    }
+
     return { action: 'deny' }
   })
 
@@ -280,7 +374,7 @@ const createMainWindow = async () => {
   // mainWindow.webContents.send('editor:getBaseTypes', _editorService.getBaseTypes())
 
   // Handles the creation of the menu
-  const menuBuilder = new MenuBuilder(mainWindow)
+  const menuBuilder = new MenuBuilder(mainWindow, updateService)
   void menuBuilder.buildMenu()
 
   /**
@@ -301,7 +395,7 @@ const createMainWindow = async () => {
 
   const hardwareModule = new HardwareModule()
 
-  const mainIpcModule = new MainProcessBridge({
+  mainIpcModule = new MainProcessBridge({
     mainWindow,
     ipcMain,
     projectService,
@@ -310,13 +404,12 @@ const createMainWindow = async () => {
     pouService,
     compilerModule,
     hardwareModule,
+    quitCoordinator,
+    packageManagerModule: packageManager,
   } as unknown as MainIpcModuleConstructor)
   mainIpcModule.setupMainIpcListener()
   // JWPLC HMI Designer window (Alpha14 F3). Registers its channels once.
   hmiDesignerHost.register(ipcMain)
-
-  // Remove this if your app does not use auto updates;
-  new AppUpdater()
 }
 
 // Disable GPU Acceleration for Windows 7;
@@ -354,13 +447,9 @@ app.on('activate', () => {
  * Emitted before the application starts closing its windows. Calling event.preventDefault() will prevent the default behavior,
  * which is terminating the application.
  */
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   logger.info('before-quit')
-  if (process.platform === 'darwin' && process.env.NODE_ENV === 'production') {
-    mainWindow?.webContents.send('app:darwin-is-closing')
-    return
-  }
-  mainWindow?.destroy()
+  quitCoordinator.handleBeforeQuit(event)
 })
 
 /**
@@ -368,8 +457,20 @@ app.on('before-quit', () => {
  * Emitted when all windows have been closed and the application will quit. Calling event.preventDefault() will prevent the default
  * behavior, which is terminating the application.
  */
-app.on('will-quit', () => {
+const EDIT_SESSION_RELEASE_BUDGET_MS = 1500
+let editSessionsReleased = false
+
+app.on('will-quit', (event) => {
   logger.info('will-quit')
+  if (editSessionsReleased || !hasOpenEditSessions()) {
+    return
+  }
+  editSessionsReleased = true
+  event.preventDefault()
+  void Promise.race([
+    releaseAllEditSessions(),
+    new Promise<void>((resolve) => setTimeout(resolve, EDIT_SESSION_RELEASE_BUDGET_MS)),
+  ]).finally(() => app.quit())
 })
 
 /**
@@ -412,7 +513,37 @@ app.on('second-instance', () => {
 app
   .whenReady()
   .then(() => {
+    const packages = new PackageManagerModule()
+    packageManager = packages
+    protocol.handle(
+      VENDOR_DOCUMENT_SCHEME,
+      createVendorDocumentHandler({ listPackages: () => packages.listInstalled() }),
+    )
     void createMainWindow()
+    // JWPLC Edition: install the bundled JWPLC Basic VPP when missing or older.
+    const bundledVppDir = app.isPackaged
+      ? join(process.resourcesPath, 'jwplc-vpp')
+      : join(__dirname, '../../resources/jwplc-vpp')
+    void installBundledVpp(packages, bundledVppDir).then((outcome) => {
+      if (outcome.state === 'installed') {
+        logger.info(`Bundled JWPLC VPP ${outcome.version} installed.`)
+        mainWindow?.webContents.send('packages:boards-updated')
+      } else if (outcome.state === 'failed') {
+        logger.warn('Bundled JWPLC VPP could not be installed: ' + outcome.error)
+      }
+    })
+    // Last session's cloud builds. The cloud is the source of truth for those
+    // projects, so nothing here survives a restart; best-effort, since a scratch
+    // directory that will not delete is no reason to refuse to start.
+    void clearCloudBuildRoot().catch((error: unknown) =>
+      logger.warn('Could not clear the cloud build scratch directory: ' + getErrorMessage(error)),
+    )
+    // Put `openplc-cli` on PATH, once. After the window, so a slow filesystem
+    // never delays the app appearing, and best-effort: a convenience command
+    // failing to install is not a reason for the editor not to start.
+    void installCliShimOnFirstRun()
+    // One check about a minute after launch, never blocking it; see modules/updater.
+    updateService.start()
     // Handle the app activation event;
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the
@@ -421,3 +552,59 @@ app
     })
   })
   .catch((err: unknown) => logger.error(getErrorMessage(err)))
+
+/**
+ * Install the `openplc-cli` shim on first run.
+ *
+ * Only the disk-image / translocation case reaches the user: it is the one where
+ * they have to act (move the app to Applications) and where silence would leave
+ * them with a command that never appears and no reason why. Everything else goes
+ * to the log — a PATH hint is useful but not worth a modal at launch.
+ */
+async function installCliShimOnFirstRun(): Promise<void> {
+  // PACKAGED ONLY, and the guard has to be here rather than assumed.
+  //
+  // The shim is generated with `leadingArgs: ['--cli']` and nothing else,
+  // because a packaged build dispatches on that marker inside its own binary. A
+  // DEV launch has no such binary: the shim came out as
+  // `exec .../node_modules/electron/dist/Electron --cli "$@"`, which starts
+  // Electron with no application to run — and Electron with no script HANGS
+  // rather than erroring. So `npm run dev` was quietly installing a command that
+  // never worked, over whichever working one was there before. Observed on a
+  // developer machine, not theorised.
+  if (!app.isPackaged) return
+
+  try {
+    const outcome = await ensureCliShimInstalled({
+      statePath: shimStatePath(app.getPath('userData')),
+      appBinaryPath: process.execPath,
+      // A packaged build dispatches on `--cli` in its own binary; the GUI only
+      // runs first-run install when packaged-shaped, so the marker suffices.
+      leadingArgs: ['--cli'],
+      environment: {
+        platform: process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : 'linux',
+        home: homedir(),
+        pathVariable: process.env.PATH ?? '',
+        localAppData: process.env.LOCALAPPDATA,
+        // The AppImage runtime exports the path of the .AppImage FILE, which is
+        // stable; `process.execPath` is a per-launch mount point.
+        appImagePath: process.env.APPIMAGE,
+      },
+      warn: (message) => {
+        logger.info(`[cli-shim] ${message}`)
+        void dialog.showMessageBox({
+          type: 'info',
+          title: 'Command line tool not installed',
+          message: 'The openplc-cli command could not be installed',
+          detail: message,
+          buttons: ['OK'],
+        })
+      },
+      onDiagnostic: (message) => logger.info(`[cli-shim] ${message}`),
+    })
+    logger.info(`[cli-shim] ${outcome.status}`)
+    if ('hint' in outcome && outcome.hint) logger.info(`[cli-shim] ${outcome.hint}`)
+  } catch (error) {
+    logger.error(`[cli-shim] install failed: ${getErrorMessage(error)}`)
+  }
+}
