@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
+import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
 import { describeVppPinDrift, type VppPackagePin } from '@root/backend/shared/utils/vpp/vpp-package-pin'
 import { useCapabilities, useDevice, usePackages } from '@root/middleware/shared/providers/platform-context'
 import { evaluateVppBackplaneGate, vppGateStateFor } from '@root/middleware/shared/utils/build-gate/vpp-backplane-gate'
@@ -27,6 +28,7 @@ import { DeviceConnectButton } from '../../../../../_molecules/device-connect-bu
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '../../../../../_molecules/modal'
 import { DeviceEditorSlot } from '../../../../../_templates/[editors]/device-editor-slot'
 import { DeviceLicenseStatus } from './components/device-license-status'
+import { HmiDesignerLauncher } from './components/hmi-designer-launcher'
 import { PinMappingTable } from './components/pin-mapping-table'
 
 const Board = memo(function () {
@@ -935,6 +937,7 @@ const Board = memo(function () {
               </div>
             </div>
           )}
+          {hasHmiDisplay(currentBoardInfo) && <HmiDesignerLauncher boardInfo={currentBoardInfo} />}
         </div>
         <div id='board-preview-container' className='flex flex-shrink-0 items-start'>
           <div className='h-[16rem] w-[20rem]'>
