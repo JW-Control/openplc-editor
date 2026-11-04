@@ -1277,7 +1277,8 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
               ) : (
                 discovery.plan.changes.map((change) => (
                   <li key={change.slot}>
-                    <span className='font-semibold'>Slot {change.slot}:</span> {describeSlotChange(change)}
+                    <span className='font-semibold'>{tr('Slot {{slot}}:', { slot: change.slot })}</span>{' '}
+                    {describeSlotChange(change)}
                   </li>
                 ))
               )}

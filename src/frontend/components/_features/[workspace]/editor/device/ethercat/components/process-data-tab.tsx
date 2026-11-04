@@ -80,7 +80,7 @@ const SimpleRow = ({
           {pdo.mandatory === true && <Badge tone='amber'>{tr('Mandatory')}</Badge>}
           {excludedBy !== undefined && (
             <span title={`Excluded by ${excludedBy}`}>
-              <Badge tone='red'>Excluded by {excludedBy}</Badge>
+              <Badge tone='red'>{tr('Excluded by {{excludedBy}}', { excludedBy })}</Badge>
             </span>
           )}
         </div>
@@ -186,7 +186,7 @@ const SimpleSection = ({
           {sorted.length === 0 ? (
             <tr>
               <td colSpan={6} className='px-2 py-6 text-center text-xs text-neutral-500 dark:text-neutral-400'>
-                No {direction.toUpperCase()}PDOs on this slave.
+                {tr('No {{direction}}PDOs on this slave.', { direction: direction.toUpperCase() })}
               </td>
             </tr>
           ) : (
@@ -365,7 +365,7 @@ const ExpertSection = ({
       </div>
       {sorted.length === 0 ? (
         <div className='px-2 py-6 text-center text-xs text-neutral-500 dark:text-neutral-400'>
-          No {direction.toUpperCase()}PDOs on this slave.
+          {tr('No {{direction}}PDOs on this slave.', { direction: direction.toUpperCase() })}
         </div>
       ) : (
         sorted.map((pdo) => {

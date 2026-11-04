@@ -430,7 +430,7 @@ const ModbusServerEditor = () => {
     return (
       <div className='flex h-full w-full items-center justify-center'>
         <p className='text-neutral-500 dark:text-neutral-400'>
-          Configuration for {protocol} servers is not yet available.
+          {tr('Configuration for {{protocol}} servers is not yet available.', { protocol })}
         </p>
       </div>
     )

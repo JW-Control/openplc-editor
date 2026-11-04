@@ -67,7 +67,7 @@ export function UnsavedChangesWarningModal({
             disabled={carryDisabled}
             className='cursor-pointer rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-neutral-500 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-500'
           >
-            Carry to {targetBranchName}
+            {tr('Carry to {{targetBranchName}}', { targetBranchName })}
           </button>
         </div>
       </div>

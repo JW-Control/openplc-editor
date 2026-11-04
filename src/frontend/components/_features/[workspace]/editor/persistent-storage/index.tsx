@@ -116,8 +116,10 @@ const PersistentStorageEditor = () => {
           </div>
           {flushInvalid && (
             <p className='text-xs text-red-600 dark:text-red-400' role='alert'>
-              Use a whole number of seconds between {RETAIN_MIN_FLUSH_SECONDS} and {RETAIN_MAX_FLUSH_SECONDS}. A
-              fraction would be rounded on upload, and the runtime refuses anything outside that range.
+              {tr(
+                'Use a whole number of seconds between {{min}} and {{max}}. A fraction would be rounded on upload, and the runtime refuses anything outside that range.',
+                { min: RETAIN_MIN_FLUSH_SECONDS, max: RETAIN_MAX_FLUSH_SECONDS },
+              )}
             </p>
           )}
           <p id='retain-flush-help' className='text-xs text-neutral-500 dark:text-neutral-400'>

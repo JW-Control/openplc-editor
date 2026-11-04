@@ -718,7 +718,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
             disabled={!isFormValid || !isBlockDifferent}
             onClick={handleBlockSubmit}
           >
-            Ok
+            {tr('Ok')}
           </button>
         </div>
       </ModalContent>

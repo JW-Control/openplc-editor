@@ -122,7 +122,7 @@ export const OpcUaServerEditor = () => {
     return (
       <div className='flex h-full w-full items-center justify-center'>
         <p className='text-neutral-500 dark:text-neutral-400'>
-          Configuration for {protocol} servers is not yet available.
+          {tr('Configuration for {{protocol}} servers is not yet available.', { protocol })}
         </p>
       </div>
     )
@@ -139,7 +139,9 @@ export const OpcUaServerEditor = () => {
   return (
     <div aria-label='Server content container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       <div className='mb-4'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>OPC-UA Server: {serverName}</h2>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('OPC-UA Server: {{serverName}}', { serverName })}
+        </h2>
         <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('Protocol: OPC-UA')}</p>
       </div>
 

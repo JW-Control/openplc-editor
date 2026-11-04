@@ -124,7 +124,7 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            All ({channels.length})
+            {tr('All ({{length}})', { length: channels.length })}
           </button>
           <button
             onClick={() => setFilterDirection('input')}
@@ -135,7 +135,7 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            Inputs ({inputCount})
+            {tr('Inputs ({{inputCount}})', { inputCount })}
           </button>
           <button
             onClick={() => setFilterDirection('output')}
@@ -146,7 +146,7 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            Outputs ({outputCount})
+            {tr('Outputs ({{outputCount}})', { outputCount })}
           </button>
         </div>
 

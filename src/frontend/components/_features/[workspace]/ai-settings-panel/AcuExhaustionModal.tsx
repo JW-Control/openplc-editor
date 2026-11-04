@@ -101,7 +101,7 @@ export const AcuExhaustionModal = ({
           )}
         {isRateLimit && resetLabel && (
           <p className='text-[12px] text-neutral-500 dark:text-neutral-400'>
-            Your usage window resets on {resetLabel}.
+            {tr('Your usage window resets on {{resetLabel}}.', { resetLabel })}
           </p>
         )}
         <div className='mt-2 flex items-center justify-end gap-2'>

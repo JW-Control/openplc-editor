@@ -234,7 +234,7 @@ const DeviceBrowserModal = ({ isOpen, onClose, onSelectDevice, repository }: Dev
                               </div>
                               <div className='flex gap-3 text-xs text-neutral-500 dark:text-neutral-400'>
                                 <span className='font-mono'>{device.type.productCode}</span>
-                                <span>Rev: {device.type.revisionNo}</span>
+                                <span>{tr('Rev: {{revisionNo}}', { revisionNo: device.type.revisionNo })}</span>
                                 <span className='truncate'>from {repoItem.filename}</span>
                               </div>
                             </div>

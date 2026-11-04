@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useDevice } from '@root/middleware/shared/providers/platform-context'
 import { type ReactNode, useEffect, useState } from 'react'
 
@@ -11,7 +12,9 @@ function SlotDetailPane({ children }: { children: ReactNode }) {
 
 function SlotDetailHeading({ slotNumber }: { slotNumber: number }) {
   return (
-    <h3 className='mb-3 font-caption text-base font-semibold text-neutral-950 dark:text-white'>Slot {slotNumber}</h3>
+    <h3 className='mb-3 font-caption text-base font-semibold text-neutral-950 dark:text-white'>
+      {tr('Slot {{slotNumber}}', { slotNumber })}
+    </h3>
   )
 }
 

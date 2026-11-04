@@ -480,7 +480,7 @@ const GlobalVariablesEditor = () => {
         >
           <VariablesCodeEditor code={editorCode} onCodeChange={setEditorCode} shouldUseDarkMode={shouldUseDarkMode} />
 
-          {parseError && <p className='mt-2 text-xs text-red-500'>Erro: {parseError}</p>}
+          {parseError && <p className='mt-2 text-xs text-red-500'>{tr('Erro: {{parseError}}', { parseError })}</p>}
         </div>
       )}
 

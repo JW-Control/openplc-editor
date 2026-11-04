@@ -103,7 +103,7 @@ const DiscoveredModuleTable = ({
                           className='rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700 dark:bg-neutral-700/60 dark:text-neutral-300'
                           title={tr('ESI XML not in repository — import it from the Repository tab before adding.')}
                         >
-                          No XML
+                          {tr('No XML')}
                         </span>
                       )}
                       {notAccepted && (

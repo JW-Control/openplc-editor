@@ -1,4 +1,5 @@
 import { MagnifierIcon } from '@root/frontend/assets/icons/interface/Magnifier'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { buildLibraryTree, type LibraryTreeNode } from '@root/frontend/utils/library-tree'
 import type { SystemLibraryPou } from '@root/middleware/shared/ports/library-types'
@@ -54,7 +55,7 @@ export const ModalBlockLibrary = ({
         <InputWithRef
           className='h-full w-full bg-inherit outline-none'
           id='Search-File'
-          placeholder='Search'
+          placeholder={tr('Search')}
           type='text'
           value={filterText}
           onChange={handleFilterChange}

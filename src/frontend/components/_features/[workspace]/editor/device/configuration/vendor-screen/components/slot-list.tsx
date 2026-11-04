@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { ReactNode } from 'react'
 
 import { slotRowClassName } from './slot-list-helpers'
@@ -40,7 +41,7 @@ function SlotSelectButton({
         <span
           className={`font-caption text-cp-sm text-neutral-950 dark:text-white ${isSelected ? 'font-bold' : 'font-semibold'}`}
         >
-          Slot {slotNumber}
+          {tr('Slot {{slotNumber}}', { slotNumber })}
         </span>
         {moduleName && ioSummary !== undefined && (
           <span className='shrink-0 text-[10px] text-neutral-400 dark:text-neutral-500'>{ioSummary}</span>

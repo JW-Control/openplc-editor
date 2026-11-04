@@ -119,7 +119,7 @@ export const RenameImpactModal = ({
 
           <div className='rounded-md border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800'>
             <div className='mb-3 text-xs font-semibold text-neutral-950 dark:text-white'>
-              Total References: {impact.totalReferences}
+              {tr('Total References: {{totalReferences}}', { totalReferences: impact.totalReferences })}
             </div>
 
             {impact.byPou.size > 0 && (

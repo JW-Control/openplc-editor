@@ -88,7 +88,9 @@ const DevicesTab = ({
           <div className='max-h-[300px] overflow-auto rounded-lg border border-neutral-200 p-3 dark:border-neutral-800'>
             {repositoryError && (
               <div className='mb-3 flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800 dark:bg-red-900/20'>
-                <p className='text-sm text-red-700 dark:text-red-300'>Failed to load repository: {repositoryError}</p>
+                <p className='text-sm text-red-700 dark:text-red-300'>
+                  {tr('Failed to load repository: {{repositoryError}}', { repositoryError })}
+                </p>
                 <button
                   onClick={onRetryRepository}
                   className='text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300'

@@ -274,7 +274,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
 
           {formState.kind === 'unverified' && (
             <p className='text-sm text-amber-600 dark:text-amber-500'>
-              Confirm your email address first. Check the message sent to {formState.email}.
+              {tr('Confirm your email address first. Check the message sent to {{email}}.', { email: formState.email })}
             </p>
           )}
 
@@ -289,7 +289,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
 
         <div className='my-4 flex items-center gap-3'>
           <span className='h-px flex-1 bg-neutral-200 dark:bg-neutral-800' />
-          <span className='text-sm text-neutral-500 dark:text-neutral-400'>Or</span>
+          <span className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('Or')}</span>
           <span className='h-px flex-1 bg-neutral-200 dark:bg-neutral-800' />
         </div>
 

@@ -360,7 +360,7 @@ const PdfPreviewViewer = ({
               ‹
             </button>
             <span className='px-2'>
-              Page {currentPage} of {docState.numPages}
+              {tr('Page {{currentPage}} of {{numPages}}', { currentPage, numPages: docState.numPages })}
             </span>
             <button
               type='button'

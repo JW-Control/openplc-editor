@@ -330,7 +330,7 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
               data-testid='io-group-name-error'
               className='pl-[120px] font-caption text-xs text-red-600 dark:text-red-400'
             >
-              An IO group named "{name.trim()}" already exists on this device.
+              {tr('An IO group named "{{trim}}" already exists on this device.', { trim: name.trim() })}
             </p>
           )}
           <div className='flex items-center gap-2'>
@@ -1011,8 +1011,10 @@ const RemoteDeviceEditor = () => {
     return (
       <div aria-label='Remote device content container' className='flex h-full w-full flex-col overflow-hidden p-4'>
         <div className='mb-4'>
-          <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>Remote Device: {deviceName}</h2>
-          <p className='text-sm text-neutral-600 dark:text-neutral-400'>Protocol: {protocol}</p>
+          <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+            {tr('Remote Device: {{deviceName}}', { deviceName })}
+          </h2>
+          <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('Protocol: {{protocol}}', { protocol })}</p>
         </div>
         <div className='flex flex-1 items-center justify-center rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700'>
           <p className='text-sm text-neutral-500 dark:text-neutral-400'>
@@ -1037,7 +1039,9 @@ const RemoteDeviceEditor = () => {
   return (
     <div aria-label='Remote device content container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       <div className='mb-4'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>Remote Device: {deviceName}</h2>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('Remote Device: {{deviceName}}', { deviceName })}
+        </h2>
         <p className='text-sm text-neutral-600 dark:text-neutral-400'>
           Protocol: Modbus {transport === 'tcp' ? '(TCP/IP)' : '(RTU/Serial)'}
         </p>

@@ -236,7 +236,7 @@ const EtherCATModuleEditor = ({ busName, deviceId, moduleId }: EtherCATModuleEdi
         <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
           {module.name}
           <span className='ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400'>
-            Slot {module.slot} · {module.ident}
+            {tr('Slot {{slot}} · {{ident}}', { slot: module.slot, ident: module.ident })}
           </span>
         </h2>
         <p className='mt-0.5 text-xs text-neutral-500 dark:text-neutral-400'>on {device.name}</p>

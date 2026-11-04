@@ -714,7 +714,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                               </p>
                               {isResolved ? (
                                 <span className='shrink-0 rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-bold text-green-500'>
-                                  RESOLVED ({chosenSide})
+                                  {tr('RESOLVED ({{chosenSide}})', { chosenSide: chosenSide ?? '' })}
                                 </span>
                               ) : (
                                 <span className='shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-500'>
@@ -880,7 +880,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
           />
           <div className='relative w-[440px] rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900'>
             <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>
-              Merge {sourceBranch} into {targetBranch}?
+              {tr('Merge {{sourceBranch}} into {{targetBranch}}?', { sourceBranch, targetBranch })}
             </h3>
             <p className='mb-4 text-xs text-neutral-600 dark:text-neutral-400'>
               Choose whether to delete{' '}

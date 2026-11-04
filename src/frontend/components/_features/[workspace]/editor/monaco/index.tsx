@@ -1419,7 +1419,7 @@ void loop()
               onClick={handleRenamePou}
               disabled={!newName || newName === ''}
             >
-              Ok
+              {tr('Ok')}
             </button>
           </div>
         </ModalContent>

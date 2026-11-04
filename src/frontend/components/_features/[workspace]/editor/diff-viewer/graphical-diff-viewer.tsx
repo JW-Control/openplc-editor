@@ -91,7 +91,7 @@ function VariableDiffSection({ entries, collapsible = false }: { entries: VarDif
           className='flex w-full items-center gap-1 bg-neutral-100/50 px-2 py-0.5 text-[9px] text-neutral-400 transition-colors hover:bg-neutral-200/50 dark:bg-neutral-800/50 dark:text-neutral-500 dark:hover:bg-neutral-700/50'
         >
           {open ? <ChevronDown className='h-3 w-3' /> : <ChevronRight className='h-3 w-3' />}
-          Variables ({entries.length})
+          {tr('Variables ({{length}})', { length: entries.length })}
         </button>
       ) : (
         <div className='bg-neutral-100/50 px-2 py-0.5 text-[9px] text-neutral-400 dark:bg-neutral-800/50 dark:text-neutral-500'>

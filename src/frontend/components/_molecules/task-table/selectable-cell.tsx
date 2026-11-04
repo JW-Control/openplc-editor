@@ -174,7 +174,7 @@ const SelectableIntervalCell = ({ getValue, row: { index }, column: { id }, tabl
             onClick={handleSave}
             className='h-full w-[236px] rounded-lg bg-brand text-center font-medium text-white'
           >
-            Ok
+            {tr('Ok')}
           </button>
         </div>
       </ModalContent>

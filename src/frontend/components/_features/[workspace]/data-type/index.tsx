@@ -402,7 +402,9 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
                 cursorPosition={codeCursorPosition}
               />
             </div>
-            {parseError && <p className='mt-2 shrink-0 text-xs text-red-500'>Error: {parseError}</p>}
+            {parseError && (
+              <p className='mt-2 shrink-0 text-xs text-red-500'>{tr('Error: {{parseError}}', { parseError })}</p>
+            )}
           </>
         )}
       </div>

@@ -631,7 +631,7 @@ export const VariableConfigModal = ({
             <div className='flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <div className='flex items-center justify-between'>
                 <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                  Field Permissions ({fieldConfigs.length} fields)
+                  {tr('Field Permissions ({{length}} fields)', { length: fieldConfigs.length })}
                 </h4>
                 <button
                   type='button'

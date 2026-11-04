@@ -632,7 +632,9 @@ const EtherCATEditor = () => {
     <div aria-label='EtherCAT editor container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       {/* Header */}
       <div className='mb-4 shrink-0'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>EtherCAT Bus: {deviceName}</h2>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('EtherCAT Bus: {{deviceName}}', { deviceName })}
+        </h2>
         <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('EtherCAT Master Configuration')}</p>
       </div>
 

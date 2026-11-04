@@ -317,7 +317,7 @@ function ManifestIoTable({ section, moduleSystem }: IoTableLayoutProps) {
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
                 </svg>
                 <span className='font-caption text-cp-sm font-semibold text-neutral-950 dark:text-white'>
-                  Slot {slot}
+                  {tr('Slot {{slot}}', { slot })}
                 </span>
                 <span className='font-caption text-cp-sm font-medium text-neutral-600 dark:text-neutral-400'>
                   {group.moduleName}

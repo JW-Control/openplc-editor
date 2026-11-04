@@ -364,7 +364,9 @@ const ChangeVersionModal = ({ open, onOpenChange, currentVersion, onFinished }: 
             )}
 
             {currentVersion && (
-              <span className='text-xs text-neutral-500 dark:text-neutral-400'>Currently running {currentVersion}</span>
+              <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                {tr('Currently running {{currentVersion}}', { currentVersion })}
+              </span>
             )}
           </div>
 

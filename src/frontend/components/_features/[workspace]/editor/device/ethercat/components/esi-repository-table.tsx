@@ -48,7 +48,7 @@ const ESIRepositoryTable = ({ repository, onRemoveItem, onClearAll, isLoading = 
       {/* Header with count and clear button */}
       <div className='flex items-center justify-between'>
         <span className='text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-          Loaded Files ({repository.length}) - {totalDevices} device(s)
+          {tr('Loaded Files ({{length}}) - {{totalDevices}} device(s)', { length: repository.length, totalDevices })}
         </span>
         <button
           onClick={() => void onClearAll()}
@@ -189,7 +189,7 @@ const RepositoryItemRow = ({ item, isExpanded, onToggleExpand, onRemove }: Repos
                   {device.type.productCode}
                 </span>
                 <span className='font-mono text-xs text-neutral-500 dark:text-neutral-400'>
-                  Rev: {device.type.revisionNo}
+                  {tr('Rev: {{revisionNo}}', { revisionNo: device.type.revisionNo })}
                 </span>
                 {device.groupName && (
                   <span className='rounded bg-neutral-200 px-1.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300'>

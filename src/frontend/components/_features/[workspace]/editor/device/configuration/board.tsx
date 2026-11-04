@@ -615,7 +615,7 @@ const Board = memo(function () {
                 )}
                 {groupedBoards.length === 0 ? (
                   <div className='px-3 py-6 text-center text-[11px] italic text-neutral-500 dark:text-neutral-400'>
-                    No devices match “{deviceSearchTerm}”.
+                    {tr('No devices match “{{deviceSearchTerm}}”.', { deviceSearchTerm })}
                   </div>
                 ) : (
                   groupedBoards.map(({ vendor, boards }) => (
@@ -766,7 +766,9 @@ const Board = memo(function () {
                 onDisconnect={handleConnectToRuntime}
               >
                 {connectionStatus === 'connected' && plcStatus && (
-                  <span className='text-xs text-neutral-600 dark:text-neutral-400'>PLC: {plcStatus}</span>
+                  <span className='text-xs text-neutral-600 dark:text-neutral-400'>
+                    {tr('PLC: {{plcStatus}}', { plcStatus })}
+                  </span>
                 )}
                 {/* Same affordance as the serial connect row below: renders
                     nothing at all unless this board's VPP is sold licensed AND a
@@ -1021,17 +1023,22 @@ const Board = memo(function () {
       <Modal open={showPythonWarning} onOpenChange={setShowPythonWarning}>
         <ModalContent className='h-fit w-[500px]'>
           <ModalHeader>
-            <ModalTitle>{unsupportedBlocksLabel} Function Blocks Not Supported</ModalTitle>
+            <ModalTitle>
+              {tr('{{blocks}} Function Blocks Not Supported', { blocks: unsupportedBlocksLabel })}
+            </ModalTitle>
           </ModalHeader>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              The selected target ({pendingBoardChange?.formattedBoard}) does not support {unsupportedBlocksLabel}{' '}
-              Function Blocks.
+              {tr('The selected target ({{board}}) does not support {{blocks}} Function Blocks.', {
+                board: pendingBoardChange?.formattedBoard ?? '',
+                blocks: unsupportedBlocksLabel,
+              })}
             </p>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              Your project contains {unsupportedBlocksLabel} Function Blocks that will cause compilation to fail on this
-              target. To use this target, you must remove all {unsupportedBlocksLabel} Function Blocks from your
-              project.
+              {tr(
+                'Your project contains {{blocks}} Function Blocks that will cause compilation to fail on this target. To use this target, you must remove all {{blocks}} Function Blocks from your project.',
+                { blocks: unsupportedBlocksLabel },
+              )}
             </p>
           </div>
           <ModalFooter className='flex justify-end gap-2'>
@@ -1076,13 +1083,15 @@ const Board = memo(function () {
           </ModalHeader>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              The selected target ({pendingBoardChange?.formattedBoard}) does not support{' '}
-              {v4FeaturesAffected.hasServers && v4FeaturesAffected.hasRemoteDevices
-                ? 'Modbus Server and Remote IO configurations'
-                : v4FeaturesAffected.hasServers
-                  ? 'Modbus Server configuration'
-                  : 'Remote IO configuration'}
-              .
+              {tr('The selected target ({{board}}) does not support {{features}}.', {
+                board: pendingBoardChange?.formattedBoard ?? '',
+                features:
+                  v4FeaturesAffected.hasServers && v4FeaturesAffected.hasRemoteDevices
+                    ? tr('Modbus Server and Remote IO configurations')
+                    : v4FeaturesAffected.hasServers
+                      ? tr('Modbus Server configuration')
+                      : tr('Remote IO configuration'),
+              })}
             </p>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
               Your project contains{' '}

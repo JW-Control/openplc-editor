@@ -157,7 +157,7 @@ const DiagnosticsTab = ({
             <div className='mb-4 flex items-center justify-between'>
               <div className='flex items-center gap-4'>
                 <span className='text-sm text-neutral-700 dark:text-neutral-300'>
-                  Found {matchCounts.total} device(s):
+                  {tr('Found {{total}} device(s):', { total: matchCounts.total })}
                 </span>
                 <span className='text-xs text-green-600 dark:text-green-400'>{matchCounts.exact} exact</span>
                 <span className='text-xs text-yellow-600 dark:text-yellow-400'>{matchCounts.partial} partial</span>

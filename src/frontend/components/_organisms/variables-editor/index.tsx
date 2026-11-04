@@ -1363,7 +1363,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
               pouName={editor.meta.name}
             />
 
-            {parseError && <p className='mt-2 text-xs text-red-500'>Error: {parseError}</p>}
+            {parseError && <p className='mt-2 text-xs text-red-500'>{tr('Error: {{parseError}}', { parseError })}</p>}
           </div>
         )}
       </div>
