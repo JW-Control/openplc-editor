@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect } from 'react'
 
 type DiscardConfirmationModalProps = {
@@ -46,7 +47,7 @@ export function DiscardConfirmationModal({
             disabled={isLoading}
             className='rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={onConfirm}

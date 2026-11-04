@@ -10,12 +10,16 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // ---------------------------------------------------------------------------
 // Layer definitions
 // ---------------------------------------------------------------------------
 
 type LayerName =
+  | 'cli'
+  | 'backend-editor'
+  | 'main'
   | 'assets'
   | 'utils'
   | 'data'
@@ -108,6 +112,68 @@ const LAYER_RULES: Record<LayerName, LayerRule> = {
     name: 'Components (frontend/components/)',
     allowedDeps: ['ports', 'provider', 'store', 'hooks', 'services', 'components', 'data', 'utils', 'assets'],
   },
+  main: {
+    name: 'Main (main/) — the Electron main process entry point',
+    /**
+     * A process entry point, so it may reach every desktop layer. Mapped for the
+     * same reason `cli` is: unmapped directories are skipped, and leaving the two
+     * entry points invisible meant nothing checked what they reached into.
+     */
+    allowedDeps: [
+      'ports',
+      'provider',
+      'store',
+      'services',
+      'utils',
+      'data',
+      'assets',
+      'types',
+      'backend-shared',
+      'backend-editor',
+      'adapters',
+      'cli',
+      'main',
+    ],
+  },
+  'backend-editor': {
+    name: 'Backend Editor (backend/editor/) — desktop main-process modules',
+    /**
+     * Mapped so the CLI's imports of it can be checked. It was unmapped, and an
+     * unmapped directory is SKIPPED — which is why 36 new CLI files sailed
+     * through this gate. `main/` is still unmapped for the same historical
+     * reason; mapping that too is a follow-up, not this change.
+     */
+    allowedDeps: ['ports', 'provider', 'utils', 'data', 'types', 'backend-shared', 'backend-editor', 'main'],
+  },
+  cli: {
+    name: 'CLI (cli/) — the headless entry point',
+    /**
+     * The CLI is a process entry point, like `main/`, so it may reach the
+     * platform layers a main process reaches. It is listed rather than left
+     * unmapped because unmapped files are SKIPPED: 36 new files were invisible
+     * to this gate, and the import it should have flagged was right there — a
+     * Node/Electron-main process importing the renderer's Zustand singleton.
+     *
+     * `store` is allowed deliberately and narrowly: the CLI hydrates the real
+     * store so the editor's own resolvers (alias resolution, the debug-spec
+     * resolver) run against the same state the GUI gives them. Reimplementing
+     * those is the drift this whole effort exists to prevent.
+     */
+    allowedDeps: [
+      'ports',
+      'provider',
+      'store',
+      'services',
+      'utils',
+      'data',
+      'assets',
+      'types',
+      'backend-shared',
+      'backend-editor',
+      'adapters',
+      'cli',
+    ],
+  },
   architecture: {
     name: 'Architecture (__architecture__/)',
     allowedDeps: [],
@@ -118,7 +184,12 @@ const LAYER_RULES: Record<LayerName, LayerRule> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const SRC_ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..')
+// `new URL(...).pathname` yields a URL-encoded path that, on win32, carries a
+// leading slash before the drive letter (/C:/Users/...). Passing that into
+// resolve() prepends the current drive, producing a doubled C:\C:\Users\...
+// prefix — which made validate:arch fail to even scan the tree. fileURLToPath
+// does the file:// -> filesystem conversion correctly on every platform.
+const SRC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 function collectFiles(dir: string, ext: string[]): string[] {
   const results: string[] = []
@@ -159,12 +230,19 @@ function getLayer(filePath: string): LayerName | null {
   // reachable from adapters/backend/main on both platforms — same `utils` rule
   // set, byte-identical between repos.
   if (rel.startsWith('middleware/shared/runtime-auth/')) return 'utils'
+  // Vendor configurator wire protocol and host client; pure, byte-identical between repos.
+  if (rel.startsWith('middleware/shared/vendor-document/')) return 'utils'
   if (rel.match(/^middleware\/adapters\/[^/]+\/components\//)) return 'adapter-components'
   if (rel.startsWith('middleware/adapters/')) return 'adapters'
 
   // Backend layers
   if (rel.startsWith('backend/shared/')) return 'backend-shared'
   if (rel.startsWith('backend/web/')) return 'backend-web'
+
+  // The headless CLI entry point (DOPE-567).
+  if (rel.startsWith('cli/')) return 'cli'
+  if (rel.startsWith('backend/editor/')) return 'backend-editor'
+  if (rel.startsWith('main/')) return 'main'
 
   // Frontend layers
   if (rel.startsWith('frontend/store/')) return 'store'
@@ -180,36 +258,25 @@ function getLayer(filePath: string): LayerName | null {
   return null
 }
 
-/** Extract import/export-from paths from a TypeScript source string */
+/**
+ * Every `import ... from '...'` / `export ... from '...'` / bare `import '...'`,
+ * with the line it starts on.
+ *
+ * Scans the whole source rather than line by line: a MULTI-LINE import — the
+ * default once a statement names more than a couple of symbols — puts the
+ * `import` keyword and the module path on different lines, so a per-line regex
+ * silently sees neither. That blind spot hid real violations of these very rules,
+ * which is worse than having no gate, because the gate reported success.
+ */
 function extractImports(source: string): { path: string; line: number }[] {
   const results: { path: string; line: number }[] = []
-  const lines = source.split('\n')
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-
-    // Static imports: import ... from '...'
-    // Re-exports:     export ... from '...'
-    const staticMatch = line.match(/(?:import|export)\s+.*?\s+from\s+['"]([^'"]+)['"]/)
-    if (staticMatch) {
-      results.push({ path: staticMatch[1], line: i + 1 })
-      continue
-    }
-
-    // Side-effect imports: import '...'
-    const sideEffectMatch = line.match(/^\s*import\s+['"]([^'"]+)['"]/)
-    if (sideEffectMatch) {
-      results.push({ path: sideEffectMatch[1], line: i + 1 })
-      continue
-    }
-
-    // Dynamic imports: import('...')
-    const dynamicMatch = line.match(/import\(\s*['"]([^'"]+)['"]\s*\)/)
-    if (dynamicMatch) {
-      results.push({ path: dynamicMatch[1], line: i + 1 })
-    }
+  const pattern = /(?:^|\n)\s*(?:import|export)\b[\s\S]*?from\s+['"]([^'"]+)['"]|(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(source)) !== null) {
+    const path = match[1] ?? match[2]
+    if (!path) continue
+    results.push({ path, line: source.slice(0, match.index).split('\n').length })
   }
-
   return results
 }
 
@@ -247,7 +314,16 @@ function tryResolveFile(base: string): string | null {
 }
 
 function resolveImport(importPath: string, fromFile: string): string | null {
-  // Only check relative imports (within src/)
+  // `@root/*` is the project's alias for `src/*`. Resolving it matters as much as
+  // resolving a relative path: skipping it made every aliased import invisible to
+  // this gate, and newer code uses the alias far more than `../..` chains — so a
+  // layer violation written as `@root/frontend/store` passed silently.
+  if (importPath.startsWith('@root/')) {
+    const resolved = join(SRC_ROOT, importPath.slice('@root/'.length))
+    return tryResolveFile(resolved)
+  }
+
+  // Otherwise only relative imports are within src/.
   if (!importPath.startsWith('.')) return null
 
   const dir = dirname(fromFile)
@@ -273,12 +349,123 @@ function resolveImport(importPath: string, fromFile: string): string | null {
  * layer rule permits.
  */
 const KNOWN_EXCEPTIONS: Record<string, LayerName[]> = {
+  // ---------------------------------------------------------------------------
+  // Pre-existing, surfaced by resolving `@root/*` (DOPE-567)
+  //
+  // This gate only ever resolved RELATIVE imports, so every `@root/...` import
+  // was invisible to it — and newer code uses the alias far more than `../..`
+  // chains. Teaching `resolveImport` the alias was needed to check the CLI at
+  // all, and it revealed these 22 files, none of them touched by that work.
+  //
+  // Listed rather than silently re-hidden: each one is a real layer crossing
+  // that predates the alias being resolved, and they belong in a focused
+  // follow-up (mostly the XML generators reaching into `store`/`components`, the
+  // EtherCAT screens reaching into `backend/shared`, and `types/IPC/*` importing
+  // schema types from `backend/shared`).
+  // ---------------------------------------------------------------------------
+  'frontend/components/_features/[workspace]/editor/device/ethercat/components/advanced-tab.tsx': ['backend-shared'],
+  'frontend/components/_features/[workspace]/editor/device/ethercat/components/device-configuration-form.tsx': [
+    'backend-shared',
+  ],
+  'frontend/components/_features/[workspace]/editor/device/ethercat/components/discovered-device-table.tsx': [
+    'backend-shared',
+  ],
+  'frontend/components/_features/[workspace]/editor/device/ethercat/components/esi-device-info.tsx': ['backend-shared'],
+  'frontend/components/_features/[workspace]/editor/device/ethercat/components/global-settings-tab.tsx': [
+    'backend-shared',
+  ],
+  'frontend/components/_features/[workspace]/editor/device/ethercat/index.tsx': ['backend-shared'],
+  'frontend/hooks/use-device-configuration.ts': ['backend-shared', 'components'],
+  'frontend/utils/PLC/xml-generator/old-editor/language/fbd-xml.ts': ['components', 'store'],
+  'frontend/utils/PLC/xml-generator/old-editor/language/ladder-xml.ts': ['components', 'store'],
+  'frontend/utils/PLC/xml-generator/old-editor/pou-xml.ts': ['store'],
+  'frontend/utils/PLC/xml-parser/language/fbd-xml.ts': ['components', 'store'],
+  'frontend/utils/PLC/xml-parser/language/ladder-xml.ts': ['components', 'store'],
+  'frontend/utils/device.ts': ['backend-shared'],
+  'types/IPC/pou-service/create-pou-file.ts': ['backend-shared'],
+  'types/IPC/pou-service/index.ts': ['backend-shared'],
+  'types/IPC/project-service/create-project.ts': ['backend-shared'],
+  'types/IPC/project-service/index.ts': ['backend-shared'],
+  'types/IPC/project-service/read-project.ts': ['backend-shared'],
+  'backend/editor/contracts/types/modules/ipc/main.ts': ['store'],
+
   // FBD paste/duplicate helpers — needs molecule-level buildGenericNode from components
   'frontend/store/slices/fbd/utils/index.ts': ['components'],
   // Ladder paste/duplicate helpers — needs nodesBuilder from component atoms
   'frontend/store/slices/ladder/utils/index.ts': ['components'],
   // Ladder slice — needs nodesBuilder + defaultCustomNodesStyles for rung creation
   'frontend/store/slices/ladder/slice.ts': ['components'],
+  // AI rung-spec builder — needs nodesBuilder, connectNodes and
+  // updateDiagramElementsPosition to turn a logical rung spec into a real
+  // xyflow graph, same as the interactive editor does
+  'frontend/store/slices/ladder/utils/rung-spec.ts': ['components'],
+  // Device CONNECT flow (D72) — resolves RTU params from the board debug spec
+  // via the shared `resolveDebugConnection` resolver, same as the activity bar's
+  // debugger/post-flash paths.
+  'frontend/hooks/use-device-connect.ts': ['backend-shared'],
+  // Baremetal run/stop mirror — maps the PROTOCOL's run/stop and switch wire
+  // values (`PlcRuntimeState` / `PlcSwitchPosition`, defined next to the RTU
+  // client that reads them) onto the store's `PlcStatus` union. Same D72 device
+  // link as the sibling entry above. The alternative is either duplicating the
+  // numeric constants in the frontend or hoisting the two enums into
+  // ports/types.ts; both were judged worse than one documented import.
+  'frontend/hooks/use-device-plc-state.ts': ['backend-shared'],
+  // Run/stop control port — `PlcControlResult` is the FC 0x4b acknowledgement
+  // shape, defined with the protocol types it is built from (`PlcRuntimeState`).
+  // Type-only import; hoisting it into ports/types.ts would drag the wire enums
+  // along with it, so the contract stays where the protocol is described.
+  'middleware/shared/ports/debugger-port.ts': ['backend-shared'],
+  // Device connect/debug resolution — interprets the board's declarative `debug`
+  // spec (backend/shared/hardware/debug-spec.ts), which is the ONE place that spec
+  // is read. The alternative is a second interpreter in the frontend, which is how
+  // Connect and the debugger came to disagree about what a spec meant.
+  'frontend/services/device-link-resolution.ts': ['backend-shared'],
+  // Activity bar — resolves the same spec for the post-upload reconnect and the
+  // debug session. Pre-existing; it was invisible until `extractImports` learned
+  // to read multi-line imports.
+  'frontend/components/_organisms/workspace-activity-bar/default.tsx': ['backend-shared'],
+  // ---------------------------------------------------------------------------
+  // VPP (Vendor Plugin Package) — DOPE-637/638
+  //
+  // `VppPackagePin` is `z.infer` of the pin schema in the project-file
+  // configuration, so backend/shared is its home: it is part of the shape a
+  // project persists, and the three layers below only name it. `screen-actions`
+  // is the one parser for a vendor screen's declarative actions, for the same
+  // reason `device-link-resolution.ts` is the one reader of a debug spec — a
+  // second interpreter is how two of them come to disagree.
+  //
+  // Same judgement as `ports/debugger-port.ts` above: hoisting these into
+  // ports/types.ts would drag the schema they are inferred from along with it.
+  // ---------------------------------------------------------------------------
+  // Pin drift warning — compares the pin a project recorded against the package
+  // actually installed; `describeVppPinDrift` is the one place that is worded.
+  'frontend/components/_features/[workspace]/editor/device/configuration/board.tsx': ['backend-shared'],
+  // Vendor screen actions — parses and runs a screen's declarative actions.
+  'frontend/components/_features/[workspace]/editor/device/configuration/vendor-screen/screen-actions.tsx': [
+    'backend-shared',
+  ],
+  // Type-only: the store holds the recorded pin per board.
+  'frontend/store/slices/device/types.ts': ['backend-shared'],
+  // Type-only: the package port answers with the pin a project would record.
+  'middleware/shared/ports/package-port.ts': ['backend-shared'],
+  // Type-only: the runtime port returns a plugin command's outcome.
+  'middleware/shared/ports/runtime-port.ts': ['backend-shared'],
+  // Type-only: BoardInfo carries the pin of the package a VPP board came from.
+  'middleware/shared/ports/types.ts': ['backend-shared'],
+
+  // PLCopen export — needs the shared PlcopenXmlGenerator composing function
+  // (backend/shared/utils/PLC/plcopen-xml-generator.ts) to turn the converted
+  // project data into XML before handing it to the platform port. No
+  // frontend-reachable layer re-exports this function today; the
+  // conversion logic itself stays local (mirrors compiler-adapter.ts's
+  // portToSchemaProjectData) and has no other backend-shared dependency.
+  'frontend/services/export-actions.ts': ['backend-shared'],
+  // I/O image diagnostics — reads the compile pipeline's own sizer and the two
+  // emitters it feeds (`computeIoImage`, `generateImageConf`,
+  // `generateProcessImageDefines`). The point of the tool is to answer what a
+  // BUILD would produce, so calling anything other than the functions the build
+  // calls would make it a second opinion instead of a preview.
+  'frontend/services/io-diagnostics/index.ts': ['backend-shared'],
 }
 
 // ---------------------------------------------------------------------------
@@ -346,22 +533,61 @@ function validate(): Violation[] {
   return violations
 }
 
+/**
+ * Tests inject the store and the platform ports instead of mocking them, so a
+ * mock cannot bypass the Provider: `createTestStore()` / `createStoreWrapper()`
+ * from `frontend/store/testing` and a `PlatformProvider` with test ports.
+ */
+function validateTestInjection(): { file: string; line: number; mocked: string }[] {
+  const found: { file: string; line: number; mocked: string }[] = []
+  const tests = collectFiles(SRC_ROOT, ['.ts', '.tsx']).filter(
+    (f) => !f.includes('__architecture__/') && (f.includes('__tests__/') || /\.(test|spec)\.[jt]sx?$/.test(f)),
+  )
+  const mockCall = /\b(?:vi|jest)\.(?:mock|doMock)\(\s*['"]([^'"]+)['"]/g
+
+  for (const file of tests) {
+    const source = readFileSync(file, 'utf-8')
+    let match: RegExpExecArray | null
+    while ((match = mockCall.exec(source)) !== null) {
+      const resolved = resolveImport(match[1], file)
+      if (!resolved) continue
+      const target = relative(SRC_ROOT, resolved).replace(/\\/g, '/')
+      const mocksStore = target.startsWith('frontend/store/') && !target.startsWith('frontend/store/slices/')
+      if (mocksStore || target.startsWith('middleware/shared/providers/')) {
+        found.push({
+          file: relative(SRC_ROOT, file).replace(/\\/g, '/'),
+          line: source.slice(0, match.index).split('\n').length,
+          mocked: match[1],
+        })
+      }
+    }
+  }
+  return found
+}
+
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 
 const violations = validate()
+const mockedInjections = validateTestInjection()
 
-if (violations.length === 0) {
+if (violations.length === 0 && mockedInjections.length === 0) {
   //
   console.log('Architecture validation passed. No layer violations found.')
   process.exit(0)
 } else {
-  console.error(`Architecture validation FAILED. ${violations.length} violation(s) found:\n`)
+  console.error(`Architecture validation FAILED. ${violations.length + mockedInjections.length} violation(s) found:\n`)
   for (const v of violations) {
     console.error(`  ${v.file}:${v.line}`)
     console.error(`    Import: ${v.importPath}`)
     console.error(`    Rule:   ${v.message}`)
+    console.error()
+  }
+  for (const m of mockedInjections) {
+    console.error(`  ${m.file}:${m.line}`)
+    console.error(`    Mock:   ${m.mocked}`)
+    console.error('    Rule:   tests inject the store and platform ports; they must not module-mock them')
     console.error()
   }
   process.exit(1)

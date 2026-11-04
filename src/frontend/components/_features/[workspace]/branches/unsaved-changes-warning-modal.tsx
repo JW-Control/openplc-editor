@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect } from 'react'
 
 export type CarryCheckState = 'loading' | 'available' | 'conflict' | 'error'
@@ -38,7 +39,7 @@ export function UnsavedChangesWarningModal({
     <div className='fixed inset-0 z-50 flex items-center justify-center'>
       <div className='absolute inset-0 bg-black/40' onClick={onCancel} />
       <div className='relative w-96 rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900'>
-        <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>Unsaved Changes</h3>
+        <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>{tr('Unsaved Changes')}</h3>
         <p className='mb-3 text-xs text-neutral-600 dark:text-neutral-400'>
           You have uncommitted changes. What would you like to do with them when switching to{' '}
           <strong>{targetBranchName}</strong>?
@@ -53,20 +54,20 @@ export function UnsavedChangesWarningModal({
             onClick={onCancel}
             className='cursor-pointer rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={onDiscard}
             className='cursor-pointer rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-600'
           >
-            Discard & Switch
+            {tr('Discard & Switch')}
           </button>
           <button
             onClick={onCarry}
             disabled={carryDisabled}
             className='cursor-pointer rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-neutral-500 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-500'
           >
-            Carry to {targetBranchName}
+            {tr('Carry to {{targetBranchName}}', { targetBranchName })}
           </button>
         </div>
       </div>
@@ -79,7 +80,7 @@ function CarryStatusLine({ state, conflictedFiles }: { state: CarryCheckState; c
     return (
       <p className='flex items-center gap-2 text-neutral-500 dark:text-neutral-400'>
         <span className='inline-block h-3 w-3 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent' />
-        Checking if changes can be carried…
+        {tr('Checking if changes can be carried…')}
       </p>
     )
   }
@@ -87,7 +88,7 @@ function CarryStatusLine({ state, conflictedFiles }: { state: CarryCheckState; c
   if (state === 'available') {
     return (
       <p className='text-emerald-600 dark:text-emerald-400'>
-        Carry available — changes will follow you to the new branch.
+        {tr('Carry available — changes will follow you to the new branch.')}
       </p>
     )
   }
@@ -95,7 +96,7 @@ function CarryStatusLine({ state, conflictedFiles }: { state: CarryCheckState; c
   if (state === 'error') {
     return (
       <p className='text-amber-600 dark:text-amber-400'>
-        Could not check for conflicts. You can still discard changes or cancel.
+        {tr('Could not check for conflicts. You can still discard changes or cancel.')}
       </p>
     )
   }

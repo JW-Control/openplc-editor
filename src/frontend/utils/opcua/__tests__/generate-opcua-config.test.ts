@@ -195,6 +195,30 @@ describe('generateOpcUaConfig', () => {
     expect(profiles[0].name).toBe('None-None')
   })
 
+  // Parse a generated config for its anonymous_role fields, failing the test
+  // loudly on a null result instead of asserting non-null, and letting the
+  // return-type annotation type the parsed value instead of an `as` cast.
+  const parseAnonymousRoleConfig = (
+    json: string | null,
+  ): Array<{ config: { server: { security_profiles: Array<{ anonymous_role: string }> } } }> => {
+    if (json === null) throw new Error('expected generateOpcUaConfig to return JSON, got null')
+    return JSON.parse(json)
+  }
+
+  it('defaults the anonymous session role to viewer when unset', () => {
+    const cfg = baseServerConfig()
+    // baseServerConfig's profile carries no anonymousRole (older projects).
+    const parsed = parseAnonymousRoleConfig(generateOpcUaConfig([makePLCServer(cfg)], debugMapJson([]), []))
+    expect(parsed[0].config.server.security_profiles[0].anonymous_role).toBe('viewer')
+  })
+
+  it('passes an explicit anonymous session role through to the runtime config', () => {
+    const cfg = baseServerConfig()
+    cfg.securityProfiles[0].anonymousRole = 'engineer'
+    const parsed = parseAnonymousRoleConfig(generateOpcUaConfig([makePLCServer(cfg)], debugMapJson([]), []))
+    expect(parsed[0].config.server.security_profiles[0].anonymous_role).toBe('engineer')
+  })
+
   it('maps security config with trusted certificates', () => {
     const cfg = baseServerConfig()
     cfg.security.trustedClientCertificates = [{ id: 'c1', pem: '-----BEGIN-----\n...' }]
@@ -459,15 +483,172 @@ describe('generateOpcUaConfig', () => {
     expect(parsed[0].config.address_space.arrays.length).toBe(0)
   })
 
-  it('collects multiple OpcUaConfigErrors and throws combined', () => {
+  // Regression: openplc-editor#745 — an ARRAY OF <user-defined type> has
+  // no leaf of its own in the debug map, and the variable picker only
+  // pre-expands the elements into `fields` for small 1-D arrays. A bigger
+  // (or multi-dimensional) UDT array therefore arrived here as a bare
+  // `array` node and failed the whole build with "Cannot resolve OPC-UA
+  // array address" on compile+download.
+  it('publishes an array of a UDT as a structure even without stored fields', () => {
     const cfg = baseServerConfig()
     cfg.addressSpace.nodes = [
-      makeNode({ pouName: 'MAIN', variablePath: 'GHOST_A' }),
-      makeNode({ pouName: 'MAIN', variablePath: 'GHOST_B' }),
+      makeNode({
+        nodeType: 'array',
+        variablePath: 'TANKS',
+        variableType: 'ARRAY[1..2] OF TANK',
+        elementType: 'TANK',
+        arrayLength: 2,
+        fields: [], // picker skipped expansion → no fields saved
+      }),
     ]
-    expect(() =>
-      generateOpcUaConfig([makePLCServer(cfg)], debugMapJson([{ path: 'X', type: 'INT', arr: 0, elem: 0 }]), instances),
-    ).toThrow(/Failed to resolve 2 OPC-UA variable/)
+    const json = generateOpcUaConfig(
+      [makePLCServer(cfg)],
+      debugMapJson([
+        { path: 'INSTANCE0.TANKS[1].LEVEL', type: 'INT', arr: 0, elem: 20 },
+        { path: 'INSTANCE0.TANKS[1].FLOW', type: 'DINT', arr: 0, elem: 21, size: 4 },
+        { path: 'INSTANCE0.TANKS[2].LEVEL', type: 'INT', arr: 0, elem: 22 },
+        { path: 'INSTANCE0.TANKS[2].FLOW', type: 'DINT', arr: 0, elem: 23, size: 4 },
+      ]),
+      instances,
+    )!
+    const parsed = JSON.parse(json) as Array<{
+      config: {
+        address_space: {
+          arrays: unknown[]
+          structures: Array<{
+            node_id: string
+            fields: Array<{
+              name: string
+              fields?: Array<{ name: string; datatype: string; size: number; arr: number; elem: number }>
+            }>
+          }>
+        }
+      }
+    }>
+    const { arrays, structures } = parsed[0].config.address_space
+    expect(arrays.length).toBe(0)
+    expect(structures.length).toBe(1)
+    expect(structures[0].node_id).toBe('ns=1;s=MY_VAR')
+    expect(structures[0].fields.map((f) => f.name)).toEqual(['[1]', '[2]'])
+    expect(structures[0].fields[0].fields).toEqual([
+      {
+        name: 'LEVEL',
+        datatype: 'INT',
+        size: 2,
+        arr: 0,
+        elem: 20,
+        permissions: { viewer: 'r', operator: 'rw', engineer: 'rw' },
+      },
+      {
+        name: 'FLOW',
+        datatype: 'DINT',
+        size: 4,
+        arr: 0,
+        elem: 21,
+        permissions: { viewer: 'r', operator: 'rw', engineer: 'rw' },
+      },
+    ])
+  })
+
+  type ParsedAddressSpace = Array<{
+    config: {
+      address_space: {
+        variables: Array<{ node_id: string }>
+        structures: Array<{ node_id: string }>
+        arrays: Array<{ node_id: string }>
+      }
+    }
+  }>
+
+  const nodeIds = (json: string | null) => {
+    if (json === null) throw new Error('expected an OPC-UA config')
+    const space = (JSON.parse(json) as ParsedAddressSpace)[0].config.address_space
+    return {
+      variables: space.variables.map((v) => v.node_id),
+      structures: space.structures.map((v) => v.node_id),
+      arrays: space.arrays.map((v) => v.node_id),
+    }
+  }
+
+  it('drops a variable node whose variable was deleted, keeps the rest and warns naming the tag', () => {
+    const cfg = baseServerConfig()
+    cfg.addressSpace.nodes = [
+      makeNode({ id: 'kept', variablePath: 'X', nodeId: 'ns=1;s=X' }),
+      makeNode({ id: 'gone', variablePath: 'GHOST', nodeId: 'ns=1;s=GHOST', displayName: 'Ghost Tag' }),
+    ]
+    const onWarn = jest.fn()
+    const json = generateOpcUaConfig(
+      [makePLCServer(cfg)],
+      debugMapJson([{ path: 'INSTANCE0.X', type: 'INT', arr: 0, elem: 0 }]),
+      instances,
+      onWarn,
+    )
+    expect(nodeIds(json).variables).toEqual(['ns=1;s=X'])
+    expect(onWarn).toHaveBeenCalledTimes(1)
+    expect(onWarn.mock.calls[0][0]).toContain('tag "Ghost Tag" (MAIN:GHOST) was left out of the build')
+    expect(onWarn.mock.calls[0][0]).toContain('Cannot resolve OPC-UA variable address')
+  })
+
+  it('drops every node of a program that is no longer instantiated in Resources', () => {
+    const cfg = baseServerConfig()
+    cfg.addressSpace.nodes = [
+      makeNode({ id: 'kept', variablePath: 'X', nodeId: 'ns=1;s=X' }),
+      makeNode({ id: 'orphan', pouName: 'OLD_PROG', variablePath: 'Y', nodeId: 'ns=1;s=Y' }),
+    ]
+    const onWarn = jest.fn()
+    const json = generateOpcUaConfig(
+      [makePLCServer(cfg)],
+      debugMapJson([{ path: 'INSTANCE0.X', type: 'INT', arr: 0, elem: 0 }]),
+      instances,
+      onWarn,
+    )
+    expect(nodeIds(json).variables).toEqual(['ns=1;s=X'])
+    expect(onWarn.mock.calls[0][0]).toContain('(OLD_PROG:Y) was left out of the build')
+    expect(onWarn.mock.calls[0][0]).toContain('Cannot find instance for program "OLD_PROG"')
+  })
+
+  it('drops a bare array node whose elements are nowhere in the debug map', () => {
+    const cfg = baseServerConfig()
+    cfg.addressSpace.nodes = [makeNode({ nodeType: 'array', variablePath: 'GHOST_ARR', arrayLength: 2 })]
+    const onWarn = jest.fn()
+    const json = generateOpcUaConfig(
+      [makePLCServer(cfg)],
+      debugMapJson([{ path: 'INSTANCE0.SOMETHING_ELSE', type: 'INT', arr: 0, elem: 0 }]),
+      instances,
+      onWarn,
+    )
+    expect(nodeIds(json)).toEqual({ variables: [], structures: [], arrays: [] })
+    expect(onWarn.mock.calls[0][0]).toContain('Cannot resolve OPC-UA array address')
+  })
+
+  it('still builds when every node is dropped, with one warning per node', () => {
+    const cfg = baseServerConfig()
+    cfg.addressSpace.nodes = [
+      makeNode({ id: 'a', pouName: 'MAIN', variablePath: 'GHOST_A' }),
+      makeNode({ id: 'b', pouName: 'MAIN', variablePath: 'GHOST_B' }),
+    ]
+    const onWarn = jest.fn()
+    const json = generateOpcUaConfig(
+      [makePLCServer(cfg)],
+      debugMapJson([{ path: 'X', type: 'INT', arr: 0, elem: 0 }]),
+      instances,
+      onWarn,
+    )
+    expect(nodeIds(json).variables).toEqual([])
+    expect(onWarn).toHaveBeenCalledTimes(2)
+  })
+
+  it('emits no warning when every node resolves', () => {
+    const cfg = baseServerConfig()
+    cfg.addressSpace.nodes = [makeNode({ variablePath: 'X', nodeId: 'ns=1;s=X' })]
+    const onWarn = jest.fn()
+    generateOpcUaConfig(
+      [makePLCServer(cfg)],
+      debugMapJson([{ path: 'INSTANCE0.X', type: 'INT', arr: 0, elem: 0 }]),
+      instances,
+      onWarn,
+    )
+    expect(onWarn).not.toHaveBeenCalled()
   })
 
   it('re-throws non-OpcUaConfigError from address space building', () => {
@@ -535,6 +716,41 @@ describe('validateOpcUaConfig', () => {
     expect(result.valid).toBe(true)
   })
 
+  it('reports error when more than one enabled profile allows Anonymous', () => {
+    // Anonymous carries no endpoint identity into the runtime, so a per-profile
+    // anonymous role is ambiguous across two Anonymous profiles. Reject it here.
+    const cfg = baseServerConfig()
+    cfg.securityProfiles[0].authMethods = ['Anonymous']
+    cfg.securityProfiles.push({
+      id: 'sp2',
+      name: 'secure_anon',
+      enabled: true,
+      securityPolicy: 'Basic256Sha256',
+      securityMode: 'SignAndEncrypt',
+      authMethods: ['Anonymous'],
+      anonymousRole: 'engineer',
+    })
+    const result = validateOpcUaConfig(cfg, debugMapJson([]), instances)
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.includes('one enabled security profile may allow Anonymous'))).toBe(true)
+  })
+
+  it('a single Anonymous profile plus a disabled Anonymous profile validates clean', () => {
+    const cfg = baseServerConfig()
+    cfg.securityProfiles[0].authMethods = ['Anonymous']
+    cfg.securityProfiles.push({
+      id: 'sp2',
+      name: 'disabled_anon',
+      enabled: false,
+      securityPolicy: 'None',
+      securityMode: 'None',
+      authMethods: ['Anonymous'],
+      anonymousRole: 'engineer',
+    })
+    const result = validateOpcUaConfig(cfg, debugMapJson([]), instances)
+    expect(result.valid).toBe(true)
+  })
+
   it('validates variable node resolution errors', () => {
     const cfg = baseServerConfig()
     cfg.addressSpace.nodes = [makeNode({ pouName: 'MAIN', variablePath: 'GHOST' })]
@@ -562,6 +778,20 @@ describe('validateOpcUaConfig', () => {
     cfg.addressSpace.nodes = [makeNode({ nodeType: 'array', variablePath: 'GHOST_ARR', arrayLength: 3 })]
     const result = validateOpcUaConfig(cfg, debugMapJson([]), instances)
     expect(result.valid).toBe(false)
+  })
+
+  it('a bare array node whose elements are a UDT validates clean', () => {
+    const cfg = baseServerConfig()
+    cfg.addressSpace.nodes = [makeNode({ nodeType: 'array', variablePath: 'TANKS', arrayLength: 2 })]
+    const result = validateOpcUaConfig(
+      cfg,
+      debugMapJson([
+        { path: 'INSTANCE0.TANKS[1].LEVEL', type: 'INT', arr: 0, elem: 20 },
+        { path: 'INSTANCE0.TANKS[2].LEVEL', type: 'INT', arr: 0, elem: 21 },
+      ]),
+      instances,
+    )
+    expect(result).toEqual({ valid: true, errors: [] })
   })
 
   it('array-with-fields field-level miss is NOT a validation error', () => {

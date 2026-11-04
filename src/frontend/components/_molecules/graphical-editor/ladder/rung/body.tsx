@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type {
   CoordinateExtent,
   DefaultEdgeOptions,
@@ -5,9 +6,18 @@ import type {
   OnNodesChange,
   ReactFlowInstance,
 } from '@xyflow/react'
-import { applyNodeChanges, getNodesBounds } from '@xyflow/react'
-import { differenceWith, isEqual, parseInt } from 'lodash'
-import { DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { applyNodeChanges } from '@xyflow/react'
+import { parseInt } from 'lodash'
+import {
+  DragEvent,
+  MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type SyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import type { PLCVariable } from '../../../../../../middleware/shared/ports/types'
 import { mapsEqual, useContentStable } from '../../../../../hooks/use-content-stable'
@@ -15,11 +25,16 @@ import { useDebugCompositeKey } from '../../../../../hooks/use-debug-composite-k
 import { useDebugBoolValuesMap, useIsDebuggerVisible } from '../../../../../hooks/use-debug-value'
 import { usePouSnapshot } from '../../../../../hooks/use-pou-snapshot'
 import { useStableCallback } from '../../../../../hooks/use-stable-callback'
-import { useOpenPLCStore } from '../../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../store'
 import type { RungLadderState } from '../../../../../store/slices/ladder'
 import { cn } from '../../../../../utils/cn'
 import { getLadderBlockType, isLadderBlockDrag } from '../../../../../utils/graphical/drag-detection'
 import { getFunctionBlockVariablesToCleanup } from '../../../../../utils/graphical/get-function-block-variables-to-cleanup'
+import {
+  findPlaceholderWithinRadius,
+  selectOnlyPlaceholder,
+} from '../../../../../utils/graphical/ladder-placeholder-snap'
+import { isLadderPlacementElement, PLACEMENT_TARGET_ATTRIBUTE } from '../../../../../utils/graphical/placement-elements'
 import { syncNodesWithVariables } from '../../../../../utils/graphical/sync-nodes-with-variables'
 import { customNodeTypes } from '../../../../_atoms/graphical-editor/ladder'
 import type { BasicNodeData } from '../../../../_atoms/graphical-editor/ladder/utils/types'
@@ -27,6 +42,7 @@ import { getVariableRestrictionType } from '../../../../_atoms/graphical-editor/
 import { ReactFlowPanel } from '../../../../_atoms/react-flow'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundEditorModel, useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
+import { useGraphicalPlacement } from '../../../../_features/[workspace]/editor/graphical/placement/placement-context'
 import { addNewElement, removeElements } from './ladder-utils/elements'
 import { onElementDragOver, onElementDragStart, onElementDrop } from './ladder-utils/elements/drag-n-drop'
 import {
@@ -34,7 +50,9 @@ import {
   renderPlaceholderElements,
   searchNearestPlaceholder,
 } from './ladder-utils/elements/placeholder'
-import { findNode } from './ladder-utils/nodes'
+import { findNode, getRungNodesBounds } from './ladder-utils/nodes'
+import { computeRungDebugStates, type RungDebugStates } from './rung-debug-states'
+import { isSameSelection } from './selection'
 
 /**
  * Check recursively if the related target or any of its parent elements are within the ladder area
@@ -98,178 +116,8 @@ const DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = {
 }
 const PRO_OPTIONS = { hideAttribution: true }
 const NOOP = () => {}
-
-// --- Debug edge coloring ---
-
-type LadderDebugContext = {
-  isFunctionBlockPou: boolean
-  hasProgramInstance: boolean
-  getCompositeKey: (variableName: string) => string
-  boolValues: Map<string, string>
-}
-
-type RungDebugStates = {
-  edgeStates: Map<string, boolean>
-  nodeInputStates: Map<string, boolean>
-}
-
-const computeRungDebugStates = (
-  nodes: RungLadderState['nodes'],
-  edges: RungLadderState['edges'],
-  ctx: LadderDebugContext,
-): RungDebugStates => {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]))
-  const edgeById = new Map(edges.map((edge) => [edge.id, edge]))
-  const edgesByTarget = new Map<string, RungLadderState['edges']>()
-  for (const edge of edges) {
-    const list = edgesByTarget.get(edge.target)
-    if (list) list.push(edge)
-    else edgesByTarget.set(edge.target, [edge])
-  }
-
-  const getNodeOutputState = (
-    nodeId: string,
-    sourceHandle: string | null | undefined,
-    isInputGreen: boolean,
-  ): boolean | undefined => {
-    const node = nodeById.get(nodeId)
-    if (!node) return undefined
-
-    if (node.type === 'powerRail') {
-      return (node.data as { variant: 'left' | 'right' }).variant === 'left'
-    }
-
-    if (node.type === 'parallel') {
-      return isInputGreen
-    }
-
-    if (node.type === 'contact') {
-      const contactData = node.data as { variable?: { name: string }; variant: 'open' | 'negated' }
-      const variableName = contactData.variable?.name
-      if (!variableName) return undefined
-
-      const compositeKey = ctx.getCompositeKey(variableName)
-      const value = ctx.boolValues.get(compositeKey)
-      if (value === undefined) return undefined
-
-      const isTrue = value === '1' || value.toUpperCase() === 'TRUE'
-      const contactState = contactData.variant === 'negated' ? !isTrue : isTrue
-
-      return isInputGreen && contactState
-    }
-
-    if (node.type === 'coil') {
-      return isInputGreen
-    }
-
-    if (node.type === 'block') {
-      const blockData = node.data as {
-        variable?: { name: string }
-        variant?: { name: string; type: string }
-        numericId?: string
-      }
-      if (!sourceHandle) return undefined
-
-      if (!ctx.isFunctionBlockPou && !ctx.hasProgramInstance) return undefined
-
-      if (blockData.variant?.type === 'function-block') {
-        const blockVariableName = blockData.variable?.name
-        if (!blockVariableName) return undefined
-
-        const compositeKey = ctx.getCompositeKey(`${blockVariableName}.${sourceHandle}`)
-        const value = ctx.boolValues.get(compositeKey)
-
-        if (value === undefined) return undefined
-
-        return value === '1' || value.toUpperCase() === 'TRUE'
-      } else if (blockData.variant?.type === 'function') {
-        const blockName = blockData.variant.name.toUpperCase()
-        const numericId = blockData.numericId
-        if (!numericId) return undefined
-
-        const compositeKey = ctx.getCompositeKey(`_TMP_${blockName}${numericId}_${sourceHandle.toUpperCase()}`)
-        const value = ctx.boolValues.get(compositeKey)
-
-        if (value === undefined) return undefined
-
-        return value === '1' || value.toUpperCase() === 'TRUE'
-      }
-
-      return undefined
-    }
-
-    return undefined
-  }
-
-  const edgeStates = new Map<string, boolean>()
-
-  const determineEdgeState = (edgeId: string): boolean => {
-    if (edgeStates.has(edgeId)) {
-      return edgeStates.get(edgeId)!
-    }
-
-    const edge = edgeById.get(edgeId)
-    if (!edge) return false
-
-    const incomingEdges = edgesByTarget.get(edge.source) ?? []
-
-    let isInputGreen = false
-    if (incomingEdges.length === 0) {
-      const sourceNode = nodeById.get(edge.source)
-      isInputGreen = sourceNode?.type === 'powerRail' && (sourceNode.data as { variant: string }).variant === 'left'
-    } else {
-      isInputGreen = incomingEdges.some((incomingEdge) => determineEdgeState(incomingEdge.id))
-    }
-
-    const sourceOutputState = getNodeOutputState(edge.source, edge.sourceHandle, isInputGreen)
-
-    const isGreen = sourceOutputState === true
-    edgeStates.set(edgeId, isGreen)
-    return isGreen
-  }
-
-  edges.forEach((edge) => {
-    determineEdgeState(edge.id)
-  })
-
-  const nodeInputStates = new Map<string, boolean>()
-
-  const determineNodeInputState = (nodeId: string): boolean => {
-    if (nodeInputStates.has(nodeId)) {
-      return nodeInputStates.get(nodeId)!
-    }
-
-    const node = nodeById.get(nodeId)
-    if (!node) return false
-
-    if (node.type === 'powerRail' && (node.data as { variant: string }).variant === 'left') {
-      nodeInputStates.set(nodeId, true)
-      return true
-    }
-
-    const incomingEdges = edgesByTarget.get(nodeId) ?? []
-
-    if (incomingEdges.length === 0) {
-      nodeInputStates.set(nodeId, false)
-      return false
-    }
-
-    const hasGreenInput = incomingEdges.some((incomingEdge) => {
-      const sourceInputGreen = determineNodeInputState(incomingEdge.source)
-      const sourceOutputGreen = getNodeOutputState(incomingEdge.source, incomingEdge.sourceHandle, sourceInputGreen)
-      return sourceOutputGreen === true
-    })
-
-    nodeInputStates.set(nodeId, hasGreenInput)
-    return hasGreenInput
-  }
-
-  nodes.forEach((node) => {
-    determineNodeInputState(node.id)
-  })
-
-  return { edgeStates, nodeInputStates }
-}
+const PLACEMENT_EXTENT_PADDING = 50
+const PLACEMENT_SWALLOW_MS = 500
 
 const rungDebugStatesEqual = (previous: RungDebugStates | null, next: RungDebugStates | null): boolean =>
   previous !== null &&
@@ -284,6 +132,7 @@ export const RungBody = ({
   isDebuggerActive = false,
   zoomLevel = 1,
 }: RungBodyProps) => {
+  const store = useOpenPLCStoreApi()
   const pouName = useBoundPou()
   const editor = useBoundEditorModel()
   const ladderFlowActions = useOpenPLCStore((state) => state.ladderFlowActions)
@@ -306,6 +155,11 @@ export const RungBody = ({
 
   const [rungLocal, setRungLocal] = useState<RungLadderState>(rung)
   const [dragging, setDragging] = useState(false)
+
+  const placement = useGraphicalPlacement()
+  const armedElement = placement?.language === 'ld' && !isDebuggerActive ? placement.armed : null
+  const [placementHover, setPlacementHover] = useState(false)
+  const swallowUntilRef = useRef(0)
 
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const reactFlowViewportRef = useRef<HTMLDivElement>(null)
@@ -330,18 +184,11 @@ export const RungBody = ({
 
   /**
    * Update flow panel extent based on the bounds of the nodes
-   * To make the getNodesBounds function work, the nodes must have width and height properties set in the node data
+   * For getRungNodesBounds to work, the nodes must have width and height properties set in the node data
    * This useEffect will run every time the nodes array changes (i.e. when a node is added or removed)
    */
   const updateReactFlowPanelExtent = (rung: RungLadderState) => {
-    const zeroPositionNode: FlowNode = {
-      id: '-1',
-      position: { x: 0, y: 0 },
-      data: { label: 'Node 0' },
-      width: 150,
-      height: 40,
-    }
-    const bounds = getNodesBounds([zeroPositionNode, ...rung.nodes])
+    const bounds = getRungNodesBounds(rung.nodes)
     const [defaultWidth, defaultHeight] = rung.defaultBounds
 
     // If the bounds are less than the default extent, set the panel extent to the default extent
@@ -356,15 +203,11 @@ export const RungBody = ({
             [bounds.width, bounds.height + 20],
           ],
     )
-    const newViewport: [number, number] = [bounds.width, bounds.height + 20]
-    const currentViewport = rung.reactFlowViewport as [number, number] | undefined
-    if (!currentViewport || currentViewport[0] !== newViewport[0] || currentViewport[1] !== newViewport[1]) {
-      ladderFlowActions.updateReactFlowViewport({
-        editorName: pouName,
-        rungId: rung.id,
-        reactFlowViewport: newViewport,
-      })
-    }
+    ladderFlowActions.updateReactFlowViewport({
+      editorName: pouName,
+      rungId: rungLocal.id,
+      reactFlowViewport: [bounds.width, bounds.height + 20],
+    })
   }
 
   // --- Debug edge coloring and node lockdown ---
@@ -459,13 +302,7 @@ export const RungBody = ({
    *  Update the local rung state when the rung state changes
    */
   useEffect(() => {
-    if (
-      dragging ||
-      (rungLocal.selectedNodes.length > 0 &&
-        differenceWith(rungLocal.selectedNodes, rung.selectedNodes, (a, b) => isEqual(a, b)).length === 0)
-    ) {
-      return
-    }
+    if (dragging || isSameSelection(rungLocal.selectedNodes, rung.selectedNodes)) return
 
     // Update the selected nodes in the rung state
     ladderFlowActions.setSelectedNodes({
@@ -535,16 +372,38 @@ export const RungBody = ({
   /**
    * Add a new node to the rung
    */
-  const handleAddNode = (newNodeType: string = 'mockNode', blockType: string | undefined) => {
-    const { libraries, ladderFlows } = useOpenPLCStore.getState()
+  const handleAddNode = (
+    newNodeType: string = 'mockNode',
+    blockType: string | undefined,
+    sourceRung: RungLadderState = rungLocal,
+  ) => {
+    const { libraries, ladderFlows } = store.getState()
     let pouLibrary = undefined
     if (blockType) {
       const [blockLibraryType, blockLibrary, pouName] = blockType.split('/')
 
-      if (blockLibraryType === 'system')
-        pouLibrary = libraries.system
+      if (blockLibraryType === 'system') {
+        const libraryPou = libraries.system
           .find((Library) => Library.name === blockLibrary)
           ?.pous.find((p) => p.name === pouName)
+        // Copy the signature, not the library entry. That entry also carries
+        // `body` (the authored source, which for a native C/C++ or Python block
+        // is the entire file) and `language`, and passing the object straight
+        // through froze a copy of the library's source into every project that
+        // placed the block. Nothing ever reads either field back off a placed
+        // variant, and the embedded VAR ... END_VAR broke the POU parser badly
+        // enough that the project would not open (DOPE-592). The user-library
+        // branch below has always built a curated object this way.
+        pouLibrary = libraryPou
+          ? {
+              name: libraryPou.name,
+              type: libraryPou.type,
+              variables: libraryPou.variables,
+              documentation: libraryPou.documentation,
+              extensible: libraryPou.extensible ?? false,
+            }
+          : undefined
+      }
 
       if (blockLibraryType === 'user') {
         const library = libraries.user.find((library) => library.name === blockLibrary)
@@ -582,15 +441,15 @@ export const RungBody = ({
         const nodes = removePlaceholderElements(rungLocal.nodes)
         setRungLocal((rung) => ({ ...rung, nodes }))
         toast({
-          title: 'Can not add block',
-          description: `The block type ${blockType} does not exist in the library`,
+          title: tr('Can not add block'),
+          description: tr('The block type {{blockType}} does not exist in the library', { blockType }),
           variant: 'fail',
         })
         return
       }
     }
 
-    const { nodes, edges, newNode, handleBranches } = addNewElement(rungLocal, {
+    const { nodes, edges, newNode, handleBranches } = addNewElement(sourceRung, {
       elementType: newNodeType,
       blockVariant: pouLibrary,
     })
@@ -625,7 +484,7 @@ export const RungBody = ({
    * Remove some nodes from the rung
    */
   const handleRemoveNode = (nodes: FlowNode[]) => {
-    const { ladderFlows } = useOpenPLCStore.getState()
+    const { ladderFlows } = store.getState()
     const { nodes: newNodes, edges: newEdges, handleBranches } = removeElements({ ...rungLocal }, nodes)
 
     captureAndPush(pouName)
@@ -711,8 +570,8 @@ export const RungBody = ({
   /**
    * Handle the drag of a node
    */
-  const handleNodeDrag = (event: MouseEvent) => {
-    if (!reactFlowInstance) return
+  const handleNodeDrag = (event: globalThis.MouseEvent | globalThis.TouchEvent) => {
+    if (!reactFlowInstance || !('clientX' in event)) return
     const closestPlaceholder = onElementDragOver(rungLocal, reactFlowInstance, { x: event.clientX, y: event.clientY })
     if (!closestPlaceholder) return
 
@@ -737,7 +596,7 @@ export const RungBody = ({
    * Handle the stop of a node drag
    */
   const handleNodeDragStop = (node: FlowNode) => {
-    const { ladderFlows } = useOpenPLCStore.getState()
+    const { ladderFlows } = store.getState()
     const result = onElementDrop(rungLocal, rung, node)
 
     captureAndPush(pouName)
@@ -784,13 +643,13 @@ export const RungBody = ({
   const onNodesDelete = useStableCallback((nodes: FlowNode[]) => {
     handleRemoveNode(nodes)
   })
-  const onNodeDragStart = useStableCallback((_event: MouseEvent, node: FlowNode) => {
+  const onNodeDragStart = useStableCallback((_event: globalThis.MouseEvent | globalThis.TouchEvent, node: FlowNode) => {
     handleNodeStartDrag(node)
   })
-  const onNodeDrag = useStableCallback((event: MouseEvent) => {
+  const onNodeDrag = useStableCallback((event: globalThis.MouseEvent | globalThis.TouchEvent) => {
     handleNodeDrag(event)
   })
-  const onNodeDragStop = useStableCallback((_event: MouseEvent, node: FlowNode) => {
+  const onNodeDragStop = useStableCallback((_event: globalThis.MouseEvent | globalThis.TouchEvent, node: FlowNode) => {
     handleNodeDragStop(node)
   })
   const onNodeDoubleClick = useStableCallback((_event: MouseEvent, node: FlowNode) => {
@@ -967,6 +826,71 @@ export const RungBody = ({
     handleAddNode(blockType, library)
   })
 
+  /**
+   * Click-to-place: while an element is armed, hovering the rung shows the
+   * placeholders and highlights the one under the pointer; a left click
+   * inserts there or cancels when no placeholder is close enough.
+   */
+  const endPlacementHover = useStableCallback(() => {
+    if (!placementHover) return
+    setPlacementHover(false)
+    setReactFlowPanelExtent((extent) => [extent[0], [extent[1][0], extent[1][1] - PLACEMENT_EXTENT_PADDING]])
+    setRungLocal((current) => ({ ...current, nodes: removePlaceholderElements(current.nodes) }))
+  })
+
+  useEffect(() => {
+    if (!armedElement) endPlacementHover()
+  }, [armedElement, endPlacementHover])
+
+  const findPlacementPlaceholder = (nodes: FlowNode[], clientX: number, clientY: number) => {
+    if (!reactFlowInstance) return undefined
+    return findPlaceholderWithinRadius(nodes, reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY }))
+  }
+
+  const handlePlacementPointerMove = (event: ReactPointerEvent) => {
+    if (!armedElement || dragging) return
+    const { clientX, clientY } = event
+    if (!placementHover) {
+      setPlacementHover(true)
+      setReactFlowPanelExtent((extent) => [extent[0], [extent[1][0], extent[1][1] + PLACEMENT_EXTENT_PADDING]])
+    }
+    setRungLocal((current) => {
+      const hasPlaceholders = current.nodes.some(
+        (node) => node.type === 'placeholder' || node.type === 'parallelPlaceholder',
+      )
+      const nodes = hasPlaceholders ? current.nodes : renderPlaceholderElements(current)
+      const target = findPlacementPlaceholder(nodes, clientX, clientY)
+      const selected = selectOnlyPlaceholder(nodes, target?.id)
+      return selected === current.nodes ? current : { ...current, nodes: selected }
+    })
+  }
+
+  const handlePlacementPointerDown = (event: ReactPointerEvent) => {
+    if (!armedElement || !placement || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    swallowUntilRef.current = performance.now() + PLACEMENT_SWALLOW_MS
+
+    const nodes = placementHover ? rungLocal.nodes : renderPlaceholderElements(rungLocal)
+    const target = findPlacementPlaceholder(nodes, event.clientX, event.clientY)
+    if (!target) {
+      placement.cancel()
+      return
+    }
+
+    const element = placement.consume()
+    if (!element || !isLadderPlacementElement(element)) return
+    endPlacementHover()
+    handleAddNode(element, undefined, { ...rungLocal, nodes: selectOnlyPlaceholder(nodes, target.id) })
+  }
+
+  const swallowAfterPlacement = (event: SyntheticEvent) => {
+    if (performance.now() > swallowUntilRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.type === 'click') swallowUntilRef.current = 0
+  }
+
   return (
     <div
       className={cn(
@@ -975,7 +899,17 @@ export const RungBody = ({
         className,
       )}
     >
-      <div aria-label='Rung body' className='h-full w-full overflow-x-auto' ref={reactFlowViewportRef}>
+      <div
+        aria-label='Rung body'
+        className={cn('h-full w-full overflow-x-auto', armedElement && 'cursor-crosshair')}
+        ref={reactFlowViewportRef}
+        {...{ [PLACEMENT_TARGET_ATTRIBUTE]: 'ld-rung' }}
+        onPointerMove={armedElement ? handlePlacementPointerMove : undefined}
+        onPointerLeave={armedElement ? endPlacementHover : undefined}
+        onPointerDownCapture={armedElement ? handlePlacementPointerDown : undefined}
+        onMouseDownCapture={swallowAfterPlacement}
+        onClickCapture={swallowAfterPlacement}
+      >
         <div
           style={{
             // Scaled by zoomLevel so this wrapper's own footprint (and thus
@@ -1012,7 +946,9 @@ export const RungBody = ({
               onDragOver: onDragOver,
               onDrop: onDrop,
 
-              nodeExtent: reactFlowPanelExtent,
+              // No nodeExtent here: node positions belong to the ladder layout engine. xyflow ≥12.9
+              // stopped recomputing drag-clamped positionAbsolute when the extent later grows, so a
+              // mid-drag clamp against the stale extent would freeze nodes at wrong positions (DOPE-492).
               translateExtent: reactFlowPanelExtent,
               panActivationKeyCode: null,
               panOnDrag: false,

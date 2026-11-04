@@ -11,8 +11,12 @@
  * cleaner "does this target support <feature>?".
  */
 
-import { parseRuntimeVersion } from '@root/backend/shared/firmware/runtime-version-gate'
+import { isUserManagementCapableRuntime, parseRuntimeVersion } from '@root/backend/shared/firmware/runtime-version-gate'
 import { type BoardInfoLike, resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
+
+// Re-exported so component/store layers (which may not import backend-shared
+// directly) can gate UI on runtime capability through the utils layer.
+export { isUserManagementCapableRuntime }
 
 /**
  * Minimal board info shape used by device utility functions.
@@ -53,6 +57,17 @@ export function isOpenPLCRuntimeTarget(boardInfo: BoardLike): boolean {
  */
 export function isSimulatorTarget(boardInfo: BoardLike): boolean {
   return resolveTargetCapabilities(boardInfo).isInProcessSimulator
+}
+
+/**
+ * A baremetal board that is programmed over Ethernet (e.g. Siemens LOGO! 8.2)
+ * rather than a serial/USB port. These take a device-IP target like a runtime
+ * (v4) board, but connect for debugging over Modbus TCP, not the v4 REST API —
+ * so the device screen shows the IP field + Search but the baremetal Connect
+ * button.
+ */
+export function isEthernetUploadTarget(boardInfo: BoardLike): boolean {
+  return boardInfo?.uploadMethod === 'ethernet'
 }
 
 /**

@@ -1,14 +1,16 @@
 import * as PrimitivePopover from '@radix-ui/react-popover'
 import { useAliasRegistry } from '@root/frontend/hooks/use-alias-registry'
 import { useProjectAliasBindings } from '@root/frontend/hooks/use-project-alias-bindings'
+import { tr } from '@root/frontend/locales/tr'
 import { isLiteralLocation } from '@root/middleware/shared/utils/iec-address/registry'
 import type { CellContext, RowData } from '@tanstack/react-table'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { PLCGlobalVariable } from '../../../../middleware/shared/ports/types'
 import { pinSelectors, remoteDeviceSelectors, vendorIoSelectors } from '../../../hooks/use-store-selectors'
-import { useOpenPLCStore } from '../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../store'
 import type { ProjectResponse } from '../../../store/slices/project'
+import { elementNameCollision } from '../../../store/slices/shared/name-collision'
 import { cn } from '../../../utils/cn'
 import { isLegalIdentifier, sanitizeVariableInput } from '../../../utils/keywords'
 import { buildRemoteDeviceOptionGroups, buildVendorIoOptionGroups } from '../../../utils/remote-device-options'
@@ -32,8 +34,30 @@ declare module '@tanstack/react-table' {
   }
 }
 
-type IEditableCellProps = CellContext<PLCGlobalVariable, unknown> & { editable?: boolean }
-const EditableNameCell = ({ getValue, row: { index }, column: { id }, table, editable = true }: IEditableCellProps) => {
+type IEditableCellProps = CellContext<PLCGlobalVariable, unknown> & {
+  editable?: boolean
+  /**
+   * Skip the rename impact analysis and the propagation that follows it.
+   *
+   * A Global Variable List's member is reached as `<list>.<member>`, never as a bare
+   * identifier, so searching POUs for the bare name finds unrelated locals and would
+   * rewrite them. The list's own name is what POUs reference, and renaming THAT is
+   * `propagateGlobalVariableListRename`'s job.
+   */
+  skipReferenceImpact?: boolean
+  /** A Resource global is a top-level symbol; a list member is not, so only the former is gated by name. */
+  isResourceGlobal?: boolean
+}
+const EditableNameCell = ({
+  getValue,
+  row: { index },
+  column: { id },
+  table,
+  editable = true,
+  skipReferenceImpact = false,
+  isResourceGlobal = true,
+}: IEditableCellProps) => {
+  const store = useOpenPLCStoreApi()
   const initialValue = getValue<string>()
   const { toast } = useToast()
 
@@ -71,21 +95,25 @@ const EditableNameCell = ({ getValue, row: { index }, column: { id }, table, edi
 
     const [isNameLegal, reason] = isLegalIdentifier(newName)
     if (isNameLegal === false) {
-      toast({ title: 'Error', description: `'${newName}' ${reason}`, variant: 'fail' })
+      toast({ title: tr('Error'), description: `'${newName}' ${reason}`, variant: 'fail' })
       setCellValue(oldName)
       setIsEditing(false)
       return
     }
 
-    const impact = findAllReferencesToVariable(
-      oldName,
-      currentVariable.type,
-      'Resource',
-      pous,
-      ladderFlows,
-      fbdFlows,
-      'global',
-    )
+    if (isResourceGlobal) {
+      const collision = elementNameCollision(store.getState(), newName, 'resource-global', oldName)
+      if (collision) {
+        toast({ title: tr('Variable already exists'), description: collision, variant: 'fail' })
+        setCellValue(oldName)
+        setIsEditing(false)
+        return
+      }
+    }
+
+    const impact: ReferenceImpactAnalysis = skipReferenceImpact
+      ? { totalReferences: 0, byPou: new Map(), byEditorType: new Map(), references: [] }
+      : findAllReferencesToVariable(oldName, currentVariable.type, 'Resource', pous, ladderFlows, fbdFlows, 'global')
 
     let shouldPropagate = true
     if (impact.totalReferences > 0) {
@@ -372,10 +400,10 @@ const EditableLocationCell = ({
     const vendorGroups = buildVendorIoOptionGroups(id, vendorIoEntries)
 
     return [
-      { label: 'Analog Inputs', options: ainPins },
-      { label: 'Analog Outputs', options: aoutPins },
-      { label: 'Digital Inputs', options: dinPins },
-      { label: 'Digital Outputs', options: doutPins },
+      { label: tr('Analog Inputs'), options: ainPins },
+      { label: tr('Analog Outputs'), options: aoutPins },
+      { label: tr('Digital Inputs'), options: dinPins },
+      { label: tr('Digital Outputs'), options: doutPins },
       ...remoteGroups,
       ...vendorGroups,
     ]

@@ -1,4 +1,5 @@
 import { ChevronDownIcon, ChevronRightIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import { useCallback, useState } from 'react'
 
@@ -214,7 +215,7 @@ export const VariableTree = ({ nodes, selectedIds, onSelect, filter }: VariableT
     return (
       <div className='flex h-full items-center justify-center p-4'>
         <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-          No program variables found. Create a program with variables first.
+          {tr('No program variables found. Create a program with variables first.')}
         </p>
       </div>
     )

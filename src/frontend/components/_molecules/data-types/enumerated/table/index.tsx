@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import React, { useEffect, useRef } from 'react'
 
@@ -38,6 +39,7 @@ const EnumeratedTable = ({
       data: { dataTypes },
     },
     projectActions: { updateDatatype },
+    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
   } = useOpenPLCStore()
 
   const { captureAndPush } = usePouSnapshot()
@@ -50,6 +52,7 @@ const EnumeratedTable = ({
     const current = dataTypes.find((dt) => dt.name === name)
     if (!current || current.derivation !== 'enumerated') return
     updateDatatype(name, { ...current, values: newValues })
+    handleFileAndWorkspaceSavedState(editor.meta.name)
   }
 
   const columnHelper = createColumnHelper<{ description: string }>()
@@ -75,10 +78,14 @@ const EnumeratedTable = ({
   )
 
   const handleBlur = (rowIndex: number) => {
-    captureAndPush(editor.meta.name)
     const prevRows = [...values]
 
     const inputElement = document.getElementById(`description-input-${rowIndex}`) as HTMLInputElement
+    // Runs on every blur: an unchanged value must not even leave an undo entry behind.
+    // An empty one still falls through, so an abandoned new row is removed as before.
+    const untouched = inputElement?.value.trim()
+    if (untouched && prevRows[rowIndex]?.description === untouched) return prevRows
+    captureAndPush(editor.meta.name)
     if (inputElement) {
       const inputValue = inputElement.value.trim()
 
@@ -88,15 +95,11 @@ const EnumeratedTable = ({
         resetBorders()
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Row removed',
-          description: `The row was removed because the value was empty.`,
+          title: tr('Row removed'),
+          description: tr('The row was removed because the value was empty.'),
           variant: 'fail',
         })
         return newRows
-      }
-
-      if (prevRows[rowIndex].description === inputValue) {
-        return prevRows
       }
 
       const validation = enumeratedValidation({ value: inputValue })
@@ -108,8 +111,8 @@ const EnumeratedTable = ({
         resetBorders()
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Value already exists',
-          description: `The value already exists in the list.`,
+          title: tr('Value already exists'),
+          description: tr('The value already exists in the list.'),
           variant: 'fail',
         })
         return newRows
@@ -121,8 +124,8 @@ const EnumeratedTable = ({
         resetBorders()
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Invalid enumerated value',
-          description: `The enumerated value is invalid. Valid names: CamelCase, PascalCase or SnakeCase.`,
+          title: tr('Invalid enumerated value'),
+          description: tr('The enumerated value is invalid. Valid names: CamelCase, PascalCase or SnakeCase.'),
           variant: 'fail',
         })
         return newRows

@@ -1,12 +1,14 @@
 import { useCallback } from 'react'
 
-import { useOpenPLCStore } from '../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../store'
 import { flushFlowWriteBacks } from '../store/slices/shared/flow-writeback'
 
 /**
  * Convenience hook wrapping snapshotActions.pushToHistory().
  * Captures the current POU state (variables, body, globalVariables, and
  * graphical flow state for LD/FBD) and pushes it to the undo history.
+ * Names that resolve to a data type instead of a POU capture the data
+ * type entry (`dataTypes`) so datatype editors share the same history.
  *
  * State is read via getState() at capture time (not subscribed): the hook
  * never re-renders its consumers and `captureAndPush` keeps a stable identity.
@@ -19,18 +21,23 @@ import { flushFlowWriteBacks } from '../store/slices/shared/flow-writeback'
  * projects).
  */
 export function usePouSnapshot() {
-  const {
-    snapshotActions: { pushToHistory, undo, redo },
-  } = useOpenPLCStore()
+  const store = useOpenPLCStoreApi()
+  const { pushToHistory, undo, redo } = useOpenPLCStore((state) => state.snapshotActions)
 
   const captureAndPush = useCallback(
     (pouName: string) => {
       // A debounced graphical write-back may still be pending — flush it so
-      // the snapshot can't pair a stale body with a fresh flow.
-      flushFlowWriteBacks(useOpenPLCStore.getState, pouName)
-      const { project, ladderFlows, fbdFlows } = useOpenPLCStore.getState()
+      // the snapshot can't pair a stale body with a fresh flow. A failed flush
+      // leaves the body stale, so there is nothing coherent to capture.
+      if (flushFlowWriteBacks(store.getState, pouName).length > 0) return
+      const { project, ladderFlows, fbdFlows } = store.getState()
       const pou = project.data.pous.find((p) => p.name === pouName)
-      if (!pou) return
+      if (!pou) {
+        const dataType = project.data.dataTypes.find((d) => d.name === pouName)
+        if (!dataType) return
+        pushToHistory(pouName, { variables: [], body: null, dataTypes: [dataType] })
+        return
+      }
 
       pushToHistory(pouName, {
         variables: pou.interface?.variables ?? [],
@@ -40,7 +47,7 @@ export function usePouSnapshot() {
         globalVariables: project.data.configurations.resource.globalVariables,
       })
     },
-    [pushToHistory],
+    [store, pushToHistory],
   )
 
   return { captureAndPush, undo, redo }

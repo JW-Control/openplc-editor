@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef, useEffect, useState } from 'react'
 
 import type { PLCDataType } from '../../../../../middleware/shared/ports/types'
@@ -19,6 +20,7 @@ const EnumeratorDataType = ({ data, ...rest }: EnumDatatypeProps) => {
   const {
     editor,
     projectActions: { updateDatatype },
+    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
   } = useOpenPLCStore()
 
   const { captureAndPush } = usePouSnapshot()
@@ -32,8 +34,7 @@ const EnumeratorDataType = ({ data, ...rest }: EnumDatatypeProps) => {
 
   useEffect(() => {
     setInitialValueData(data.initialValue || '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [data.initialValue])
 
   useEffect(() => {
     setTableData(data.values)
@@ -46,6 +47,7 @@ const EnumeratorDataType = ({ data, ...rest }: EnumDatatypeProps) => {
       ...data,
       initialValue: value,
     })
+    handleFileAndWorkspaceSavedState(editor.meta.name)
   }
 
   // `updateDatatype` is a full replace — spread `data` first so we
@@ -53,6 +55,7 @@ const EnumeratorDataType = ({ data, ...rest }: EnumDatatypeProps) => {
   // downstream consumers.
   const writeValues = (newValues: PLCEnumeratedDatatype['values']) => {
     updateDatatype(data.name, { ...data, values: newValues })
+    handleFileAndWorkspaceSavedState(editor.meta.name)
   }
 
   const addNewRow = () => {
@@ -140,7 +143,7 @@ const EnumeratorDataType = ({ data, ...rest }: EnumDatatypeProps) => {
             className='mb-3 flex h-8 w-full items-center justify-between'
           >
             <p className='cursor-default select-none font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-              Description
+              {tr('Description')}
             </p>
             <div
               aria-label='Data type table actions buttons container'
@@ -197,7 +200,7 @@ const EnumeratorDataType = ({ data, ...rest }: EnumDatatypeProps) => {
             className='flex w-full items-center justify-end'
           >
             <label className='cursor-default select-none pr-6 font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100 '>
-              Initial Value:
+              {tr('Initial Value:')}
             </label>
             <Select
               onValueChange={(value) =>

@@ -96,7 +96,7 @@ describe('tabs/utils', () => {
       expect(result.type).toBe('plc-datatype')
       if (result.type === 'plc-datatype') {
         expect(result.meta.derivation).toBe('enumerated')
-        expect(result.structure).toEqual({ selectedRow: '-1', description: '' })
+        expect(result.structure).toEqual({ display: 'table', selectedRow: '-1', description: '' })
       }
     })
 
@@ -269,6 +269,13 @@ describe('tabs/utils', () => {
       expect(result.type).toBe('plc-datatype')
     })
 
+    it('creates editor from diagnostics tab', () => {
+      const tab: TabsProps = { name: 'I/O Image Diagnostics', elementType: { type: 'diagnostics' } }
+      const result = CreateEditorObjectFromTab(tab)
+      expect(result.type).toBe('plc-diagnostics')
+      expect(result.meta.name).toBe('I/O Image Diagnostics')
+    })
+
     it('creates editor from resource tab', () => {
       const tab: TabsProps = { name: 'Res', elementType: { type: 'resource' } }
       const result = CreateEditorObjectFromTab(tab)
@@ -291,6 +298,13 @@ describe('tabs/utils', () => {
       const tab: TabsProps = { name: 'Srv', elementType: { type: 'server', protocol: 's7comm' } }
       const result = CreateEditorObjectFromTab(tab)
       expect(result.type).toBe('plc-server')
+    })
+
+    it('creates editor from user-management tab', () => {
+      const tab: TabsProps = { name: 'User Management', elementType: { type: 'user-management' } }
+      const result = CreateEditorObjectFromTab(tab)
+      expect(result.type).toBe('plc-user-management')
+      expect(result.meta.name).toBe('User Management')
     })
 
     it('creates editor from diff-viewer tab', () => {
@@ -316,5 +330,24 @@ describe('tabs/utils', () => {
     it('defaults to the canonical tab name', () => {
       expect(CreateHmiDesignerEditor()).toEqual({ type: 'plc-hmi-designer', meta: { name: HMI_DESIGNER_TAB_NAME } })
     })
+  })
+})
+
+describe('CreateEditorObjectFromTab for the single-instance editors', () => {
+  const cases: Array<[TabsProps['elementType'], string]> = [
+    [{ type: 'hmi-designer' }, 'plc-hmi-designer'],
+    [{ type: 'diagnostics' }, 'plc-diagnostics'],
+    [{ type: 'package-manager' }, 'plc-package-manager'],
+    [{ type: 'library-manager' }, 'plc-library-manager'],
+    [{ type: 'library-manifest' }, 'plc-library-manifest'],
+    [{ type: 'user-management' }, 'plc-user-management'],
+    [{ type: 'persistent-storage' }, 'plc-persistent-storage'],
+    [{ type: 'ethercat-module', busName: 'bus', deviceId: 'd1', moduleId: 'm1' }, 'plc-ethercat-module'],
+  ]
+
+  it.each(cases)('opens %o as its own editor', (elementType, expectedType) => {
+    const model = CreateEditorObjectFromTab({ name: 'tab', elementType })
+    expect(model.type).toBe(expectedType)
+    expect(model.meta.name).toBe('tab')
   })
 })

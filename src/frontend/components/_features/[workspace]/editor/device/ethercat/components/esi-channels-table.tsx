@@ -1,4 +1,5 @@
 import { Checkbox } from '@root/frontend/components/_atoms/checkbox'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIChannel } from '@root/middleware/shared/ports/esi-types'
 import { useMemo, useState } from 'react'
@@ -80,7 +81,7 @@ const ESIChannelsTable = ({
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            All ({channels.length})
+            {tr('All ({{length}})', { length: channels.length })}
           </button>
           <button
             onClick={() => setFilterDirection('input')}
@@ -91,7 +92,7 @@ const ESIChannelsTable = ({
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            Inputs ({inputCount})
+            {tr('Inputs ({{inputCount}})', { inputCount })}
           </button>
           <button
             onClick={() => setFilterDirection('output')}
@@ -102,14 +103,14 @@ const ESIChannelsTable = ({
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            Outputs ({outputCount})
+            {tr('Outputs ({{outputCount}})', { outputCount })}
           </button>
         </div>
 
         {/* Search */}
         <input
           type='text'
-          placeholder='Search channels...'
+          placeholder={tr('Search channels...')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className='h-[30px] rounded-md border border-neutral-300 bg-white px-2 text-xs text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
@@ -137,25 +138,25 @@ const ESIChannelsTable = ({
                 </th>
               )}
               <th className='w-[8%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Dir
+                {tr('Dir')}
               </th>
               <th className='w-[25%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Name
+                {tr('Name')}
               </th>
               <th className='w-[15%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
                 PDO
               </th>
               <th className='w-[12%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Index
+                {tr('Index')}
               </th>
               <th className='w-[10%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Type
+                {tr('Type')}
               </th>
               <th className='w-[8%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Bits
+                {tr('Bits')}
               </th>
               <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                IEC Type
+                {tr('IEC Type')}
               </th>
             </tr>
           </thead>

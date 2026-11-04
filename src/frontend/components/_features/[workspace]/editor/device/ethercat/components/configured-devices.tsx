@@ -1,6 +1,7 @@
 import { MinusIcon } from '@root/frontend/assets/icons/interface/Minus'
 import { PlusIcon } from '@root/frontend/assets/icons/interface/Plus'
 import TableActions from '@root/frontend/components/_atoms/table-actions'
+import { tr } from '@root/frontend/locales/tr'
 import type {
   ConfiguredEtherCATDevice,
   EnrichDeviceData,
@@ -109,26 +110,29 @@ const ConfiguredDevices = ({
             <tr>
               <th className='w-8 px-2 py-2'></th>
               <th className='w-[20%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Name
+                {tr('Name')}
               </th>
               <th className='w-[20%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Type
+                {tr('Type')}
               </th>
               <th className='w-[10%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Position
+                {tr('Position')}
               </th>
               <th className='w-[15%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Channels (In/Out)
+                {tr('Channels (In/Out)')}
               </th>
-              <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Source</th>
+              <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                {tr('Source')}
+              </th>
             </tr>
           </thead>
           <tbody>
             {devices.length === 0 ? (
               <tr>
                 <td colSpan={6} className='px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-                  No devices configured. Click the + button to add a device from the repository, or use the Discovery
-                  tab to scan and add devices.
+                  {tr(
+                    'No devices configured. Click the + button to add a device from the repository, or use the Discovery tab to scan and add devices.',
+                  )}
                 </td>
               </tr>
             ) : (

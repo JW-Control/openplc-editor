@@ -30,7 +30,7 @@ In order to run the development version, clone the repository, and install depen
 You'll need the following tools:
 
 - [Git](https://git-scm.com/)
-- [NodeJS](https://nodejs.org/en/download/), version `>=20 <24`
+- [NodeJS](https://nodejs.org/en/download/), version `>=22 <24`
 
 ### Step by step
 
@@ -52,6 +52,14 @@ npm install
 
 ```bash
 npm run dev
+```
+
+### Running tests
+
+```bash
+npm run test         # Unit tests (Jest, with coverage)
+npm run test:watch   # Unit tests in watch mode (no coverage)
+npm run test:e2e     # End-to-end tests (Playwright, builds the app first)
 ```
 
 ## Releasing a New Version
@@ -101,3 +109,11 @@ Go to [project](https://github.com/orgs/Autonomy-Logic/projects/4) management pa
 ## Issues
 
 Go to [issues](https://github.com/Autonomy-Logic/openplc-editor/issues) page to view the current state of issues in the project.
+
+## License
+
+The OpenPLC Editor is licensed under the GPLv3 (see [LICENSE](LICENSE)).
+
+The baremetal runtime the editor builds into microcontroller firmware is dual-licensed: GPLv3 or a commercial licence. If you are using it in a commercial setting, you may need a commercial licence. Licences can be bought from the OpenPLC Editor (desktop or web) when you upload a program to the device.
+
+Contributions require agreeing to the [Contributor License Agreement](CLA.md) by ticking its checkbox on the pull request; see [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Autonomy®
 /**
  * Tests for the pure helpers shared by every program-build
  * orchestrator (`buildKnownPous`, `formatErrorWithPouContext`).
@@ -235,7 +235,7 @@ describe('enrichErrorWithPouContext', () => {
   })
 
   it('skips blank separator lines between END_VAR and the body', () => {
-    // The ST generators (`pou-text-serializer.ts` and xml2st on the
+    // The ST generators (`pou-text-serializer.ts` and the ST transpiler on the
     // compile path) insert blank lines after END_VAR for readability.
     // Those blanks live in the per-POU file the splitter feeds
     // strucpp but NOT in `pou.body.value`, which is what the body

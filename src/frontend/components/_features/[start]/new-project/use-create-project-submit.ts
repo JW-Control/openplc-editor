@@ -10,6 +10,8 @@
  * step components from drifting; a fix to one is a fix to both.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import { useProject } from '../../../../../middleware/shared/providers'
 import { useOpenPLCStore } from '../../../../store'
 import { useToast } from '../../[app]/toast/use-toast'
@@ -52,7 +54,7 @@ export function useCreateProjectSubmit() {
 
       if (!result.success || !result.data) {
         toast({
-          title: 'Cannot create a project!',
+          title: tr('Cannot create a project!'),
           description: result.error?.description ?? 'Failed to create the project.',
           variant: 'fail',
         })
@@ -63,8 +65,8 @@ export function useCreateProjectSubmit() {
       onSuccess()
     } catch (_error) {
       toast({
-        title: 'Cannot create a project!',
-        description: 'Failed to create the project.',
+        title: tr('Cannot create a project!'),
+        description: tr('Failed to create the project.'),
         variant: 'fail',
       })
     }

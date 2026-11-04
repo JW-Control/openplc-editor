@@ -2,17 +2,17 @@
  * Thin platform-bridge for the shared compile pipeline.
  *
  * The shared compile pipeline orchestrator (`backend/shared/compile/
- * pipeline.ts`) drives the full editor-canonical build flow — XML
- * generation, ST transpile, strucpp compile, conf authoring, defines
- * authoring, firmware-bundle composition, arduino-cli invocation,
- * runtime upload.  Every step is shared and pure EXCEPT for three
- * places that genuinely depend on the platform:
+ * pipeline.ts`) drives the full editor-canonical build flow — ST
+ * transpile, strucpp compile, conf authoring, defines authoring,
+ * firmware-bundle composition, arduino-cli invocation, runtime
+ * upload.  ST transpilation runs in-process on both platforms (the
+ * shared `st-transpiler/`); the only places that genuinely depend on
+ * the platform are:
  *
- *  1. `xml2st` transpile — editor spawns the bundled binary,
- *     web HTTP-POSTs to the centralised compiler-service backend.
- *  2. `arduino-cli` compile — editor spawns arduino-cli, web POSTs
- *     to the same backend (which spawns it server-side).
- *  3. Runtime upload — editor HTTPS-POSTs to the device's
+ *  1. `arduino-cli` compile — editor spawns arduino-cli, web POSTs
+ *     to the centralised compiler-service backend (which spawns it
+ *     server-side).
+ *  2. Runtime upload — editor HTTPS-POSTs to the device's
  *     `/api/upload`, web pipes through the orchestrator
  *     (WebRTC data channel with HTTP fallback).
  *
@@ -80,33 +80,13 @@ export type PlatformDeviceContext =
 // Per-method I/O contracts
 // ---------------------------------------------------------------------------
 
-/** `xml2st` input: a single XML string (the IEC 61131-3 PLC XML the
- *  shared `XmlGenerator` produces) plus an array of extra CLI tokens
- *  to append to the xml2st invocation.  Defined here (not on either
- *  adapter) because xml2st flag drift was the root cause of the
- *  initial cross-platform STRUCT bug — editor's local xml2st passed
- *  `--keep-structs` but the web's compile-service `/generate-st`
- *  endpoint hardcoded an unflagged invocation, so structs declared
- *  in the project compiled fine on the desktop and blew up on the
- *  web with `Undefined type 'MY_STRUCT'` errors out of strucpp.
- *  Pushing the flag set into a single shared field means any future
- *  xml2st option is a one-line pipeline change with no per-platform
- *  drift possible.
- *
- *  Editor's adapter passes `xml2stArgs` verbatim to the local
- *  binary (trusted).  Web's adapter filters against its own
- *  known-args allowlist before forwarding to the compile-service
- *  `/generate-st` endpoint, logging a warning for anything it
- *  doesn't recognise (defence in depth — service has its own
- *  allowlist too). */
 /**
  * Input to the in-process JSON → ST transpiler.  Each adapter
  * projects this into the transpiler's `TranspileProject` IR with
  * its own helper — editor: `fromSchemaShape` (IPC schema-shape);
  * web: `fromPortShape` after a port→schema conversion at the
- * adapter boundary.  Replaces the legacy XML-fed surface that
- * routed through a bundled `xml2st` binary; transpilation now
- * runs in-process against the JSON IR.
+ * adapter boundary.  Transpilation runs in-process against the
+ * JSON IR on both platforms.
  *
  * The declared type is port-shape because that's the renderer
  * store's shape; pipeline callers that hold schema-shape data
@@ -169,9 +149,20 @@ export interface UploadRuntimeV4Args {
   /** File map the runtime extracts on the device.  Already
    *  composed by `composeRuntimeV4Bundle`; the pipeline passes it
    *  straight through. */
-  bundle: Record<string, string>
+  bundle: RuntimeV4Bundle
   /** Discriminated device context; see `PlatformDeviceContext`. */
   context: PlatformDeviceContext
+  /**
+   * Whether this runtime stores the source project sent beside a program, as
+   * declared at `GET /api/capabilities` and read by the pre-upload version
+   * check.
+   *
+   * `false` means do not build one: a runtime that does not support snapshots
+   * discards the extra parts silently, so sending one costs the user upload
+   * time for an archive that is thrown away, and leaves them a device they
+   * cannot retrieve from with nothing said about why.
+   */
+  supportsProjectSnapshot: boolean
 }
 
 export interface UploadResult {
@@ -192,6 +183,13 @@ export interface UploadArduinoBoardArgs {
   /** Serial port for upload (e.g. `/dev/cu.usbmodem1101`).  Editor
    *  resolves; web's adapter receives but ignores. */
   port: string
+  /** Upload transport. Absent/"serial" (default): `port` is a serial port.
+   *  "ethernet": the board's core does a network upload; `ipAddress` carries
+   *  the device IP that arduino-cli receives as `--port`. */
+  uploadMethod?: 'serial' | 'ethernet'
+  /** Device IP for `uploadMethod:"ethernet"` (from configuration
+   *  runtimeIpAddress). Ignored for serial uploads. */
+  ipAddress?: string
 }
 
 /** Runtime v3 upload (legacy, editor-only).  Web's adapter MUST
@@ -217,15 +215,39 @@ export interface InstallArduinoCoreArgs {
    *  fails if it is unavailable — required for prebuilt arduino-hal boards
    *  whose precompiled `.a` is ABI-locked to that core version. */
   coreVersion?: string
+  /** Optional third-party board-manager index URL (e.g. a vendor's
+   *  `package_<vendor>_index.json`).  Sourced from the VPP manifest's
+   *  `target.boardManagerUrl` (or `board_manager_url` in hals.json) and
+   *  forwarded to arduino-cli as `--additional-urls`.
+   *
+   *  Cores outside arduino-cli's built-in index are invisible without it:
+   *  `core install industrialshields:esp32` fails with "Platform not found"
+   *  unless the vendor index is supplied AND `core update-index` has been
+   *  run against it.  The editor does both; web ignores this field. */
+  boardManagerUrl?: string
 }
 
 /** Arduino-CLI library install (editor-only.  Same no-op
  *  contract as core install for web). */
+/** A library installed from a git URL rather than the Arduino index.
+ *  Mirrors `ThirdPartyLibrary` in backend/shared/compile/third-party-libraries.ts,
+ *  restated here so the port does not depend on a backend module. */
+export interface ThirdPartyLibraryRequest {
+  name: string
+  gitUrl: string
+  reason: string
+}
+
 export interface InstallArduinoLibArgs {
   /** Legacy single-library id (kept for the placeholder call sites
    *  that pre-date `extraLibraries`).  Empty string when the caller
    *  is driving the install entirely from `extraLibraries`. */
   libId: string
+  /** Libraries this target needs that are not in the Arduino index, installed
+   *  with `lib install --git-url`. Selected from the target's CAPABILITIES —
+   *  a board that cannot host an OPC-UA server never downloads the OPC-UA
+   *  stack. Web no-ops: its compile service pre-installs everything. */
+  thirdPartyLibraries?: ThirdPartyLibraryRequest[]
   /** Per-board library list.  Sourced from the selected board's
    *  `hals.json` `extra_libraries` (static boards) or its VPP
    *  manifest `hal.extraArduinoLibraries` (VPP boards) — both feed
@@ -262,7 +284,35 @@ export interface CheckRuntimeVersionResult {
    *  when the runtime is unreachable or doesn't expose the
    *  endpoint (very old v3 runtimes). */
   version: string | null
+  /**
+   * Whether this runtime stores the source project an upload carries, from
+   * `projectSnapshot` at `GET /api/capabilities`. `false` for every runtime
+   * predating the feature or the endpoint, which is the honest default: one
+   * that stores snapshots says so.
+   */
+  supportsProjectSnapshot: boolean
+  /**
+   * Oldest editor this runtime accepts programs from, declared at
+   * `GET /api/capabilities` (DOPE-448).  `null` means the runtime
+   * declares no floor — it predates the endpoint, or this platform
+   * has no transport for it.
+   *
+   * `null` is "no constraint", never "too old": every runtime
+   * currently deployed answers `null`, and the runtime only
+   * advertises this value — the editor is what compares and refuses.
+   */
+  minEditorVersion?: string | null
 }
+
+/**
+ * Path → content of a runtime-v4 upload bundle.
+ *
+ * Text for everything the compile pipeline composes; `Uint8Array` exists for
+ * VPP plugin payloads, which may be precompiled objects (`hal.provisioning
+ * === 'prebuilt'`). Routing those through a JS string would corrupt them, and
+ * the corruption would only surface as a link failure on the device.
+ */
+export type RuntimeV4Bundle = Record<string, string | Uint8Array>
 
 /** VPP (Vendor Plugin Package) runtime-v4 packaging.  Boards that
  *  come from an installed `.vpp` package ship a vendor I/O driver
@@ -287,8 +337,25 @@ export interface PackageVppPluginResult {
    *  bundle.  Errors that should abort the upload are reported via
    *  `errors[]`; soft skips emit log lines via the `log` callback
    *  and return an empty record without errors. */
-  files: Record<string, string>
+  files: RuntimeV4Bundle
   errors?: StructuredCompileError[]
+  /**
+   * `package.minRuntimeVersion` from the manifest of the VPP this
+   * board came from (DOPE-448) — the oldest runtime whose plugin API
+   * the package's HAL was built against.
+   *
+   * `null`/absent for non-VPP boards, for packages that declare no
+   * floor, and on platforms without VPP integration. The pipeline
+   * compares it against the connected runtime's reported version
+   * right after the version probe, which is the earliest point where
+   * both halves are known — a VPP plugin is built against a runtime
+   * API, so an older runtime loads it and fails at scan time, on a
+   * live PLC.
+   *
+   * This cannot be enforced at install time: the target device is
+   * unknown until the user connects to one.
+   */
+  minRuntimeVersion?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -360,4 +427,37 @@ export interface CompilerPlatformPort {
    *  remote VPP packages).  The pipeline calls this between
    *  `composeRuntimeV4Bundle` and `uploadRuntimeV4`. */
   packageVppPlugin(args: PackageVppPluginArgs, log: PlatformLog): Promise<PackageVppPluginResult>
+
+  /**
+   * Persist a composed runtime-v4 bundle to the platform's build location.
+   *
+   * Split out of `uploadRuntimeV4`, which used to be the only thing that wrote
+   * the bundle anywhere. That made `compileOnly` produce almost nothing on disk
+   * for a v4 target: the bundle is composed in memory, and the compile-only path
+   * returned before the upload that happened to materialise it. A build folder
+   * left holding only the VPP files (which `packageVppPlugin` writes directly)
+   * looked plausible enough to be mistaken for a complete build — and stale
+   * files from an earlier upload made it look complete outright.
+   *
+   * Called for every v4 compile, upload or not, so `compile` and `upload` leave
+   * byte-identical artifacts.
+   *
+   * Optional: a platform with no project build directory can omit it, and the
+   * pipeline simply skips the write.
+   */
+  materializeRuntimeV4Bundle?(
+    args: MaterializeRuntimeV4BundleArgs,
+    log: PlatformLog,
+  ): Promise<MaterializeRuntimeV4BundleResult>
+}
+
+export interface MaterializeRuntimeV4BundleArgs {
+  /** Path → file content, as composed by `composeRuntimeV4Bundle`. */
+  bundle: RuntimeV4Bundle
+}
+
+export interface MaterializeRuntimeV4BundleResult {
+  /** Number of files written, for the progress line. */
+  written: number
+  errors?: StructuredCompileError[]
 }

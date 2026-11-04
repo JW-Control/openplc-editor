@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Generic diagnostics bridge: subscribe to LSP
  * `publishDiagnostics` notifications and feed Monaco's marker
@@ -88,7 +88,19 @@ export function attachDiagnosticsBridge(
       monacoApi.editor.setModelMarkers(
         bodyModel,
         markerOwner,
-        params.diagnostics.map((d) => lspDiagnosticToMonaco(d, monacoApi, bodyOffset, defaultSource)),
+        params.diagnostics
+          .map((d) => lspDiagnosticToMonaco(d, monacoApi, bodyOffset, defaultSource))
+          // Drop what the preamble owns. The offset shifts worker-frame lines
+          // back to the body-only view, so anything the generated preamble
+          // produced lands at or below line 0 — and Monaco CLAMPS those to line
+          // 1 rather than discarding them, which this bridge used to assume it
+          // did. The user then got a red marker on their first line carrying a
+          // message about generated code they cannot see or fix: for Python,
+          // basedpyright's strict rules firing on the injected type stubs
+          // ("Instance variable \"speed\" is not initialized", "Type `Any` is
+          // not allowed"). Filtering here rather than muting individual rules
+          // keeps the user's own code checked exactly as strictly as before.
+          .filter((marker) => marker.startLineNumber >= 1),
       )
     }
 

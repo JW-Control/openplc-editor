@@ -10,8 +10,9 @@ name: JWPLC Edition - Pre-release
 # The installer bundles the JWPLC HMI Designer (tools/jwplc-hmi-designer/poc of
 # platform-jwplc @ PLATFORM_DESIGNER_SHA) in resources/jwplc-hmi-designer/poc,
 # so "Abrir HMI Designer" works without a platform-jwplc checkout. The VPP is
-# packed deterministically from platform-jwplc @ PLATFORM_VPP_SHA and verified
-# with the editor's own verifyPackageSignature before upload.
+# packed deterministically from platform-jwplc @ PLATFORM_VPP_SHA, verified
+# with the editor's own verifyPackageSignature, bundled in resources/jwplc-vpp
+# (installed by the editor on launch) and also attached to the release.
 
 on:
   push:
@@ -21,16 +22,73 @@ on:
 env:
   NODE_VERSION: '22.x'
   PLATFORM_REPO: https://github.com/JW-Control/platform-jwplc.git
-  # v2.1.0-alpha.16/JWPLC-Sim/main @ 94edd7d (Designer 2.1.0-alpha.16: iconos, medidor, historial, modo claro, proyecto Runtime)
-  PLATFORM_DESIGNER_SHA: 94edd7d4ace73718f0f226ded8d0b7c30019823d
-  # v2.1.0-alpha.16/JWPLC-Sim/main @ 94edd7d (VPP 2.1.0-alpha.16 de #207, firma jwcontrol-2026 verificada)
-  PLATFORM_VPP_SHA: 94edd7d4ace73718f0f226ded8d0b7c30019823d
+  # v2.1.0-alpha.17/JWPLC-Sim/main @ 4cb23c5 (Designer: temas claro/oscuro, indicadores de nivel, vista embebida en OpenPLC)
+  PLATFORM_DESIGNER_SHA: 4cb23c5c990100cc362df909596a65c83130a024
+  # v2.1.0-alpha.17/Editor-Upstream/main @ 0647a84 (VPP 2.1.0-alpha.17, pantallas 4.3, firma jwcontrol-2026
+  # verificada, mismo árbol que cfb5908).
+  PLATFORM_VPP_SHA: 0647a84c15cb24f024021a0ea9402a9876fed2d2
   # Short download names (the version is in the release title and in SHA256SUMS.txt).
   VPP_NAME: JWPLC-Basic.vpp
   EXE_NAME: OpenPLC-Editor.exe
 
 jobs:
+  pack-vpp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Pack VPP from platform-jwplc
+        run: |
+          git init -q platform
+          git -C platform fetch -q --depth 1 "$PLATFORM_REPO" "$PLATFORM_VPP_SHA"
+          mkdir vpp-src vpp-out
+          git -C platform archive "$PLATFORM_VPP_SHA" openplc-editor-installers/v4.2.7/vpp | tar -x -C vpp-src
+          cd vpp-src/openplc-editor-installers/v4.2.7/vpp
+          find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort | TZ=UTC zip -q -X -D "$GITHUB_WORKSPACE/vpp-out/$VPP_NAME" -@
+
+      - name: Verify VPP signature with the editor verifier
+        run: |
+          mkdir -p verify/pkg
+          cp src/backend/shared/utils/vpp/verify-package-signature.ts src/backend/shared/utils/vpp/package-verification-core.ts \
+            src/backend/shared/utils/vpp/trusted-keys.ts verify/
+          # Node's ESM loader needs the extension that webpack and tsc resolve on their own.
+          sed -i "s#from './package-verification-core'#from './package-verification-core.ts'#" verify/verify-package-signature.ts
+          grep -q "package-verification-core.ts'" verify/verify-package-signature.ts
+          unzip -q "vpp-out/$VPP_NAME" -d verify/pkg
+          cat > verify/run.ts <<'EOF'
+          import { TRUSTED_PACKAGE_KEYS } from './trusted-keys.ts'
+          import { verifyPackageSignature } from './verify-package-signature.ts'
+          const result = verifyPackageSignature(process.argv[2], TRUSTED_PACKAGE_KEYS)
+          console.log(JSON.stringify(result))
+          if (!result.valid) process.exit(1)
+          EOF
+          node --experimental-strip-types --no-warnings verify/run.ts verify/pkg
+
+      - name: Write bundled.json
+        run: |
+          node -e '
+            const m = require("./verify/pkg/manifest.json");
+            const index = { file: process.env.VPP_NAME, packageId: m.package.id, version: m.package.version };
+            require("fs").writeFileSync("vpp-out/bundled.json", JSON.stringify(index, null, 2) + "\n");
+            console.log(index);
+          '
+
+      - name: Upload VPP
+        uses: actions/upload-artifact@v4
+        with:
+          name: jwplc-vpp
+          path: vpp-out/
+          retention-days: 30
+          if-no-files-found: error
+
   build-windows-x64:
+    needs: pack-vpp
     runs-on: windows-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -66,10 +124,18 @@ jobs:
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
           done
           grep -q '2.1.0-alpha.16' resources/jwplc-hmi-designer/poc/desktop.html
-          # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4).
-          test -f resources/jwplc-hmi-designer/poc/designer-openplc-bindings.js
+          # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4) and the light/dark theme.
+          for f in designer-openplc-bindings.js designer-theme.js designer-light-theme.css; do
+            test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
+          done
           rm -rf platform
           echo "Designer files: $(find resources/jwplc-hmi-designer/poc -type f | wc -l)"
+
+      - name: Bundle the signed JWPLC Basic VPP
+        uses: actions/download-artifact@v4
+        with:
+          name: jwplc-vpp
+          path: resources/jwplc-vpp
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -90,7 +156,10 @@ jobs:
 
       - name: Check the Designer inside the package
         shell: bash
-        run: test -f release/build/win-unpacked/resources/jwplc-hmi-designer/poc/designer-openplc-host.js
+        run: |
+          test -f release/build/win-unpacked/resources/jwplc-hmi-designer/poc/designer-openplc-host.js
+          test -f "release/build/win-unpacked/resources/jwplc-vpp/$VPP_NAME"
+          test -f release/build/win-unpacked/resources/jwplc-vpp/bundled.json
 
       - name: Upload Windows x64 installer
         uses: actions/upload-artifact@v4
@@ -101,7 +170,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build-windows-x64
+    needs: [pack-vpp, build-windows-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,28 +189,14 @@ jobs:
           name: jwplc-edition-${{ needs.build-windows-x64.outputs.version }}-windows-x64
           path: dist
 
-      - name: Pack VPP from platform-jwplc
-        run: |
-          git init -q platform
-          git -C platform fetch -q --depth 1 "$PLATFORM_REPO" "$PLATFORM_VPP_SHA"
-          mkdir vpp-src
-          git -C platform archive "$PLATFORM_VPP_SHA" openplc-editor-installers/v4.2.7/vpp | tar -x -C vpp-src
-          cd vpp-src/openplc-editor-installers/v4.2.7/vpp
-          find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort | TZ=UTC zip -q -X -D "$GITHUB_WORKSPACE/dist/$VPP_NAME" -@
+      - name: Download VPP
+        uses: actions/download-artifact@v4
+        with:
+          name: jwplc-vpp
+          path: vpp
 
-      - name: Verify VPP signature with the editor verifier
-        run: |
-          mkdir -p verify/pkg
-          cp src/backend/shared/utils/vpp/verify-package-signature.ts src/backend/shared/utils/vpp/trusted-keys.ts verify/
-          unzip -q "dist/$VPP_NAME" -d verify/pkg
-          cat > verify/run.ts <<'EOF'
-          import { TRUSTED_PACKAGE_KEYS } from './trusted-keys.ts'
-          import { verifyPackageSignature } from './verify-package-signature.ts'
-          const result = verifyPackageSignature(process.argv[2], TRUSTED_PACKAGE_KEYS)
-          console.log(JSON.stringify(result))
-          if (!result.valid) process.exit(1)
-          EOF
-          node --experimental-strip-types --no-warnings verify/run.ts verify/pkg
+      - name: Attach VPP
+        run: cp "vpp/$VPP_NAME" "dist/$VPP_NAME"
 
       - name: Checksums and release notes
         id: files

@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { useMemo, useState } from 'react'
 
 import { useVersionControl } from '../../../../../middleware/shared/providers'
@@ -40,7 +41,7 @@ export function CreateBranchPopover({ projectId, onCreated, onCloseParent }: Cre
       return
     }
     if (!versionControl) {
-      setError('Version control unavailable')
+      setError(tr('Version control unavailable'))
       return
     }
 
@@ -67,7 +68,7 @@ export function CreateBranchPopover({ projectId, onCreated, onCloseParent }: Cre
         // No write permission ⇒ warn instead of opening a branch form the
         // backend would reject anyway.
         if (open && !canEdit) {
-          notifyNoWritePermission('create branches in')
+          notifyNoWritePermission(tr('create branches in'))
           return
         }
         setIsOpen(open)
@@ -83,7 +84,7 @@ export function CreateBranchPopover({ projectId, onCreated, onCloseParent }: Cre
             <path d='M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z' />
           </svg>
           <span className='flex-1 text-start font-caption text-xs font-normal text-neutral-600 dark:text-neutral-400'>
-            Create new branch
+            {tr('Create new branch')}
           </span>
           <svg className='h-3 w-3 text-neutral-400 dark:text-neutral-500' viewBox='0 0 16 16' fill='currentColor'>
             <path d='M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z' />
@@ -106,7 +107,7 @@ export function CreateBranchPopover({ projectId, onCreated, onCloseParent }: Cre
                   <path d='M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z' />
                 </svg>
                 <p className='my-[2px] flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
-                  New Branch
+                  {tr('New Branch')}
                 </p>
               </div>
               <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
@@ -172,7 +173,7 @@ export function CreateBranchPopover({ projectId, onCreated, onCloseParent }: Cre
                     onClick={handleCancel}
                     disabled={isPending}
                   >
-                    Cancel
+                    {tr('Cancel')}
                   </button>
                 </Popover.Close>
                 <button

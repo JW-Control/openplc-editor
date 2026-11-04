@@ -1,4 +1,5 @@
 import { Pencil1Icon, PlusIcon, TrashIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import type { OpcUaServerConfig, OpcUaUser } from '@root/middleware/shared/ports/types'
 import { useCallback, useMemo, useState } from 'react'
@@ -93,7 +94,7 @@ export const UsersTab = ({ config, serverName, onConfigChange }: UsersTabProps) 
       {/* Header and description */}
       <div className='flex flex-col gap-2'>
         <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-          Configure user accounts for OPC-UA client authentication.
+          {tr('Configure user accounts for OPC-UA client authentication.')}
         </p>
       </div>
 
@@ -101,8 +102,9 @@ export const UsersTab = ({ config, serverName, onConfigChange }: UsersTabProps) 
       {usernameAuthEnabled && passwordUserCount === 0 && (
         <div className='rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900'>
           <p className='text-xs text-neutral-700 dark:text-neutral-300'>
-            Warning: Username authentication is enabled but no password users exist. Add at least one user for clients
-            to authenticate.
+            {tr(
+              'Warning: Username authentication is enabled but no password users exist. Add at least one user for clients to authenticate.',
+            )}
           </p>
         </div>
       )}
@@ -114,24 +116,30 @@ export const UsersTab = ({ config, serverName, onConfigChange }: UsersTabProps) 
         className='flex w-fit items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
       >
         <PlusIcon className='h-4 w-4' />
-        Add User
+        {tr('Add User')}
       </button>
 
       {/* Users Table */}
       {config.users.length === 0 ? (
         <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-          No users configured. Add users for password or certificate authentication.
+          {tr('No users configured. Add users for password or certificate authentication.')}
         </p>
       ) : (
         <div className='overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-700'>
           <table className='w-full'>
             <thead className='bg-neutral-100 dark:bg-neutral-900'>
               <tr>
-                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Name</th>
-                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Type</th>
-                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Role</th>
+                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                  {tr('Name')}
+                </th>
+                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                  {tr('Type')}
+                </th>
+                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                  {tr('Role')}
+                </th>
                 <th className='px-3 py-2 text-right text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                  Actions
+                  {tr('Actions')}
                 </th>
               </tr>
             </thead>
@@ -151,7 +159,7 @@ export const UsersTab = ({ config, serverName, onConfigChange }: UsersTabProps) 
                         type='button'
                         onClick={() => handleEditUser(user)}
                         className='rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
-                        title='Edit'
+                        title={tr('Edit')}
                       >
                         <Pencil1Icon className='h-4 w-4' />
                       </button>
@@ -159,7 +167,7 @@ export const UsersTab = ({ config, serverName, onConfigChange }: UsersTabProps) 
                         type='button'
                         onClick={() => handleDeleteUser(user.id)}
                         className='rounded p-1 text-neutral-500 hover:bg-red-100 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-900/30 dark:hover:text-red-400'
-                        title='Delete'
+                        title={tr('Delete')}
                       >
                         <TrashIcon className='h-4 w-4' />
                       </button>
@@ -174,16 +182,19 @@ export const UsersTab = ({ config, serverName, onConfigChange }: UsersTabProps) 
 
       {/* Role Descriptions */}
       <div className='mt-2 border-t border-neutral-200 pt-4 dark:border-neutral-800'>
-        <h4 className='mb-2 font-caption text-xs font-semibold text-neutral-950 dark:text-white'>Role Descriptions:</h4>
+        <h4 className='mb-2 font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
+          {tr('Role Descriptions:')}
+        </h4>
         <ul className='space-y-1 text-xs text-neutral-500 dark:text-neutral-400'>
           <li>
-            • <span className='font-medium'>Viewer:</span> Can only read variable values (monitoring)
+            • <span className='font-medium'>{tr('Viewer:')}</span> {tr('Can only read variable values (monitoring)')}
           </li>
           <li>
-            • <span className='font-medium'>Operator:</span> Can read/write based on per-variable permissions
+            • <span className='font-medium'>{tr('Operator:')}</span>{' '}
+            {tr('Can read/write based on per-variable permissions')}
           </li>
           <li>
-            • <span className='font-medium'>Engineer:</span> Full administrative access to all variables
+            • <span className='font-medium'>{tr('Engineer:')}</span> {tr('Full administrative access to all variables')}
           </li>
         </ul>
       </div>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { baseTypeEnum } from '@root/middleware/shared/ports/plc-schemas'
 import type { PLCDataType, PLCStructureVariable } from '@root/middleware/shared/ports/types'
 import { useEffect, useState } from 'react'
@@ -9,6 +10,7 @@ import { DimensionsModal } from '../../../../../_atoms/dimensions-modal'
 import { toast } from '../../../../../_features/[app]/toast/use-toast'
 
 type ArrayModalProps = {
+  dataTypeName: string
   variableName: string
   VariableRow?: number
   arrayModalIsOpen: boolean
@@ -23,13 +25,11 @@ type UserLibFunctionBlock = { type: string; name: string }
 export const ArrayModal = ({
   arrayModalIsOpen,
   closeContainer,
+  dataTypeName,
   setArrayModalIsOpen,
   variableName,
 }: ArrayModalProps) => {
   const {
-    editor: {
-      meta: { name },
-    },
     project: {
       data: { dataTypes },
     },
@@ -42,7 +42,7 @@ export const ArrayModal = ({
   const userDataTypes = dataTypes
     .filter(hasStringName)
     .map((type) => type.name)
-    .filter((typeName) => typeName !== name && typeName.toUpperCase() !== 'ARRAY')
+    .filter((typeName) => typeName !== dataTypeName && typeName.toUpperCase() !== 'ARRAY')
 
   const systemFunctionBlocks = sliceLibraries.system.flatMap((lib) =>
     (lib.pous ?? [])
@@ -77,7 +77,9 @@ export const ArrayModal = ({
   const [typeValue, setTypeValue] = useState<string>('dint')
 
   useEffect(() => {
-    const structure = dataTypes.filter((dataType) => dataType?.name === name && dataType?.derivation === 'structure')[0]
+    const structure = dataTypes.filter(
+      (dataType) => dataType?.name === dataTypeName && dataType?.derivation === 'structure',
+    )[0]
     if (!structure || structure.derivation !== 'structure') return
 
     const variable = structure.variable.find((variable) => variable.name === variableName)
@@ -87,7 +89,7 @@ export const ArrayModal = ({
       setDimensions(variable.type.data.dimensions.map((dimension) => dimension.dimension))
       setTypeValue(variable.type.data.baseType.value)
     }
-  }, [name, variableName, dataTypes])
+  }, [dataTypeName, variableName, dataTypes])
 
   const handleAddDimension = () => {
     setDimensions((prev) => [...prev, ''])
@@ -140,8 +142,8 @@ export const ArrayModal = ({
     const dimensionToSave = dimensions.filter((value) => value !== '')
     if (dimensionToSave.length === 0) {
       toast({
-        title: 'Invalid array',
-        description: 'Array must have at least one non-empty dimension',
+        title: tr('Invalid array'),
+        description: tr('Array must have at least one non-empty dimension'),
         variant: 'fail',
       })
       return
@@ -149,12 +151,14 @@ export const ArrayModal = ({
 
     const formattedArrayName = `ARRAY [${dimensionToSave.join(', ')}] OF ${typeValue.toUpperCase()}`
 
-    const structure = dataTypes.find((dataType) => dataType?.derivation === 'structure' && dataType?.name === name)
+    const structure = dataTypes.find(
+      (dataType) => dataType?.derivation === 'structure' && dataType?.name === dataTypeName,
+    )
 
     if (!structure || !('variable' in structure)) {
       toast({
-        title: 'Structure not found',
-        description: `The structure '${name}' was not found.`,
+        title: tr('Structure not found'),
+        description: tr("The structure '{{dataTypeName}}' was not found.", { dataTypeName }),
         variant: 'fail',
       })
       return
@@ -183,7 +187,7 @@ export const ArrayModal = ({
       return variable
     })
 
-    updateDatatype(name, {
+    updateDatatype(dataTypeName, {
       ...structure,
       variable: updatedVariables,
     } as unknown as PLCDataType)

@@ -14,6 +14,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { MinusIcon } from '@root/frontend/assets/icons/interface/Minus'
 import { PlusIcon } from '@root/frontend/assets/icons/interface/Plus'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { buildLibraryTree, type LibraryTreeNode } from '@root/frontend/utils/library-tree'
 import type { InstalledLibrary, SystemLibrary } from '@root/middleware/shared/ports/library-types'
@@ -96,7 +97,9 @@ const SystemLibrariesTab = ({ installed, onRefresh }: SystemLibrariesTabProps) =
       {/* Left pane — pool list */}
       <div className='flex w-1/2 min-w-[325px] flex-col gap-4 overflow-y-auto pr-4'>
         <div className='flex items-center justify-between'>
-          <h3 className='select-none text-base font-medium text-neutral-950 dark:text-white'>Installed Libraries</h3>
+          <h3 className='select-none text-base font-medium text-neutral-950 dark:text-white'>
+            {tr('Installed Libraries')}
+          </h3>
           <div className='flex gap-1'>
             <Popover.Root open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
               <Popover.Trigger asChild>
@@ -119,14 +122,14 @@ const SystemLibrariesTab = ({ installed, onRefresh }: SystemLibrariesTabProps) =
                     onClick={() => void handleImportFromFile()}
                     className='flex w-full items-center rounded-md px-3 py-2 text-left font-caption text-cp-sm font-medium text-neutral-850 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-850'
                   >
-                    Add from file...
+                    {tr('Add from file...')}
                   </button>
                   <button
                     type='button'
                     onClick={handleImportFromInternet}
                     className='flex w-full items-center rounded-md px-3 py-2 text-left font-caption text-cp-sm font-medium text-neutral-850 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-850'
                   >
-                    Add from catalog...
+                    {tr('Add from catalog...')}
                   </button>
                 </Popover.Content>
               </Popover.Portal>
@@ -152,7 +155,7 @@ const SystemLibrariesTab = ({ installed, onRefresh }: SystemLibrariesTabProps) =
         <div className='flex flex-col overflow-y-auto rounded-md border border-neutral-200 dark:border-neutral-700'>
           {installed.length === 0 ? (
             <div className='flex items-center justify-center p-8 text-sm text-neutral-500 dark:text-neutral-400'>
-              No libraries installed. Click + to add a library.
+              {tr('No libraries installed. Click + to add a library.')}
             </div>
           ) : (
             installed.map((lib) => (
@@ -197,10 +200,10 @@ const SystemLibrariesTab = ({ installed, onRefresh }: SystemLibrariesTabProps) =
               {selectedRow.displayName ?? selectedRow.name}
             </h3>
             <div className='flex flex-col gap-3'>
-              <DetailRow label='Identifier' value={selectedRow.name} />
-              <DetailRow label='Version' value={selectedRow.version} />
+              <DetailRow label={tr('Identifier')} value={selectedRow.name} />
+              <DetailRow label={tr('Version')} value={selectedRow.version} />
               <DetailRow
-                label='Source'
+                label={tr('Source')}
                 value={
                   selectedRow.bundled
                     ? 'Bundled with strucpp'
@@ -210,16 +213,16 @@ const SystemLibrariesTab = ({ installed, onRefresh }: SystemLibrariesTabProps) =
                 }
               />
               {selectedRow.installedAt && (
-                <DetailRow label='Installed' value={new Date(selectedRow.installedAt).toLocaleString()} />
+                <DetailRow label={tr('Installed')} value={new Date(selectedRow.installedAt).toLocaleString()} />
               )}
-              {selectedRow.author && <DetailRow label='Author' value={selectedRow.author} />}
-              {selectedRow.description && <DetailRow label='Description' value={selectedRow.description} />}
+              {selectedRow.author && <DetailRow label={tr('Author')} value={selectedRow.author} />}
+              {selectedRow.description && <DetailRow label={tr('Description')} value={selectedRow.description} />}
             </div>
             {selectedArchive && <PouTreePreview library={selectedArchive} />}
           </>
         ) : (
           <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-            Select a library to view details
+            {tr('Select a library to view details')}
           </div>
         )}
       </div>

@@ -14,6 +14,7 @@
  * one I have is broken; reinstall."
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { PublicLibrary } from '../../../../middleware/shared/ports/public-catalog-types'
@@ -56,7 +57,7 @@ const PublicCatalogBrowserModal = () => {
   const runFetch = async () => {
     if (!library?.queryPublicCatalog) {
       setPhase('error')
-      setError('Public catalog is not available on this platform build.')
+      setError(tr('Public catalog is not available on this platform build.'))
       return
     }
     const myId = ++requestIdRef.current
@@ -150,15 +151,15 @@ const PublicCatalogBrowserModal = () => {
       }}
     >
       <ModalContent className='flex h-[600px] w-[680px] select-none flex-col rounded-lg p-6'>
-        <ModalTitle className='mb-1 text-xl font-semibold'>Browse Public Libraries</ModalTitle>
+        <ModalTitle className='mb-1 text-xl font-semibold'>{tr('Browse Public Libraries')}</ModalTitle>
         <p className='mb-4 text-sm text-neutral-600 dark:text-neutral-400'>
-          Discover and install community-published OpenPLC libraries.
+          {tr('Discover and install community-published OpenPLC libraries.')}
         </p>
 
         <div className='mb-3 flex items-center gap-2'>
           <input
             type='text'
-            placeholder='Search by name, author, or description...'
+            placeholder={tr('Search by name, author, or description...')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={phase !== 'ready'}
@@ -170,8 +171,8 @@ const PublicCatalogBrowserModal = () => {
             disabled={phase !== 'ready'}
             className='rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-1000 focus:border-brand focus:outline-none disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
           >
-            <option value='popular'>Sort: Popularity</option>
-            <option value='name'>Sort: Name</option>
+            <option value='popular'>{tr('Sort: Popularity')}</option>
+            <option value='name'>{tr('Sort: Name')}</option>
           </select>
         </div>
 
@@ -179,7 +180,7 @@ const PublicCatalogBrowserModal = () => {
           {phase === 'loading' && (
             <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
               <span className='mr-2 inline-block h-3 w-3 animate-pulse rounded-full bg-brand' />
-              Loading public catalog...
+              {tr('Loading public catalog...')}
             </div>
           )}
 
@@ -191,7 +192,7 @@ const PublicCatalogBrowserModal = () => {
                 onClick={() => void runFetch()}
                 className='cursor-pointer rounded-md bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-medium-dark'
               >
-                Retry
+                {tr('Retry')}
               </button>
             </div>
           )}
@@ -278,7 +279,7 @@ const PublicCatalogBrowserModal = () => {
               onClick={handleClose}
               className='cursor-pointer rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { useWindow } from '../../../../middleware/shared/providers'
@@ -35,12 +36,12 @@ const QuitApplicationModal = ({ isOpen, ...rest }: QuitApplicationModalProps) =>
       }}
       {...rest}
     >
-      <ModalContent className='flex max-h-80 w-[300px] select-none flex-col items-center justify-evenly rounded-lg'>
+      <ModalContent className='flex w-[300px] select-none flex-col items-center justify-evenly rounded-lg'>
         <div className='flex select-none flex-col items-center gap-6'>
           <WarningIcon className='mr-2 mt-2 h-[73px] w-[73px]' />
           <div>
             <p className='text-m w-full text-center font-bold text-gray-600 dark:text-neutral-100'>
-              Are you sure you want to quit the application?
+              {tr('Are you sure you want to quit the application?')}
             </p>
           </div>
           <div className='flex w-[200px] flex-col gap-1 space-y-2 text-sm'>
@@ -48,13 +49,13 @@ const QuitApplicationModal = ({ isOpen, ...rest }: QuitApplicationModalProps) =>
               onClick={handleCloseApplication}
               className='w-full rounded-lg bg-brand px-4 py-2 text-center font-medium text-white'
             >
-              Yes
+              {tr('Yes')}
             </button>
             <button
               onClick={() => handleCancelModal()}
               className='w-full rounded-md bg-neutral-100 px-4 py-2 font-medium dark:bg-neutral-850 dark:text-neutral-100'
             >
-              No
+              {tr('No')}
             </button>
           </div>
         </div>

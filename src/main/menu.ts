@@ -1,14 +1,15 @@
 import { i18n } from '@root/frontend/locales/i18n'
+import { tr } from '@root/frontend/locales/tr'
 import { BrowserWindow, Menu, MenuItemConstructorOptions, nativeTheme, shell } from 'electron'
 
 import { ProjectService } from '../backend/editor/services'
 import { store } from './modules/store'
+import type { UpdateService } from './modules/updater'
 
 /**
  * Wip: Interface for mac machines menu.
  */
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
-  selector?: string
   submenu?: DarwinMenuItemConstructorOptions[] | Menu
 }
 
@@ -19,6 +20,8 @@ interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
 export default class MenuBuilder {
   private mainWindow: BrowserWindow
   private projectService: ProjectService
+  private updates: UpdateService | undefined
+  private projectOpen = false
   private readonly handleDevelopmentContextMenu = (_: Electron.Event, props: Electron.ContextMenuParams): void => {
     if (!this.hasLiveWindow()) return
 
@@ -42,9 +45,32 @@ export default class MenuBuilder {
     { role: 'toggleDevTools' },
   ]
 
-  constructor(mainWindow: BrowserWindow) {
+  constructor(mainWindow: BrowserWindow, updates?: UpdateService) {
     this.mainWindow = mainWindow
     this.projectService = new ProjectService(mainWindow)
+    this.updates = updates
+  }
+
+  /**
+   * "Check for Updates" and its automatic toggle. No accelerator: Ctrl+U is
+   * Monaco's cursor undo, and a menu accelerator would take it from the editor.
+   */
+  private updateItems(): MenuItemConstructorOptions[] {
+    const updates = this.updates
+    return [
+      {
+        label: i18n.t('menu:file.submenu.updates'),
+        enabled: updates !== undefined,
+        click: () => void updates?.checkNow(),
+      },
+      {
+        label: tr('Check for Updates Automatically'),
+        type: 'checkbox',
+        checked: updates?.isAutoCheckEnabled() ?? false,
+        enabled: updates !== undefined,
+        click: (item) => updates?.setAutoCheck(item.checked),
+      },
+    ]
   }
 
   private hasLiveWindow(): boolean {
@@ -74,6 +100,12 @@ export default class MenuBuilder {
     return menu
   }
 
+  async setProjectOpen(open: boolean): Promise<void> {
+    if (open === this.projectOpen) return
+    this.projectOpen = open
+    await this.buildMenu()
+  }
+
   handleCreateProject() {
     this.mainWindow.webContents.send('project:create-accelerator')
   }
@@ -86,12 +118,29 @@ export default class MenuBuilder {
     this.mainWindow.webContents.send('project:save-accelerator')
   }
 
+  handleSaveProjectAs() {
+    this.mainWindow.webContents.send('project:save-as-accelerator')
+  }
+
+  /**
+   * Retrieve Project from PLC. The main process only forwards the request —
+   * the renderer owns the modal, the runtime connection and everything after.
+   */
+  handleRetrieveProject() {
+    this.mainWindow.webContents.send('project:retrieve-accelerator')
+  }
+
   handleSaveFile() {
     this.mainWindow.webContents.send('project:save-file-accelerator')
   }
 
-  handleExportProjectRequest(xmlFormatTarget: 'old-editor' | 'codesys') {
-    this.mainWindow.webContents.send('compiler:export-project-request', xmlFormatTarget)
+  handleExportProjectRequest() {
+    this.mainWindow.webContents.send('compiler:export-project-request')
+  }
+
+  // The renderer owns the overwrite confirmation, so this only forwards the request.
+  handleImportPlcopenRequest() {
+    this.mainWindow.webContents.send('project:import-plcopen-accelerator')
   }
 
   async handleGetRecent() {
@@ -99,9 +148,9 @@ export default class MenuBuilder {
     return response
   }
 
-  async handleOpenProjectByPath(projectPath: string) {
-    const response = await this.projectService.openProjectByPath(projectPath)
-    this.mainWindow.webContents.send('project:open-recent-accelerator', response)
+  // The renderer opens it through project:read-files, which sets the file-access root.
+  handleOpenProjectByPath(projectPath: string) {
+    this.mainWindow.webContents.send('project:open-recent-accelerator', projectPath)
   }
 
   handleCloseTab() {
@@ -118,6 +167,21 @@ export default class MenuBuilder {
 
   handleSwitchPerspective() {
     this.mainWindow.webContents.send('workspace:switch-perspective-accelerator')
+  }
+
+  handleOpenDiagnostics() {
+    this.mainWindow.webContents.send('workspace:open-diagnostics-accelerator')
+  }
+
+  /**
+   * The developer items, or nothing outside a dev build.
+   *
+   * Returned as a list so a template can spread it: an empty array leaves the
+   * menu byte-for-byte as it was, which is what a release build must see.
+   */
+  private developerMenuItems(): MenuItemConstructorOptions[] {
+    if (process.env.NODE_ENV !== 'development') return []
+    return [{ type: 'separator' }, { label: tr('I/O Image Diagnostics'), click: () => this.handleOpenDiagnostics() }]
   }
 
   async handleOpenExternalLink(link: string) {
@@ -144,11 +208,24 @@ export default class MenuBuilder {
     this.mainWindow.webContents.send('window-controls:request-close')
   }
 
+  handleRefreshRequest() {
+    if (!this.hasLiveWindow()) return
+    this.mainWindow.webContents.send('app:refresh-accelerator')
+  }
+
   handleUndoRequest() {
     this.mainWindow.webContents.send('edit:undo-request')
   }
   handleRedoRequest() {
     this.mainWindow.webContents.send('edit:redo-request')
+  }
+
+  handlePrint() {
+    this.mainWindow.webContents.send('project:print-accelerator')
+  }
+
+  handlePageSetup() {
+    this.mainWindow.webContents.send('project:page-setup-accelerator')
   }
 
   /**
@@ -202,8 +279,21 @@ export default class MenuBuilder {
   async buildDarwinTemplate(): Promise<MenuItemConstructorOptions[]> {
     const recent = await this.handleGetRecent()
     const homeDir = process.env.HOME || ''
+    // Not `role: 'appMenu'`: its labels use `app.name`, which is the package name, not the product name.
+    const appName = 'OpenPLC Editor'
     const defaultDarwinMenu: MenuItemConstructorOptions = {
-      role: 'appMenu',
+      label: appName,
+      submenu: [
+        { role: 'about', label: `About ${appName}` },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide', label: `Hide ${appName}` },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit', label: `Quit ${appName}` },
+      ],
     }
 
     const subMenuFile: DarwinMenuItemConstructorOptions = {
@@ -224,63 +314,76 @@ export default class MenuBuilder {
           label: i18n.t('menu:file.submenu.save'),
           accelerator: 'Cmd+S',
           click: () => this.handleSaveFile(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:file.submenu.saveProject'),
           accelerator: 'Cmd+Shift+S',
           click: () => this.handleSaveProject(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:file.submenu.saveAs'),
           accelerator: 'Cmd+Shift+A',
-          click: () => {},
-          enabled: false,
+          click: () => this.handleSaveProjectAs(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:file.submenu.closeTab'),
           accelerator: 'Cmd+W',
           click: () => this.handleCloseTab(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:file.submenu.closeProject'),
           accelerator: 'Cmd+Shift+W',
           click: () => this.handleCloseProject(),
+          enabled: this.projectOpen,
         },
         { type: 'separator' },
         {
           label: i18n.t('menu:file.submenu.exportToPLCOpenXml'),
-          click: () => this.handleExportProjectRequest('old-editor'),
+          click: () => this.handleExportProjectRequest(),
+          enabled: this.projectOpen,
         },
         {
-          label: i18n.t('menu:file.submenu.exportToCodesysXml'),
-          click: () => this.handleExportProjectRequest('codesys'),
+          label: i18n.t('menu:file.submenu.importFromPLCOpenXml'),
+          click: () => this.handleImportPlcopenRequest(),
+          enabled: this.projectOpen,
+        },
+        { type: 'separator' },
+        // Its own group: retrieving is not a save, a close, or an export, and
+        // sitting inside any of those groups reads as a variant of them.
+        {
+          label: i18n.t('menu:file.submenu.retrieveProject'),
+          click: () => this.handleRetrieveProject(),
         },
         { type: 'separator' },
         {
           label: i18n.t('menu:file.submenu.pageSetup'),
           accelerator: 'Cmd+Option+P',
-          enabled: false,
+          click: () => this.handlePageSetup(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:file.submenu.preview'),
           accelerator: 'Cmd+Shift+P',
-          enabled: false,
+          click: () => this.handlePrint(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:file.submenu.print'),
           accelerator: 'Cmd+P',
-          enabled: false,
+          click: () => this.handlePrint(),
+          enabled: this.projectOpen,
         },
         { type: 'separator' },
-        {
-          label: i18n.t('menu:file.submenu.updates'),
-          accelerator: 'Cmd+U',
-          enabled: false,
-        },
+        ...this.updateItems(),
         { type: 'separator' },
         {
-          label: 'Board Package Manager...',
+          label: tr('Board Package Manager...'),
           click: () => this.mainWindow.webContents.send('packages:open-manager'),
+          enabled: this.projectOpen,
         },
       ],
     }
@@ -288,40 +391,37 @@ export default class MenuBuilder {
     const subMenuEdit: DarwinMenuItemConstructorOptions = {
       label: i18n.t('menu:edit.label'),
       submenu: [
+        // macOS delivers Cmd+Z to a focused text field only through a menu role.
         {
           label: i18n.t('menu:edit.submenu.undo'),
           accelerator: 'Cmd+Z',
-          click: () => this.handleUndoRequest(),
+          ...(this.projectOpen ? { click: () => this.handleUndoRequest() } : { role: 'undo' }),
         },
         {
           label: i18n.t('menu:edit.submenu.redo'),
           accelerator: 'Cmd+Shift+Z',
-          click: () => this.handleRedoRequest(),
+          ...(this.projectOpen ? { click: () => this.handleRedoRequest() } : { role: 'redo' }),
         },
         { type: 'separator' },
         {
           label: i18n.t('menu:edit.submenu.cut'),
           accelerator: 'Cmd+X',
-          selector: 'cut:',
-          enabled: true,
+          role: 'cut',
         },
         {
           label: i18n.t('menu:edit.submenu.copy'),
           accelerator: 'Cmd+C',
-          selector: 'copy:',
-          enabled: true,
+          role: 'copy',
         },
         {
           label: i18n.t('menu:edit.submenu.paste'),
           accelerator: 'Cmd+V',
-          selector: 'paste:',
-          enabled: true,
+          role: 'paste',
         },
         { type: 'separator' },
         {
           label: i18n.t('menu:edit.submenu.find'),
           accelerator: 'Cmd+F',
-          selector: 'find:',
           enabled: false,
         },
         {
@@ -339,6 +439,7 @@ export default class MenuBuilder {
           label: i18n.t('menu:edit.submenu.findInProject'),
           accelerator: '',
           click: () => this.handleFindInProject(),
+          enabled: this.projectOpen,
         },
         { type: 'separator' },
         {
@@ -362,14 +463,14 @@ export default class MenuBuilder {
         {
           label: i18n.t('menu:edit.submenu.selectAll'),
           accelerator: 'Cmd+A',
-          selector: 'selectAll:',
-          enabled: false,
+          role: 'selectAll',
         },
         {
           label: i18n.t('menu:edit.submenu.deletePou'),
           accelerator: 'Cmd+backspace',
           // role: 'delete',
           click: () => this.handleDeletePou(),
+          enabled: this.projectOpen,
         },
       ],
     }
@@ -380,8 +481,7 @@ export default class MenuBuilder {
         {
           label: i18n.t('menu:display.submenu.refresh'),
           accelerator: 'Cmd+R',
-          selector: 'reload:',
-          enabled: false,
+          click: () => this.handleRefreshRequest(),
         },
         {
           label: i18n.t('menu:display.submenu.clearErrors'),
@@ -390,7 +490,7 @@ export default class MenuBuilder {
         },
         { type: 'separator' },
         {
-          label: 'Zoom', // Todo: i18n.t('menu:display.submenu.zoom') have to be added
+          label: tr('Zoom'),
           enabled: false,
           submenu: [
             {
@@ -408,6 +508,7 @@ export default class MenuBuilder {
           label: i18n.t('menu:display.submenu.switchPerspective'),
           accelerator: 'F12',
           click: () => this.handleSwitchPerspective(),
+          enabled: this.projectOpen,
         },
         {
           label: i18n.t('menu:display.submenu.fullScreen'),
@@ -426,6 +527,7 @@ export default class MenuBuilder {
           sublabel: this.themeSublabel(),
           click: () => this.updateAppTheme(),
         },
+        ...this.developerMenuItems(),
       ],
     }
 
@@ -440,7 +542,7 @@ export default class MenuBuilder {
         return {
           label: `${projectName} (${projectPath})`,
           click: () => {
-            void this.handleOpenProjectByPath(projectEntry.path)
+            this.handleOpenProjectByPath(projectEntry.path)
           },
         }
       }),
@@ -477,7 +579,28 @@ export default class MenuBuilder {
     const templateDefault: MenuItemConstructorOptions[] = [
       {
         label: i18n.t('menu:file.label'),
-        visible: false,
+        // KNOWN DIVERGENCE from the in-app React File menu (`menus/file.tsx`),
+        // which is the only File menu on Windows while this is the only one on
+        // Linux. Deliberate for now, and tracked rather than fixed here:
+        //   - native only: New Project, Open Project, Board Package Manager
+        //   - React only: README (capability-gated)
+        // Everything either menu offers now WORKS on its platform, which is the
+        // part that mattered: Save As was disabled here, so on Linux a
+        // retrieved project could not be saved at all. Full parity is a bigger
+        // change than this ticket, since some React items are gated on
+        // capabilities the main process does not know about.
+        //
+        // Hidden on Windows ONLY, where the in-app React menubar renders its own
+        // File menu and a native one beside it would be a duplicate. Linux gets
+        // no in-app menubar (`app-layout.tsx` draws no title bar there), so this
+        // menu is the only File menu it has and must stay visible.
+        //
+        // It was a bare `visible: false` before, which read as "Windows and Linux
+        // both hide this" — but Linux shows the menu regardless, so the flag was
+        // describing an intent the platform never applied. Spelling the platform
+        // out keeps the behaviour Linux already has if Electron ever starts
+        // honouring the flag there.
+        visible: process.platform !== 'win32',
         submenu: [
           {
             label: i18n.t('menu:file.submenu.newProject'),
@@ -496,66 +619,87 @@ export default class MenuBuilder {
             label: i18n.t('menu:file.submenu.save'),
             accelerator: 'Ctrl+S',
             click: () => this.handleSaveFile(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:file.submenu.saveProject'),
             accelerator: 'Ctrl+Shift+S',
             click: () => this.handleSaveProject(),
+            enabled: this.projectOpen,
           },
           {
+            // Wired, not disabled. Linux has no in-app menubar, so this is its
+            // only Save As -- and a retrieved project can be saved NO other
+            // way: both save paths refuse it and point here. A disabled item
+            // does not fire its accelerator either, so Ctrl+Shift+A was dead
+            // too, and every refusal named an action the platform did not have.
             label: i18n.t('menu:file.submenu.saveAs'),
             accelerator: 'Ctrl+Shift+A',
-            enabled: false,
+            click: () => this.handleSaveProjectAs(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:file.submenu.closeTab'),
             accelerator: 'Ctrl+W',
             click: () => this.handleCloseTab(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:file.submenu.closeProject'),
             accelerator: 'Ctrl+Shift+W',
             click: () => this.handleCloseProject(),
+            enabled: this.projectOpen,
           },
           {
             type: 'separator',
           },
           {
             label: i18n.t('menu:file.submenu.exportToPLCOpenXml'),
-            click: () => this.handleExportProjectRequest('old-editor'),
+            click: () => this.handleExportProjectRequest(),
+            enabled: this.projectOpen,
           },
           {
-            label: i18n.t('menu:file.submenu.exportToCodesysXml'),
-            click: () => this.handleExportProjectRequest('codesys'),
+            label: i18n.t('menu:file.submenu.importFromPLCOpenXml'),
+            click: () => this.handleImportPlcopenRequest(),
+            enabled: this.projectOpen,
+          },
+          {
+            type: 'separator',
+          },
+          // Its own group: retrieving is not a save, a close, or an export, and
+          // sitting inside any of those groups reads as a variant of them.
+          {
+            label: i18n.t('menu:file.submenu.retrieveProject'),
+            click: () => this.handleRetrieveProject(),
           },
           {
             type: 'separator',
           },
           {
             label: i18n.t('menu:file.submenu.pageSetup'),
-            enabled: false,
             accelerator: 'Ctrl+Alt+P',
+            click: () => this.handlePageSetup(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:file.submenu.preview'),
-            enabled: false,
             accelerator: 'Ctrl+Shift+P',
+            click: () => this.handlePrint(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:file.submenu.print'),
             accelerator: 'Ctrl+P',
-            enabled: false,
+            click: () => this.handlePrint(),
+            enabled: this.projectOpen,
           },
           { type: 'separator' },
-          {
-            label: i18n.t('menu:file.submenu.updates'),
-            enabled: false,
-            accelerator: 'Ctrl+U',
-          },
+          ...this.updateItems(),
           { type: 'separator' },
           {
-            label: 'Board Package Manager...',
+            label: tr('Board Package Manager...'),
             click: () => this.mainWindow.webContents.send('packages:open-manager'),
+            enabled: this.projectOpen,
           },
           { type: 'separator' },
           {
@@ -573,11 +717,13 @@ export default class MenuBuilder {
             label: i18n.t('menu:edit.submenu.undo'),
             accelerator: 'Ctrl+Z',
             click: () => this.handleUndoRequest(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:edit.submenu.redo'),
             accelerator: 'Ctrl+Shift+Z',
             click: () => this.handleRedoRequest(),
+            enabled: this.projectOpen,
           },
           { type: 'separator' },
           {
@@ -619,6 +765,7 @@ export default class MenuBuilder {
             label: i18n.t('menu:edit.submenu.findInProject'),
             accelerator: 'Ctrl+Shift+F',
             click: () => this.handleFindInProject(),
+            enabled: this.projectOpen,
           },
           { type: 'separator' },
           {
@@ -649,6 +796,7 @@ export default class MenuBuilder {
             label: i18n.t('menu:edit.submenu.deletePou'),
             accelerator: 'Ctrl+Shift+delete',
             click: () => this.handleDeletePou(),
+            enabled: this.projectOpen,
           },
         ],
       },
@@ -657,8 +805,8 @@ export default class MenuBuilder {
         submenu: [
           {
             label: i18n.t('menu:display.submenu.refresh'),
-            role: 'reload',
-            enabled: false,
+            accelerator: 'Ctrl+R',
+            click: () => this.handleRefreshRequest(),
           },
           {
             label: i18n.t('menu:display.submenu.clearErrors'),
@@ -667,7 +815,7 @@ export default class MenuBuilder {
           },
           { type: 'separator' },
           {
-            label: 'Zoom',
+            label: tr('Zoom'),
             enabled: false,
             submenu: [
               {
@@ -685,6 +833,7 @@ export default class MenuBuilder {
             label: i18n.t('menu:display.submenu.switchPerspective'),
             accelerator: 'F12',
             click: () => this.handleSwitchPerspective(),
+            enabled: this.projectOpen,
           },
           {
             label: i18n.t('menu:display.submenu.fullScreen'),
@@ -702,6 +851,7 @@ export default class MenuBuilder {
             sublabel: this.themeSublabel(),
             click: () => this.updateAppTheme(),
           },
+          ...this.developerMenuItems(),
         ],
       },
       {
@@ -735,7 +885,7 @@ export default class MenuBuilder {
           return {
             label: `${projectName} (${projectPath})`,
             click: () => {
-              void this.handleOpenProjectByPath(projectEntry.path)
+              this.handleOpenProjectByPath(projectEntry.path)
             },
           }
         }),

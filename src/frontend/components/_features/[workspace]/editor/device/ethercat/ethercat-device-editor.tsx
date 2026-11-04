@@ -1,28 +1,44 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { useDeviceConfiguration } from '@root/frontend/hooks/use-device-configuration'
-import { useOpenPLCStore } from '@root/frontend/store'
+import { tr } from '@root/frontend/locales/tr'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import type {
+  Cia402AxisConfig,
   ConfiguredEtherCATDevice,
   EnrichDeviceData,
   ESIDeviceSummary,
   ESIRepositoryItemLight,
   EtherCATChannelMapping,
   EtherCATSlaveConfig,
+  PersistedPdoEntry,
   SDOConfigurationEntry,
 } from '@root/middleware/shared/ports/esi-types'
 import { useEsi } from '@root/middleware/shared/providers/platform-context'
+import { reconcilePdoChannels } from '@root/middleware/shared/utils/ethercat'
 import { buildAddressPool } from '@root/middleware/shared/utils/iec-address'
-import { resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
+import { resolveAddressProducerCapabilities } from '@root/middleware/shared/utils/target-capabilities'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Cia402AxisTab } from './components/cia402-axis-tab'
+import { CouplerDiagnosticsTab } from './components/coupler-diagnostics-tab'
 import {
   ChannelMappingsSection,
   DeviceConfigurationForm,
   SdoParametersSection,
 } from './components/device-configuration-form'
+import { ModulesTab } from './components/modules-tab'
+import { ProcessDataTab } from './components/process-data-tab'
 
-type DeviceDetailTab = 'info' | 'configuration' | 'startup-params' | 'channel-mappings'
+type DeviceDetailTab =
+  | 'info'
+  | 'configuration'
+  | 'startup-params'
+  | 'channel-mappings'
+  | 'axis'
+  | 'process-data'
+  | 'modules'
+  | 'diagnostics'
 
 const TabItem = ({ value, label, isActive }: { value: string; label: string; isActive: boolean }) => (
   <Tabs.Trigger
@@ -63,6 +79,7 @@ interface EtherCATDeviceEditorProps {
  * instance reads its own device regardless of which tab is active.
  */
 const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: EtherCATDeviceEditorProps = {}) => {
+  const store = useOpenPLCStoreApi()
   const { editor, project, projectActions, workspaceActions } = useOpenPLCStore()
   const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
   const esi = useEsi()
@@ -102,12 +119,36 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
     )
   }, [remoteDevice])
 
+  // A recognized CiA 402 SoftMotion drive: its PDO channel mappings are
+  // generated and consumed internally by the drive bridge, so the raw
+  // Channel Mappings tab is hidden and the SoftMotion Axis tab leads.
+  const isSoftMotion = !!device?.cia402?.enabled
+
+  // Channel Mappings is hidden for SoftMotion drives; if it was the active
+  // tab (the default), fall through to the SoftMotion Axis tab.
+  useEffect(() => {
+    if (isSoftMotion && activeTab === 'channel-mappings') setActiveTab('axis')
+  }, [isSoftMotion, activeTab])
+
+  // On a modular coupler, Modules leads. Switch away from the default
+  // Channel Mappings tab the first time the device becomes available so
+  // the operator lands on Modules; later clicks (including picking Channel
+  // Mappings explicitly) are left alone.
+  const landedOnModulesRef = useRef(false)
+  useEffect(() => {
+    if (landedOnModulesRef.current || !device) return
+    landedOnModulesRef.current = true
+    if (device.isModularCoupler === true && activeTab === 'channel-mappings') {
+      setActiveTab('modules')
+    }
+  }, [device, activeTab])
+
   // Pool of every claim from producers active on the current target.
   // EtherCAT is sharing the image table with VPP and Modbus TCP on
   // Runtime v4, so all three feed into the pool — but capability
   // scoping ensures inactive producers don't claim.
   const usedAddresses = useMemo(() => {
-    const state = useOpenPLCStore.getState()
+    const state = store.getState()
     const boardInfo = state.deviceAvailableOptions.availableBoards.get(
       state.deviceDefinitions.configuration.deviceBoard,
     )
@@ -125,10 +166,10 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
         vendorIoMapping: { entries: ioMapping },
         remoteDevices: project.data.remoteDevices,
       },
-      resolveTargetCapabilities(boardInfo),
+      resolveAddressProducerCapabilities(boardInfo),
     )
     return new Set(pool.byAddress.keys())
-  }, [project.data.remoteDevices, vendorScreenData])
+  }, [store, project.data.remoteDevices, vendorScreenData])
 
   // Exclude the current device's own addresses from the "external" set
   const externalAddresses = useMemo(() => {
@@ -149,7 +190,7 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
       // registry and cascades any alias rename onto bound variables' names.
       projectActions.updateEthercatConfig(busName, { masterConfig, devices })
       // Mark the slave file dirty (same pattern as other file types)
-      const { sharedWorkspaceActions } = useOpenPLCStore.getState()
+      const { sharedWorkspaceActions } = store.getState()
       if (deviceName) {
         sharedWorkspaceActions.handleFileAndWorkspaceSavedState(deviceName)
       } else {
@@ -175,7 +216,16 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
 
   const handleEnrichDevice = useCallback(
     (data: EnrichDeviceData) => {
-      syncDevicesToStore(configuredDevices.map((d) => (d.id === deviceId ? { ...d, ...data } : d)))
+      // `coeFlags` from the enrichment belongs inside `config`, not at
+      // the top of the device. Everything else spreads into the device as-is.
+      syncDevicesToStore(
+        configuredDevices.map((d) => {
+          if (d.id !== deviceId) return d
+          const { coeFlags, ...rest } = data
+          const nextConfig = coeFlags !== undefined ? { ...d.config, coeFlags } : d.config
+          return { ...d, ...rest, config: nextConfig }
+        }),
+      )
     },
     [configuredDevices, deviceId, syncDevicesToStore],
   )
@@ -183,6 +233,115 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
   const handleUpdateSdoConfigurations = useCallback(
     (sdoConfigurations: SDOConfigurationEntry[]) => {
       syncDevicesToStore(configuredDevices.map((d) => (d.id === deviceId ? { ...d, sdoConfigurations } : d)))
+    },
+    [configuredDevices, deviceId, syncDevicesToStore],
+  )
+
+  // Expert-mode PDO reassignment: only the `assigned` flag of the named PDO changes.
+  // Add / remove modules on a modular coupler. The persisted shape produced by
+  // ModulesTab's buildModuleForSlot is spread onto `device.modules`.
+  const handleUpdateModules = useCallback(
+    (modules: Parameters<typeof ModulesTab>[0]['onUpdateModules'] extends (m: infer M) => unknown ? M : never) => {
+      syncDevicesToStore(
+        configuredDevices.map((d) =>
+          d.id === deviceId ? { ...d, modules: modules.length > 0 ? modules : undefined } : d,
+        ),
+      )
+    },
+    [configuredDevices, deviceId, syncDevicesToStore],
+  )
+
+  // Alias / mapping edits for a channel belonging to one of a coupler's
+  // modules route through here: the hook rebuilds the specific module and
+  // we persist it by swapping that module in the slave's modules array.
+  const handleUpdateModule = useCallback(
+    (moduleId: string, module: Parameters<typeof handleUpdateModules>[0][number]) => {
+      syncDevicesToStore(
+        configuredDevices.map((d) => {
+          if (d.id !== deviceId) return d
+          const nextModules = (d.modules ?? []).map((m) => (m.id === moduleId ? module : m))
+          return { ...d, modules: nextModules.length > 0 ? nextModules : undefined }
+        }),
+      )
+    },
+    [configuredDevices, deviceId, syncDevicesToStore],
+  )
+
+  const handleUpdatePdoAssigned = useCallback(
+    (direction: 'rx' | 'tx', pdoIndex: string, assigned: boolean) => {
+      syncDevicesToStore(
+        configuredDevices.map((d) => {
+          if (d.id !== deviceId) return d
+          const list = (direction === 'rx' ? d.rxPdos : d.txPdos) ?? []
+          const next = list.map((pdo) =>
+            pdo.index.toLowerCase() === pdoIndex.toLowerCase() ? { ...pdo, assigned } : pdo,
+          )
+          return direction === 'rx' ? { ...d, rxPdos: next } : { ...d, txPdos: next }
+        }),
+      )
+    },
+    [configuredDevices, deviceId, syncDevicesToStore],
+  )
+
+  // An entry-list edit rebuilds channelInfo and channelMappings from the PDOs: untouched
+  // channels keep alias and IEC location, new ones get a free address, removed ones go.
+  const handleUpdatePdoEntries = useCallback(
+    (direction: 'rx' | 'tx', pdoIndex: string, entries: PersistedPdoEntry[]) => {
+      syncDevicesToStore(
+        configuredDevices.map((d) => {
+          if (d.id !== deviceId) return d
+          const list = (direction === 'rx' ? d.rxPdos : d.txPdos) ?? []
+          const nextList = list.map((pdo) =>
+            pdo.index.toLowerCase() === pdoIndex.toLowerCase() ? { ...pdo, entries } : pdo,
+          )
+          const nextRx = direction === 'rx' ? nextList : (d.rxPdos ?? [])
+          const nextTx = direction === 'tx' ? nextList : (d.txPdos ?? [])
+          const reconciled = reconcilePdoChannels({
+            rxPdos: nextRx,
+            txPdos: nextTx,
+            previousChannelInfo: d.channelInfo,
+            previousMappings: d.channelMappings,
+            externalUsedAddresses: externalAddresses,
+          })
+          return {
+            ...d,
+            rxPdos: nextRx,
+            txPdos: nextTx,
+            channelInfo: reconciled.channelInfo,
+            channelMappings: reconciled.channelMappings,
+          }
+        }),
+      )
+    },
+    [configuredDevices, deviceId, externalAddresses, syncDevicesToStore],
+  )
+
+  const handleUpdateCoeFlags = useCallback(
+    (next: NonNullable<EtherCATSlaveConfig['coeFlags']>) => {
+      syncDevicesToStore(
+        configuredDevices.map((d) => {
+          if (d.id !== deviceId) return d
+          return { ...d, config: { ...d.config, coeFlags: next } }
+        }),
+      )
+    },
+    [configuredDevices, deviceId, syncDevicesToStore],
+  )
+
+  const handleUpdateCia402 = useCallback(
+    (patch: Partial<Cia402AxisConfig>) => {
+      syncDevicesToStore(
+        configuredDevices.map((d) => {
+          if (d.id !== deviceId) return d
+          const base: Cia402AxisConfig = d.cia402 ?? {
+            enabled: false,
+            scaleNum: 1,
+            scaleDenom: 1,
+            scaleFactor: 1,
+          }
+          return { ...d, cia402: { ...base, ...patch } }
+        }),
+      )
     },
     [configuredDevices, deviceId, syncDevicesToStore],
   )
@@ -240,25 +399,34 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
   }, [repository, device])
 
   // Use the device configuration hook for channels, CoE objects, etc.
-  const { channels, coeObjects, isLoadingChannels, channelLoadError, handleAliasChange, updateConfig } =
-    useDeviceConfiguration({
-      device: device as ConfiguredEtherCATDevice,
-      projectPath,
-      externalAddresses,
-      onUpdateDevice: handleUpdateDevice,
-      onUpdateChannelMappings: handleUpdateChannelMappings,
-      onEnrichDevice: handleEnrichDevice,
-      enabled: device !== null,
-    })
+  const {
+    channels,
+    channelMappings,
+    coeObjects,
+    alternativeSmMappings,
+    isLoadingChannels,
+    channelLoadError,
+    handleAliasChange,
+    updateConfig,
+  } = useDeviceConfiguration({
+    device,
+    projectPath,
+    externalAddresses,
+    onUpdateDevice: handleUpdateDevice,
+    onUpdateChannelMappings: handleUpdateChannelMappings,
+    onEnrichDevice: handleEnrichDevice,
+    onUpdateModule: handleUpdateModule,
+    enabled: device !== null,
+  })
 
   // Fallback when device is not found
   if (!device) {
     return (
       <div aria-label='EtherCAT device editor container' className='flex h-full w-full items-center justify-center p-4'>
         <div className='text-center'>
-          <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>Device not found</h2>
+          <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>{tr('Device not found')}</h2>
           <p className='mt-2 text-sm text-neutral-600 dark:text-neutral-400'>
-            The EtherCAT device could not be found. It may have been removed from the bus configuration.
+            {tr('The EtherCAT device could not be found. It may have been removed from the bus configuration.')}
           </p>
         </div>
       </div>
@@ -282,11 +450,41 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
         className='flex min-h-0 flex-1 flex-col overflow-hidden'
       >
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='channel-mappings' label='Channel Mappings' isActive={activeTab === 'channel-mappings'} />
-          <TabItem value='info' label='Device Info' isActive={activeTab === 'info'} />
-          <TabItem value='configuration' label='Configuration' isActive={activeTab === 'configuration'} />
-          <TabItem value='startup-params' label='Startup Parameters' isActive={activeTab === 'startup-params'} />
+          {/* On a modular coupler, Modules leads: it drives everything else
+              on the device, so operators start there and Channel Mappings
+              follows (now showing the aggregate across all configured
+              modules). */}
+          {device.isModularCoupler === true && (
+            <TabItem value='modules' label={tr('Modules')} isActive={activeTab === 'modules'} />
+          )}
+          {!isSoftMotion && (
+            <TabItem
+              value='channel-mappings'
+              label={tr('Channel Mappings')}
+              isActive={activeTab === 'channel-mappings'}
+            />
+          )}
+          {device.cia402 && <TabItem value='axis' label={tr('SoftMotion Axis')} isActive={activeTab === 'axis'} />}
+          <TabItem value='info' label={tr('Device Info')} isActive={activeTab === 'info'} />
+          <TabItem value='configuration' label={tr('Configuration')} isActive={activeTab === 'configuration'} />
+          <TabItem value='process-data' label={tr('Process Data')} isActive={activeTab === 'process-data'} />
+          {device.isModularCoupler === true && (
+            <TabItem value='diagnostics' label={tr('Diagnostics')} isActive={activeTab === 'diagnostics'} />
+          )}
+          <TabItem value='startup-params' label={tr('Startup Parameters')} isActive={activeTab === 'startup-params'} />
         </Tabs.List>
+
+        {/* SoftMotion Axis (CiA 402) Tab */}
+        {device.cia402 && (
+          <Tabs.Content
+            value='axis'
+            className='flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden'
+          >
+            <div className='flex-1 overflow-auto p-4'>
+              <Cia402AxisTab device={device} onUpdate={handleUpdateCia402} />
+            </div>
+          </Tabs.Content>
+        )}
 
         {/* Device Info Tab */}
         <Tabs.Content
@@ -296,39 +494,39 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
           <div className='flex-1 overflow-auto p-4'>
             <div className='grid grid-cols-2 gap-x-6 gap-y-3 text-xs'>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Vendor</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Vendor')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.vendor.name || 'Unknown'}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Vendor ID</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Vendor ID')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.vendorId}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Product Code</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Product Code')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.productCode}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Revision</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Revision')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.revisionNo}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>ESI File</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('ESI File')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.filename || 'Not found'}</span>
               </div>
               {esiDevice?.groupName && (
                 <div className='flex flex-col gap-0.5'>
-                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>Group</span>
+                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Group')}</span>
                   <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.groupName}</span>
                 </div>
               )}
               {esiDevice && (
                 <>
                   <div className='flex flex-col gap-0.5'>
-                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>Input Channels</span>
+                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Input Channels')}</span>
                     <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.inputChannelCount}</span>
                   </div>
                   <div className='flex flex-col gap-0.5'>
-                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>Output Channels</span>
+                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Output Channels')}</span>
                     <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.outputChannelCount}</span>
                   </div>
                 </>
@@ -349,6 +547,58 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
           </div>
         </Tabs.Content>
 
+        {/* Process Data (Simple / Expert) */}
+        <Tabs.Content
+          value='process-data'
+          className='flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden'
+        >
+          <div className='flex-1 overflow-auto p-4'>
+            <ProcessDataTab
+              rxPdos={device.rxPdos ?? []}
+              txPdos={device.txPdos ?? []}
+              pdoAssignAvailable={device.config.coeFlags?.pdoAssign === true}
+              coeFlags={device.config.coeFlags}
+              alternativeSmMappings={alternativeSmMappings}
+              onUpdatePdoAssigned={handleUpdatePdoAssigned}
+              onUpdatePdoEntries={handleUpdatePdoEntries}
+              onUpdateCoeFlags={handleUpdateCoeFlags}
+            />
+          </div>
+        </Tabs.Content>
+
+        {/* Modules (modular coupler only). ModulesTab owns its own inner
+            scrolls (left scanned-modules table + right configured-modules
+            table), so the outer wrapper is a flex container that lets the
+            tab fill the available height instead of fixing it at 480px. */}
+        {device.isModularCoupler === true && (
+          <Tabs.Content
+            value='modules'
+            className='flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden'
+          >
+            <div className='flex min-h-0 flex-1 flex-col overflow-hidden p-4'>
+              <ModulesTab
+                device={device}
+                busName={busName}
+                repository={repository}
+                onUpdateModules={handleUpdateModules}
+                externalUsedAddresses={externalAddresses}
+              />
+            </div>
+          </Tabs.Content>
+        )}
+
+        {/* Diagnostics (modular coupler only) */}
+        {device.isModularCoupler === true && (
+          <Tabs.Content
+            value='diagnostics'
+            className='flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden'
+          >
+            <div className='flex-1 overflow-auto p-4'>
+              <CouplerDiagnosticsTab device={device} busName={busName} />
+            </div>
+          </Tabs.Content>
+        )}
+
         {/* Startup Parameters Tab */}
         <Tabs.Content
           value='startup-params'
@@ -365,21 +615,24 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
           </div>
         </Tabs.Content>
 
-        {/* Channel Mappings Tab */}
-        <Tabs.Content
-          value='channel-mappings'
-          className='flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden'
-        >
-          <div className='flex min-h-0 flex-1 flex-col overflow-auto p-4'>
-            <ChannelMappingsSection
-              isLoading={isLoadingChannels}
-              loadError={channelLoadError}
-              channels={channels}
-              mappings={device.channelMappings}
-              onAliasChange={handleAliasChange}
-            />
-          </div>
-        </Tabs.Content>
+        {/* Channel Mappings Tab — hidden for SoftMotion drives (their PDO
+            mappings are generated and consumed internally by the bridge). */}
+        {!isSoftMotion && (
+          <Tabs.Content
+            value='channel-mappings'
+            className='flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden'
+          >
+            <div className='flex min-h-0 flex-1 flex-col overflow-auto p-4'>
+              <ChannelMappingsSection
+                isLoading={isLoadingChannels}
+                loadError={channelLoadError}
+                channels={channels}
+                mappings={channelMappings}
+                onAliasChange={handleAliasChange}
+              />
+            </div>
+          </Tabs.Content>
+        )}
       </Tabs.Root>
     </div>
   )

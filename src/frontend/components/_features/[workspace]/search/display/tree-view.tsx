@@ -1,4 +1,5 @@
-import { ComponentPropsWithoutRef, ReactNode, useCallback, useEffect, useState } from 'react'
+import { tr } from '@root/frontend/locales/tr'
+import { Children, ComponentPropsWithoutRef, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 
 import { ArrowIcon } from '../../../../../assets/icons/interface/Arrow'
 import { CommentIcon } from '../../../../../assets/icons/interface/Comment'
@@ -73,27 +74,19 @@ type IProjectSearchTreeBranchProps = ComponentPropsWithoutRef<'li'> & {
 }
 
 const BranchSources = {
-  'data-type': { BranchIcon: DataTypeIcon, label: 'Data Types' },
-  function: { BranchIcon: FunctionIcon, label: 'Functions' },
-  'function-block': { BranchIcon: FunctionBlockIcon, label: 'Function Blocks' },
-  program: { BranchIcon: ProgramIcon, label: 'Programs' },
-  resource: { BranchIcon: ResourceIcon, label: 'Resource' },
-  device: { BranchIcon: DeviceIcon, label: 'Device' },
+  'data-type': { BranchIcon: DataTypeIcon, label: tr('Data Types') },
+  function: { BranchIcon: FunctionIcon, label: tr('Functions') },
+  'function-block': { BranchIcon: FunctionBlockIcon, label: tr('Function Blocks') },
+  program: { BranchIcon: ProgramIcon, label: tr('Programs') },
+  resource: { BranchIcon: ResourceIcon, label: tr('Resource') },
+  device: { BranchIcon: DeviceIcon, label: tr('Device') },
 }
 
 const ProjectSearchTreeBranch = ({ branchTarget, children, ...res }: IProjectSearchTreeBranchProps) => {
-  const {
-    project: {
-      data: { pous, dataTypes, configurations },
-    },
-  } = useOpenPLCStore()
   const [branchIsOpen, setBranchIsOpen] = useState(false)
   const { BranchIcon, label } = BranchSources[branchTarget]
   const handleBranchVisibility = useCallback(() => setBranchIsOpen(!branchIsOpen), [branchIsOpen])
-  const hasAssociatedPou: boolean =
-    pous.some((pou) => pou.pouType === branchTarget) ||
-    (branchTarget === 'data-type' && dataTypes.length > 0) ||
-    (branchTarget === 'resource' && configurations !== null)
+  const hasAssociatedPou: boolean = Children.count(children) > 0
   useEffect(() => setBranchIsOpen(hasAssociatedPou), [hasAssociatedPou])
 
   return (
@@ -145,9 +138,9 @@ type IProjectSearchTreeNestedBranchProps = ComponentPropsWithoutRef<'li'> & {
 }
 
 const NestedBranchSources = {
-  array: { BranchIcon: ArrayIcon, label: 'Arrays' },
-  enumerated: { BranchIcon: EnumIcon, label: 'Enums' },
-  structure: { BranchIcon: StructureIcon, label: 'Structures' },
+  array: { BranchIcon: ArrayIcon, label: tr('Arrays') },
+  enumerated: { BranchIcon: EnumIcon, label: tr('Enums') },
+  structure: { BranchIcon: StructureIcon, label: tr('Structures') },
 }
 
 const ProjectSearchTreeNestedBranch = ({
@@ -262,16 +255,10 @@ const ProjectSearchTreeLeaf = ({ leafLang, label, ...res }: IProjectSearchTreeLe
 }
 
 const ProjectSearchTreeVariableBranch = ({ leafLang, label, children, ...res }: IProjectSearchTreeLeafProps) => {
-  const {
-    project: {
-      data: { pous, configurations },
-    },
-  } = useOpenPLCStore()
   const [branchIsOpen, setBranchIsOpen] = useState<boolean>(false)
-  const { LeafIcon } = LeafSources[leafLang]
+  const { LeafIcon } = LeafSources[leafLang] ?? LeafSources.st
   const handleBranchVisibility = useCallback(() => setBranchIsOpen(!branchIsOpen), [branchIsOpen])
-  const hasVariable: boolean =
-    pous.some((pou) => (pou.interface?.variables ?? []).length > 0) || configurations !== null
+  const hasVariable: boolean = Children.count(children) > 0
   useEffect(() => setBranchIsOpen(hasVariable), [hasVariable])
 
   return (
@@ -317,19 +304,34 @@ type IProjectSearchTreeVariableLeafProps = ComponentPropsWithoutRef<'li'> & {
   label?: string | null
   hasVariable?: boolean
   hasComment?: boolean
+  selected?: boolean
 }
 
 const ProjectSearchTreeVariableLeaf = ({
   label,
   hasVariable,
   hasComment,
+  selected,
   ...res
 }: IProjectSearchTreeVariableLeafProps) => {
+  const leafRef = useRef<HTMLLIElement>(null)
+
+  useEffect(() => {
+    if (!selected) return
+    const element = leafRef.current
+    if (element && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selected])
+
   return (
     label && (
       <li
+        ref={leafRef}
+        aria-selected={selected}
         className={cn(
           'flex w-full cursor-pointer flex-row items-center py-1 pl-[50px] hover:bg-slate-200 dark:hover:bg-neutral-850',
+          selected && 'bg-slate-100 dark:bg-neutral-900',
         )}
         {...res}
       >

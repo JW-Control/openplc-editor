@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { useVersionControl } from '../../../../../middleware/shared/providers'
@@ -41,29 +42,29 @@ export function CreateBranchModal({ isOpen, projectId, onClose, onCreated }: Cre
 
     // No write permission ⇒ skip the doomed backend write and warn.
     if (!canEdit) {
-      notifyNoWritePermission('create branches in')
+      notifyNoWritePermission(tr('create branches in'))
       return
     }
 
     const trimmed = name.trim()
 
     if (!trimmed) {
-      setError('Branch name cannot be empty')
+      setError(tr('Branch name cannot be empty'))
       return
     }
 
     if (/\s/.test(trimmed)) {
-      setError('Branch name cannot contain spaces')
+      setError(tr('Branch name cannot contain spaces'))
       return
     }
 
     if (/[~^:?*[\]\\]/.test(trimmed)) {
-      setError('Branch name contains invalid characters')
+      setError(tr('Branch name contains invalid characters'))
       return
     }
 
     if (/(\.\.|\/\/|@\{|\.lock$|^\.|^\/|\/$)/.test(trimmed)) {
-      setError('Branch name has an invalid format')
+      setError(tr('Branch name has an invalid format'))
       return
     }
 
@@ -87,7 +88,7 @@ export function CreateBranchModal({ isOpen, projectId, onClose, onCreated }: Cre
     <div className='fixed inset-0 z-50 flex items-center justify-center'>
       <div className='absolute inset-0 bg-black/40' onClick={onClose} />
       <div className='relative w-80 rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900'>
-        <h3 className='mb-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>Create Branch</h3>
+        <h3 className='mb-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>{tr('Create Branch')}</h3>
         <form onSubmit={handleSubmit}>
           <input
             type='text'
@@ -101,7 +102,7 @@ export function CreateBranchModal({ isOpen, projectId, onClose, onCreated }: Cre
           {error ? (
             <p className='mt-1 text-xs text-red-500'>{error}</p>
           ) : (
-            <p className='mt-1 text-xs text-neutral-400 dark:text-neutral-500'>No spaces allowed</p>
+            <p className='mt-1 text-xs text-neutral-400 dark:text-neutral-500'>{tr('No spaces allowed')}</p>
           )}
           <div className='mt-4 flex justify-end gap-2'>
             <button
@@ -110,7 +111,7 @@ export function CreateBranchModal({ isOpen, projectId, onClose, onCreated }: Cre
               disabled={isPending}
               className='rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='submit'

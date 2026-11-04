@@ -1,0 +1,25 @@
+{
+  "comment": {
+    "tooltip": "Crear un comentario",
+    "label": "Comentario"
+  },
+  "powerRail": "Crear una barra de alimentación",
+  "coil": "Crear una bobina",
+  "var": "VAR",
+  "placement": {
+    "title": {
+      "ld": "Ladder",
+      "fbd": "FBD"
+    },
+    "elements": {
+      "contact": "Contacto",
+      "coil": "Bobina",
+      "block": "Bloque",
+      "input-variable": "Variable de entrada",
+      "output-variable": "Variable de salida",
+      "connector": "Conector",
+      "continuation": "Continuación",
+      "comment": "Comentario"
+    }
+  }
+}

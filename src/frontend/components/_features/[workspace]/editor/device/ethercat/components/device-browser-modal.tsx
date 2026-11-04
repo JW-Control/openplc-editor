@@ -1,6 +1,8 @@
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '@root/frontend/components/_molecules/modal'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIDeviceRef, ESIDeviceSummary, ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
+import { canonicalVendorId } from '@root/middleware/shared/utils/ethercat'
 import { useCallback, useMemo, useState } from 'react'
 
 type DeviceBrowserModalProps = {
@@ -37,10 +39,10 @@ const DeviceBrowserModal = ({ isOpen, onClose, onSelectDevice, repository }: Dev
     > = new Map()
 
     for (const repoItem of repository) {
-      const vendorKey = repoItem.vendor.id
+      const vendorKey = canonicalVendorId(repoItem.vendor.id)
       if (!groups.has(vendorKey)) {
         groups.set(vendorKey, {
-          vendorId: repoItem.vendor.id,
+          vendorId: vendorKey,
           vendorName: repoItem.vendor.name,
           devices: [],
         })
@@ -127,14 +129,14 @@ const DeviceBrowserModal = ({ isOpen, onClose, onSelectDevice, repository }: Dev
     <Modal open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <ModalContent className='h-[600px] w-[600px]' onClose={handleClose}>
         <ModalHeader>
-          <ModalTitle>Add Device from Repository</ModalTitle>
+          <ModalTitle>{tr('Add Device from Repository')}</ModalTitle>
         </ModalHeader>
 
         {/* Search */}
         <div className='mb-2'>
           <input
             type='text'
-            placeholder='Search devices by name, product code, or vendor...'
+            placeholder={tr('Search devices by name, product code, or vendor...')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className='h-[34px] w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
@@ -223,10 +225,16 @@ const DeviceBrowserModal = ({ isOpen, onClose, onSelectDevice, repository }: Dev
                                     {device.groupName}
                                   </span>
                                 )}
+                                {/* Mark modular couplers so the operator spots them. */}
+                                {device.isModularCoupler === true && (
+                                  <span className='bg-brand/10 dark:bg-brand/20 flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-brand'>
+                                    {tr('Modular coupler')}
+                                  </span>
+                                )}
                               </div>
                               <div className='flex gap-3 text-xs text-neutral-500 dark:text-neutral-400'>
                                 <span className='font-mono'>{device.type.productCode}</span>
-                                <span>Rev: {device.type.revisionNo}</span>
+                                <span>{tr('Rev: {{revisionNo}}', { revisionNo: device.type.revisionNo })}</span>
                                 <span className='truncate'>from {repoItem.filename}</span>
                               </div>
                             </div>
@@ -256,14 +264,14 @@ const DeviceBrowserModal = ({ isOpen, onClose, onSelectDevice, repository }: Dev
             onClick={handleClose}
             className='rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedRef}
             className='rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark disabled:cursor-not-allowed disabled:opacity-50'
           >
-            Add Device
+            {tr('Add Device')}
           </button>
         </ModalFooter>
       </ModalContent>

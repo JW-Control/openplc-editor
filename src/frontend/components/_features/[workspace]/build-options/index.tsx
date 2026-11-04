@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { ReactNode, useState } from 'react'
 
 import { DownloadIcon } from '../../../../assets/icons/interface/Download'
@@ -18,14 +19,6 @@ type BuildOptionsPopoverProps = {
   uploadAvailable: boolean
   /** Tooltip shown when an upload-bearing option is disabled. */
   uploadDisabledReason: string
-  /**
-   * Render the library-build option set instead of the program one:
-   * "Build" and "Clean build" — no upload variants.  The library
-   * build pipeline emits `build-only` for a normal build and
-   * `clean-upload` for a clean build (the enum is reused so the
-   * popover stays a single component).
-   */
-  libraryMode?: boolean
   onSelect: (option: BuildOption) => void
 }
 
@@ -70,7 +63,6 @@ export const BuildOptionsPopover = ({
   triggerTooltip,
   uploadAvailable,
   uploadDisabledReason,
-  libraryMode,
   onSelect,
 }: BuildOptionsPopoverProps): ReactNode => {
   const [open, setOpen] = useState(false)
@@ -104,48 +96,27 @@ export const BuildOptionsPopover = ({
           alignOffset={-4}
           className='box z-50 flex h-fit w-[230px] flex-col gap-1 rounded-lg bg-white p-2 dark:bg-neutral-950'
         >
-          {libraryMode ? (
-            <>
-              <OptionRow
-                label='Build'
-                description='Compile the library into a .stlib archive.'
-                disabled={false}
-                disabledReason=''
-                onClick={() => choose('build-only')}
-              />
-              <OptionRow
-                label='Clean build'
-                description='Skip the verification cache and re-verify against the simulator.'
-                disabled={false}
-                disabledReason=''
-                onClick={() => choose('clean-upload')}
-              />
-            </>
-          ) : (
-            <>
-              <OptionRow
-                label='Build only'
-                description='Compile the program without uploading.'
-                disabled={false}
-                disabledReason=''
-                onClick={() => choose('build-only')}
-              />
-              <OptionRow
-                label='Build and upload'
-                description='Compile and upload to the target device.'
-                disabled={!uploadAvailable}
-                disabledReason={uploadDisabledReason}
-                onClick={() => choose('build-upload')}
-              />
-              <OptionRow
-                label='Clean build and upload'
-                description='Invalidate the cache, fully recompile, then upload.'
-                disabled={!uploadAvailable}
-                disabledReason={uploadDisabledReason}
-                onClick={() => choose('clean-upload')}
-              />
-            </>
-          )}
+          <OptionRow
+            label={tr('Build only')}
+            description={tr('Compile the program without uploading.')}
+            disabled={false}
+            disabledReason=''
+            onClick={() => choose('build-only')}
+          />
+          <OptionRow
+            label={tr('Build and upload')}
+            description={tr('Compile and upload to the target device.')}
+            disabled={!uploadAvailable}
+            disabledReason={uploadDisabledReason}
+            onClick={() => choose('build-upload')}
+          />
+          <OptionRow
+            label={tr('Clean build and upload')}
+            description={tr('Invalidate the cache, fully recompile, then upload.')}
+            disabled={!uploadAvailable}
+            disabledReason={uploadDisabledReason}
+            onClick={() => choose('clean-upload')}
+          />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

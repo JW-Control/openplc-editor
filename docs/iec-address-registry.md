@@ -109,6 +109,81 @@ to call on every mutation, on project load, and pre-compile.
 Determinism (stable order + stable channel order) guarantees reproducible
 results across sessions, so a re-open never gratuitously renumbers.
 
+`allocateAddresses` returns `{ assignments, conflicts, slotCounts }`.
+
+### 5.1 Slot counts: how big the I/O image has to be
+
+Both passes above already build the reservation set for each prefix space,
+so the allocator knows exactly how far into each space the producers reach.
+`slotCounts` publishes that: prefix (`%IX`, `%QW`, …) → highest claimed
+linear index **plus one**, i.e. how many slots that space needs.
+
+It is the number the compile pipeline sizes the runtime's I/O image
+from, instead of the fixed per-platform `MAX_*` / `BUFFER_SIZE`. Three
+properties of it are load-bearing:
+
+- **A prefix nobody claimed is absent, not zero-valued.** Absent and `0` mean
+  the same thing, and callers read `slotCounts[prefix] ?? 0`. A class with no
+  producers sizes to zero — the floor is always zero, never a minimum.
+- **Bit spaces count bits**, matching `linear` — `%IX1.2` is bit 10, so the
+  count is 11. Rounding up to a whole byte is the firmware buffer's concern
+  (bit areas are declared `[MAX_/8][8]`), not the registry's.
+- **It is a high-water mark, not a channel count.** A pinned channel at
+  `%QW9` needs 10 slots even if it is the only one, because the gap below it
+  is addressable storage.
+
+Unparseable `pinned` addresses take no part in the linear reservation, so
+they contribute nothing here — the same exception `assignments` makes.
+
+### 5.2 Capability scoping vs. unresolved targets
+
+Allocation is scoped to the consumer kinds the active target supports
+(`allocateAddresses`'s `activeKinds`). Deactivating a kind is deliberate and
+load-bearing: switching to a board without VPP frees the VPP space, and the
+still-active producers compact into it on the next recalculation.
+
+The invariant that makes that safe:
+
+> **An unknown target is permissive for allocation and empty for feature
+> gating.**
+
+`resolveTargetCapabilities(undefined)` answers `EMPTY_CAPABILITIES`, which is
+correct for gating — never offer an affordance the target can't back. Feeding
+that same answer to the allocator is not: an empty `activeKinds` set is
+indistinguishable from "this target supports nothing", so **every** consumer
+is filtered out, `assignments` comes back empty, and the write-back leaves the
+stale addresses in place while reporting success. A board id fails to resolve
+whenever the VPP package isn't installed, the project was authored elsewhere,
+or the catalogue hasn't loaded yet — all ordinary situations.
+
+So the store distinguishes the two cases (`allocationCapabilities` /
+`activeKindsForAllocation` in the project slice): a target that **answered** is
+honoured exactly as declared; a target that **didn't resolve** allocates with
+every producer active (`ALL_ADDRESS_PRODUCERS_ACTIVE`). Permissive is the safe
+direction — the worst case is compaction for a producer the eventual target
+turns out not to support, and selecting that target recalculates anyway.
+
+**The consequence to be aware of:** a project authored while the target is
+unresolved allocates with every producer active, so once the package is
+installed and the target resolves, capabilities can shrink and the addresses
+**recompact on that first open**. For alias-bound variables that is
+transparent — it is the whole reason the registry exists. For a variable bound
+to a literal `%addr` the binding does not follow, and the amber
+orphan/collision glyph on the location cell is what surfaces it. That is
+acceptable, and strictly better than the previous symptom (stale addresses,
+reported as success), but it is not derivable from the invariant alone.
+
+Capability scoping is the **single authority** on which producers are active:
+no kind is ever forced on in a provisional pool. That holds because every
+producer's creation path is capability-gated in the UI, so "capability off"
+and "cannot author this producer" coincide. Remote devices reach that state
+through two predicates rather than one — the project type
+(`projectCaps.hasRemoteDevices`, false for libraries) and the target
+(`modbusTcpRemote || ethercat`, the same predicate the variable-location
+dropdown uses). Devices already configured stay **visible** on a target that
+can't host them, because the board-switch warning promises they are "disabled
+during compilation", not removed; only creating a new one is refused.
+
 ## 6. Aliases and variable binding
 
 - **Aliases live only in the registry**, attached to channels. Uniqueness
@@ -181,7 +256,7 @@ in the emitters.
 middleware/shared/utils/iec-address/registry/
   types.ts          # Consumer, Channel, AddressClass, IecAddressRegistry, reports
   address-space.ts  # prefix<->class, bit linearization, parse/format, lowest-free
-  allocate.ts       # allocateAddresses(consumers) -> { assignments, conflicts }
+  allocate.ts       # allocateAddresses(consumers) -> { assignments, conflicts, slotCounts }
   registry.ts       # createRegistry / add / remove / update / setAlias / recalculate / queries
   resolve.ts        # buildAliasIndex, resolveLocation (compile-time)
   migrate.ts        # migrateProjectToRegistry (legacy -> registry) [Phase 2]
@@ -219,8 +294,9 @@ Shipped on `feat/central-iec-address-registry` (editor + web, byte-identical):
 - **Pure core** — types, address-space, allocator (capability-scoped,
   gapless, deterministic), registry ops, `resolveLocation`, migration
   transform, and the session **alias-memory** (`memoryKey` +
-  `restoreAliasesFromMemory`, keyed `moduleId:slot:channel`; held in the store,
-  never serialized, reset on a fresh project).
+  `restoreAliasesFromMemory`, keyed `moduleId:slot:channel`, also for the
+  entries an embedded configurator's station produces; held in the store, never
+  serialized, reset on a fresh project).
 - **Central action** `recalculateIecAddresses` reallocates **VPP + Modbus +
   EtherCAT** together (`ALLOCATED_KINDS`), capability-scoped, restoring aliases
   from the session memory, and writes addresses + aliases back to each
@@ -228,7 +304,15 @@ Shipped on `feat/central-iec-address-registry` (editor + web, byte-identical):
   Invoked from every producer mutation and on target switch.
 - **Pins** participate as **fixed constraints** — hardware addresses are never
   reallocated; their aliases persist per-board and flow through the same
-  registry uniqueness gate. Nothing to route.
+  registry uniqueness gate. But a pin edit MOVES those constraints, so
+  `createNewPin` / `removePin` / `updatePin` drive the central recalculation
+  whenever the pin address signature changes (alias-only and pin-number-only
+  edits skip it). Without that, `removePin` slid the freed slot to the end of
+  the pin block and left it stranded, and `createNewPin` could mint an address
+  already held by a VPP or Modbus channel — an unreported two-producer
+  collision.
+- **Unresolved targets** allocate permissively rather than as if the target
+  supported nothing — see §5.2.
 - **Aliases** resolve to concrete IEC addresses **in the editor** (each
   variable's `location` is kept resolved); the compiler/runtime are untouched.
 

@@ -1,4 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs'
+import { tr } from '@root/frontend/locales/tr'
 import type { OpcUaServerConfig } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -7,6 +8,7 @@ import { cn } from '../../../../../../utils/cn'
 import { InputWithRef } from '../../../../../_atoms/input'
 import { Label } from '../../../../../_atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+import { DuplicateProtocolNotice } from '../duplicate-protocol-notice'
 import { AddressSpaceTab } from './components/address-space-tab'
 import { CertificatesTab } from './components/certificates-tab'
 import { SecurityProfilesTab } from './components/security-profiles-tab'
@@ -25,8 +27,8 @@ import { UsersTab } from './components/users-tab'
  */
 
 const DEFAULT_NETWORK_INTERFACE_OPTIONS = [
-  { value: '0.0.0.0', label: 'All Interfaces (0.0.0.0)' },
-  { value: '127.0.0.1', label: 'Localhost (127.0.0.1)' },
+  { value: '0.0.0.0', label: tr('All Interfaces (0.0.0.0)') },
+  { value: '127.0.0.1', label: tr('Localhost (127.0.0.1)') },
 ]
 
 // Input styles matching Modbus server editor
@@ -120,7 +122,7 @@ export const OpcUaServerEditor = () => {
     return (
       <div className='flex h-full w-full items-center justify-center'>
         <p className='text-neutral-500 dark:text-neutral-400'>
-          Configuration for {protocol} servers is not yet available.
+          {tr('Configuration for {{protocol}} servers is not yet available.', { protocol })}
         </p>
       </div>
     )
@@ -129,7 +131,7 @@ export const OpcUaServerEditor = () => {
   if (!localConfig) {
     return (
       <div className='flex h-full w-full items-center justify-center'>
-        <p className='text-neutral-500 dark:text-neutral-400'>Loading OPC-UA configuration...</p>
+        <p className='text-neutral-500 dark:text-neutral-400'>{tr('Loading OPC-UA configuration...')}</p>
       </div>
     )
   }
@@ -137,18 +139,22 @@ export const OpcUaServerEditor = () => {
   return (
     <div aria-label='Server content container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       <div className='mb-4'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>OPC-UA Server: {serverName}</h2>
-        <p className='text-sm text-neutral-600 dark:text-neutral-400'>Protocol: OPC-UA</p>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('OPC-UA Server: {{serverName}}', { serverName })}
+        </h2>
+        <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('Protocol: OPC-UA')}</p>
       </div>
+
+      <DuplicateProtocolNotice name={serverName} protocol={protocol} />
 
       <Tabs.Root value={activeTab} onValueChange={setActiveTab} className='flex min-h-0 flex-1 flex-col'>
         {/* Tab Navigation */}
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='general' label='General Settings' isActive={activeTab === 'general'} />
-          <TabItem value='security' label='Security Profiles' isActive={activeTab === 'security'} />
-          <TabItem value='users' label='Users' isActive={activeTab === 'users'} />
-          <TabItem value='certificates' label='Certificates' isActive={activeTab === 'certificates'} />
-          <TabItem value='address-space' label='Address Space' isActive={activeTab === 'address-space'} />
+          <TabItem value='general' label={tr('General Settings')} isActive={activeTab === 'general'} />
+          <TabItem value='security' label={tr('Security Profiles')} isActive={activeTab === 'security'} />
+          <TabItem value='users' label={tr('Users')} isActive={activeTab === 'users'} />
+          <TabItem value='certificates' label={tr('Certificates')} isActive={activeTab === 'certificates'} />
+          <TabItem value='address-space' label={tr('Address Space')} isActive={activeTab === 'address-space'} />
         </Tabs.List>
 
         {/* General Settings Tab */}
@@ -301,11 +307,15 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
     <div className='flex flex-col gap-6'>
       {/* Server Configuration Section */}
       <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>Server Configuration</h3>
+        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
+          {tr('Server Configuration')}
+        </h3>
 
         {/* Enable Server Toggle */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Enable Server</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+            {tr('Enable Server')}
+          </Label>
           <label className='relative inline-flex cursor-pointer items-center'>
             <input
               type='checkbox'
@@ -328,14 +338,14 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
 
         {/* Server Name */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Server Name</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Server Name')}</Label>
           <div className='w-64'>
             <InputWithRef
               type='text'
               value={serverDisplayName}
               onChange={(e) => setServerDisplayName(e.target.value)}
               onBlur={handleServerNameBlur}
-              placeholder='OpenPLC OPC UA Server'
+              placeholder={tr('OpenPLC OPC UA Server')}
               className={inputStyles}
             />
           </div>
@@ -343,12 +353,14 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
 
         {/* Bind Address */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Network Interface</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+            {tr('Network Interface')}
+          </Label>
           <div className='w-64'>
             <Select value={config.server.bindAddress} onValueChange={(value) => onServerUpdate({ bindAddress: value })}>
               <SelectTrigger
                 withIndicator
-                placeholder='Select network interface'
+                placeholder={tr('Select network interface')}
                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
               />
               <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -373,7 +385,7 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
 
         {/* Port */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Port</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Port')}</Label>
           <div className='w-64'>
             <InputWithRef
               type='number'
@@ -386,12 +398,14 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
               className={inputStyles}
             />
           </div>
-          <span className='text-xs text-neutral-500 dark:text-neutral-400'>Default: 4840</span>
+          <span className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Default: 4840')}</span>
         </div>
 
         {/* Endpoint Path */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Endpoint Path</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+            {tr('Endpoint Path')}
+          </Label>
           <div className='w-64'>
             <InputWithRef
               type='text'
@@ -407,14 +421,18 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
 
       {/* Application Identity Section */}
       <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>Application Identity</h3>
+        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
+          {tr('Application Identity')}
+        </h3>
         <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-          Configure the OPC-UA application identity URIs. These are used by clients to identify the server.
+          {tr('Configure the OPC-UA application identity URIs. These are used by clients to identify the server.')}
         </p>
 
         {/* Application URI */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Application URI</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+            {tr('Application URI')}
+          </Label>
           <div className='w-80'>
             <InputWithRef
               type='text'
@@ -429,7 +447,7 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
 
         {/* Product URI */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Product URI</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Product URI')}</Label>
           <div className='w-80'>
             <InputWithRef
               type='text'
@@ -445,11 +463,15 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
 
       {/* Timing Configuration Section */}
       <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>Timing Configuration</h3>
+        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
+          {tr('Timing Configuration')}
+        </h3>
 
         {/* Cycle Time */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Cycle Time (ms)</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+            {tr('Cycle Time (ms)')}
+          </Label>
           <div className='w-64'>
             <InputWithRef
               type='number'
@@ -463,18 +485,22 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
             />
           </div>
           <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-            Update frequency for OPC-UA variables (10-10000ms)
+            {tr('Update frequency for OPC-UA variables (10-10000ms)')}
           </span>
         </div>
       </div>
 
       {/* Namespace Configuration Section */}
       <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>Namespace Configuration</h3>
+        <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
+          {tr('Namespace Configuration')}
+        </h3>
 
         {/* Namespace URI */}
         <div className='flex items-center gap-4'>
-          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Namespace URI</Label>
+          <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+            {tr('Namespace URI')}
+          </Label>
           <div className='w-80'>
             <InputWithRef
               type='text'
@@ -485,7 +511,7 @@ const GeneralSettingsTab = ({ config, onServerUpdate, onCycleTimeUpdate }: Gener
           </div>
         </div>
         <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-          The namespace URI for OpenPLC variables in the OPC-UA address space
+          {tr('The namespace URI for OpenPLC variables in the OPC-UA address space')}
         </p>
       </div>
     </div>

@@ -1,10 +1,11 @@
 import type {
   Architecture,
-  DebugConnectionType,
   DebugTreeNode,
   FbInstanceInfo,
   Platform,
+  PLCInstance,
   PlcLogs,
+  PLCPou,
 } from '../../../../middleware/shared/ports/types'
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,7 @@ export type WorkspaceProjectTreeLeafType =
   | 'function-block'
   | 'program'
   | 'data-type'
+  | 'global-variable-list'
   | 'device'
   | 'resource'
   | 'server'
@@ -40,7 +42,10 @@ export type WorkspaceProjectTreeLeafType =
   | 'package-manager'
   | 'library-manager'
   | 'library-manifest'
+  | 'user-management'
+  | 'persistent-storage'
   | 'ethercat-device'
+  | 'ethercat-module'
   | null
 
 // ---------------------------------------------------------------------------
@@ -73,7 +78,6 @@ export type WorkspaceState = {
     close: {
       window: boolean
       app: boolean
-      appDarwin: boolean
     }
     // PLC Logs
     isPlcLogsVisible: boolean
@@ -93,14 +97,28 @@ export type WorkspaceState = {
     debugExpandedNodes: Map<string, boolean>
     fbDebugInstances: Map<string, FbInstanceInfo[]>
     fbSelectedInstance: Map<string, string>
+    /**
+     * The generated program the CURRENT debug session is running,
+     * when the session runs something the project itself does not
+     * contain.
+     *
+     * Set only by the library-debug flow, which compiles a harness
+     * program (see `composeLibraryDebugHarness`) declaring one
+     * instance of every block in the library.  That program exists
+     * only for the life of the session: writing it into `project.data`
+     * would fight each editor's dirty tracking and could be persisted
+     * to disk on the next save.
+     *
+     * Consumers ADD `programPou` to the project's own POU list rather
+     * than replacing it, so a debug flag the author ticks mid-session
+     * still takes effect.  `null` for an ordinary PLC project, whose
+     * session runs the project's own programs.
+     */
+    debugHarness: { programPou: PLCPou; instances: PLCInstance[] } | null
     debugLocalMd5: string | null
     debugGraphList: string[]
     debugDataStale: boolean
     debugMd5Mismatch: { runtimeMd5: string; localMd5: string } | null
-    /** Active transport for the running debug session — drives the
-     *  per-poll batch size and any other transport-specific behaviour.
-     *  Null when no session is active. */
-    debugConnectionType: DebugConnectionType | null
     /** Target's native byte order for multi-byte variable values on
      *  the wire.  Detected from the 0xDEAD sentinel in the MD5
      *  response: LE target writes the trailer as `[0xAD, 0xDE]`, BE
@@ -127,6 +145,25 @@ export type WorkspaceState = {
      * on project close.
      */
     canEdit: boolean
+    /**
+     * Whether a build or debug saves the whole project first. False only on a
+     * partner session that asked for it off; reset to true on project close.
+     */
+    autoSaveOnBuild: boolean
+    /**
+     * Whether the open project was retrieved from a device and has no location
+     * the user chose yet.
+     *
+     * It lives in a scratch directory, so `meta.path` is a real writable
+     * directory and everything that derives a path from it keeps working --
+     * including the pre-build flush, which is why a retrieved project can still
+     * be compiled and uploaded. What this gates is the USER-initiated save:
+     * writing to scratch and calling it saved would tell someone their work is
+     * safe when it is somewhere temporary. Save As clears the flag.
+     *
+     * Reset to `false` on project close and on any normally opened project.
+     */
+    isEphemeralProject: boolean
   }
 }
 
@@ -150,7 +187,6 @@ export type WorkspaceActions = {
   setSystemConfigs: (config: Partial<SystemConfigs>) => void
   setCloseWindow: (value: boolean) => void
   setCloseApp: (value: boolean) => void
-  setCloseAppDarwin: (value: boolean) => void
   switchAppTheme: () => void
   toggleMaximizedWindow: () => void
   toggleCollapse: () => void
@@ -180,12 +216,13 @@ export type WorkspaceActions = {
   setDebugExpandedNodes: (expandedNodes: Map<string, boolean>) => void
   toggleDebugExpandedNode: (compositeKey: string) => void
   setFbDebugInstances: (instances: Map<string, FbInstanceInfo[]>) => void
+  /** Install (or clear, with `null`) the session's harness overlay. */
+  setDebugHarness: (harness: { programPou: PLCPou; instances: PLCInstance[] } | null) => void
   setFbSelectedInstance: (fbTypeName: string, key: string) => void
   setDebugLocalMd5: (md5: string | null) => void
   setDebugGraphList: (list: string[]) => void
   setDebugDataStale: (stale: boolean) => void
   setDebugMd5Mismatch: (mismatch: { runtimeMd5: string; localMd5: string } | null) => void
-  setDebugConnectionType: (connectionType: DebugConnectionType | null) => void
   setDebugTargetEndian: (endian: 'le' | 'be') => void
   clearDebugState: () => void
   clearFbDebugContext: () => void
@@ -194,6 +231,8 @@ export type WorkspaceActions = {
   setProjectLoading: (isLoading: boolean, message?: string) => void
   // Persist-permission flag (backend write access on the open project)
   setCanEdit: (value: boolean) => void
+  setAutoSaveOnBuild: (value: boolean) => void
+  setIsEphemeralProject: (value: boolean) => void
 }
 
 export type WorkspaceSlice = WorkspaceState & {

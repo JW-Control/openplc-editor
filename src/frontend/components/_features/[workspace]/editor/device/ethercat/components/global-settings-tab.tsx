@@ -2,6 +2,7 @@ import type { EtherCATMasterConfig } from '@root/backend/shared/types/PLC/open-p
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
 import { InputWithRef } from '@root/frontend/components/_atoms/input'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend/components/_atoms/select'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { NetworkInterface } from '@root/middleware/shared/ports/ethercat-types'
 import { useEffect, useState } from 'react'
@@ -53,7 +54,9 @@ const GlobalSettingsTab = ({
     <div className='flex flex-col gap-6 overflow-auto pb-4'>
       {/* Enable Plugin */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>Enable Plugin</h3>
+        <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
+          {tr('Enable Plugin')}
+        </h3>
         <div className='flex items-center gap-4'>
           <label className='relative inline-flex cursor-pointer items-center'>
             <input
@@ -79,7 +82,7 @@ const GlobalSettingsTab = ({
       {/* Network Interface */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
         <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
-          Network Interface
+          {tr('Network Interface')}
         </h3>
         <div className='flex flex-col gap-1'>
           {isConnectedToRuntime && interfaces.length > 0 ? (
@@ -90,7 +93,7 @@ const GlobalSettingsTab = ({
               >
                 <SelectTrigger
                   withIndicator
-                  placeholder='Select interface'
+                  placeholder={tr('Select interface')}
                   className='flex h-[30px] w-full max-w-[320px] items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-700 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -123,7 +126,7 @@ const GlobalSettingsTab = ({
                   'hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-950 dark:hover:bg-neutral-800',
                   'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
-                title='Refresh interfaces'
+                title={tr('Refresh interfaces')}
               >
                 <ArrowIcon
                   size='sm'
@@ -151,7 +154,7 @@ const GlobalSettingsTab = ({
       {/* Cycle Time */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
         <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
-          Cycle Time (microseconds)
+          {tr('Cycle Time (microseconds)')}
         </h3>
         <div className='flex flex-col gap-1'>
           <InputWithRef
@@ -176,7 +179,7 @@ const GlobalSettingsTab = ({
             className={cn(inputClassName, 'max-w-[200px]')}
           />
           <span className='text-[10px] text-neutral-500 dark:text-neutral-500'>
-            EtherCAT bus cycle time in microseconds (100 - 100000)
+            {tr('EtherCAT bus cycle time in microseconds (100 - 100000)')}
           </span>
         </div>
       </div>
@@ -184,7 +187,7 @@ const GlobalSettingsTab = ({
       {/* Watchdog Timeout */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
         <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
-          Watchdog Timeout (cycles)
+          {tr('Watchdog Timeout (cycles)')}
         </h3>
         <div className='flex flex-col gap-1'>
           <InputWithRef
@@ -209,7 +212,7 @@ const GlobalSettingsTab = ({
             className={cn(inputClassName, 'max-w-[200px]')}
           />
           <span className='text-[10px] text-neutral-500 dark:text-neutral-500'>
-            Number of missed cycles before watchdog triggers (1 - 100)
+            {tr('Number of missed cycles before watchdog triggers (1 - 100)')}
           </span>
         </div>
       </div>

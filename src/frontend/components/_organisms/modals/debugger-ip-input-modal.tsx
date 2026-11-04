@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { useOpenPLCStore } from '../../../store'
@@ -55,7 +56,7 @@ const DebuggerIpInputModal = () => {
         <p className='mb-4 text-center text-sm text-neutral-700 dark:text-neutral-300'>{modalData.message}</p>
         <div className='w-full'>
           <Label htmlFor='ip-address' className='mb-2 block text-sm'>
-            IP Address
+            {tr('IP Address')}
           </Label>
           <input
             id='ip-address'
@@ -65,7 +66,7 @@ const DebuggerIpInputModal = () => {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleSubmit()
             }}
-            placeholder='192.168.1.100'
+            placeholder='192.168.0.2'
             className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
             autoFocus
           />
@@ -81,7 +82,7 @@ const DebuggerIpInputModal = () => {
             onClick={handleCancel}
             className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
         </div>
       </ModalContent>

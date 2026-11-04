@@ -16,29 +16,25 @@
  *   - Translates the handler's return value back into the port's
  *     canonical result shape
  *
- * `transpileToSt` selects between two backends at runtime via
- * `isNewTranspilerEnabled()` (env: `OPENPLC_USE_NEW_TRANSPILER`):
- * the in-process JSON-fed transpiler
- * (`backend/shared/transpilers/st-transpiler/`) when the flag is on,
- * or the bundled `xml2st` subprocess (default) — serialising the
- * project IR via `XmlGenerator` and running it through
- * `handleTranspileXMLtoST` on disk, the same way the editor handled
- * compilation before Phase 2.
+ * `transpileToSt` runs the in-process JSON-fed transpiler
+ * (`backend/shared/transpilers/st-transpiler/`).
  *
  * This module is editor-only (lives under `backend/editor/`); the
  * web platform implements the same port interface separately under
  * `middleware/adapters/web/`.
  */
 
-import { isNewTranspilerEnabled } from '@root/backend/editor/utils/transpiler-mode'
-import { deployRuntimeProgram } from '@root/backend/shared/library/deploy-runtime-program'
+import { deployReachedDevice, deployRuntimeProgram } from '@root/backend/shared/library/deploy-runtime-program'
 import { probeRuntimeVersion } from '@root/backend/shared/library/probe-runtime-version'
+import {
+  describeSnapshotUploadWarning,
+  readSnapshotUploadWarning,
+} from '@root/backend/shared/project/upload-snapshot-warning'
 import {
   fromSchemaShape,
   type SchemaProjectData,
   transpileToSt as runJsonTranspiler,
 } from '@root/backend/shared/transpilers/st-transpiler'
-import { XmlGenerator } from '@root/backend/shared/utils/PLC/xml-generator'
 import type {
   CheckRuntimeVersionArgs,
   CheckRuntimeVersionResult,
@@ -47,6 +43,8 @@ import type {
   CompilerPlatformPort,
   InstallArduinoCoreArgs,
   InstallArduinoLibArgs,
+  MaterializeRuntimeV4BundleArgs,
+  MaterializeRuntimeV4BundleResult,
   PackageVppPluginArgs,
   PackageVppPluginResult,
   PlatformDeviceContext,
@@ -71,7 +69,6 @@ import type { CompilerModule } from './compiler-module'
  * file-watching, etc.).
  */
 export interface EditorCompilerHandlers {
-  handleTranspileXMLtoST: CompilerModule['handleTranspileXMLtoST']
   handleCompileArduinoProgram: CompilerModule['handleCompileArduinoProgram']
   handleUploadProgram: CompilerModule['handleUploadProgram']
   handleCoreInstallation: CompilerModule['handleCoreInstallation']
@@ -118,6 +115,8 @@ export interface EditorCompilerPlatformPortContext {
       filename: string
       contentType: string
       cleanBuild: boolean
+      snapshotBuffer?: Buffer
+      snapshotMetadata?: string
       onUploadAccepted?: (responseBody: string) => void
     }) => Promise<{ success: true; data: string } | { success: false; error: string }>
   }
@@ -126,6 +125,34 @@ export interface EditorCompilerPlatformPortContext {
    *  in the `archiver`-dependent compressSourceFolder method (which
    *  has its own private state on CompilerModule). */
   compressSourceFolder: (folderPath: string) => Promise<Buffer>
+  /** Build the source-project archive stored on the device so the project can
+   *  be retrieved later. Injected for the same reason as
+   *  `compressSourceFolder`: it reaches the Electron-bound library manager, and
+   *  this adapter has to stay importable outside a real Electron process.
+   *
+   *  Optional so a caller predating it stays valid — absent simply means the
+   *  upload carries no snapshot, which is what an older editor does anyway. */
+  buildUploadSnapshot?: () => Promise<{
+    archive: Buffer
+    metadata: string
+    missingLibraries: string[]
+  } | null>
+  /**
+   * `package.minRuntimeVersion` of the VPP providing a given board, or
+   * null when the board isn't from a VPP / declares no floor
+   * (DOPE-448). The pipeline compares it against the connected
+   * runtime after the version probe.
+   *
+   * Injected rather than resolved here for the same reason as
+   * `compressSourceFolder`: importing `PackageManagerModule` directly
+   * pulls in the Electron-dependent logger at module load, which
+   * breaks anything importing this adapter outside a real Electron
+   * process (its own unit test included).
+   *
+   * Optional so callers predating this stay valid; absent means "no
+   * floor known", which the pipeline treats as no constraint.
+   */
+  getVppRuntimeFloor?: (boardTarget: string) => string | null
   /** Timeout for the post-upload compile-status poll. */
   pollTimeoutMs: number
   /** Interval for the post-upload compile-status poll. */
@@ -149,6 +176,30 @@ export function createEditorCompilerPlatformPort(
   handlers: EditorCompilerHandlers,
   context: EditorCompilerPlatformPortContext,
 ): CompilerPlatformPort {
+  /**
+   * Transpile: project the schema-shape payload via `fromSchemaShape`
+   * and run the in-process JSON transpiler. Folds failures into the result.
+   * The editor's IPC payload is schema-shape; the double cast bridges the
+   * declared-vs-runtime mismatch.
+   */
+  const runInProcessTranspile = (args: TranspileToStArgs): TranspileToStResult => {
+    try {
+      const ir = fromSchemaShape(args.projectData as unknown as SchemaProjectData)
+      const result = runJsonTranspiler(ir)
+      if (result.programSt === null || result.errors.length > 0) {
+        const message = result.errors.join('\n') || 'Failed to generate Structured Text'
+        return { ok: false, errors: [{ message, line: 0, column: 0, severity: 'error' }] }
+      }
+      return { ok: true, programSt: result.programSt }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        errors: [{ message: `st-transpiler failed: ${message}`, line: 0, column: 0, severity: 'error' }],
+      }
+    }
+  }
+
   return {
     /**
      * Node's `crypto.createHash('md5')` produces the canonical MD5
@@ -156,77 +207,21 @@ export function createEditorCompilerPlatformPort(
      * adapter computes the same hash via `spark-md5`; both outputs
      * are byte-identical.
      */
-    async computeMd5(input: string): Promise<string> {
-      return createHash('md5').update(input).digest('hex')
+    computeMd5(input: string): Promise<string> {
+      return Promise.resolve(createHash('md5').update(input).digest('hex'))
     },
 
     /**
-     * Transpile the project IR to Structured Text. The toggle —
-     * `OPENPLC_USE_NEW_TRANSPILER` via `isNewTranspilerEnabled()` — selects
-     * between the in-process JSON-fed transpiler (new path, opt-in)
-     * and the bundled `xml2st` subprocess (legacy path, default).
-     *
-     * The legacy branch reproduces the pre-Phase-2 behaviour:
-     * serialise the project to IEC 61131-3 XML via the shared
-     * `XmlGenerator`, materialise it to `<sourceTargetFolder>/plc.xml`,
-     * run `handleTranspileXMLtoST` (which spawns the bundled `xml2st`
-     * binary), then read `program.st` back from disk.
+     * Transpile the project IR to Structured Text via the in-process JSON
+     * transpiler (`backend/shared/transpilers/st-transpiler/`).
      */
-    async transpileToSt(args: TranspileToStArgs, log: PlatformLog): Promise<TranspileToStResult> {
-      if (isNewTranspilerEnabled()) {
-        try {
-          // Editor IPC delivers the schema-shape project data
-          // (discriminated-union POUs + singular `configuration`).
-          // The port's declared `projectData` type is port-shape, but
-          // the pipeline reaches us with the editor's schema-shape IPC
-          // payload (matching `compileProgram`'s actual contract).  The
-          // double cast bridges the static mismatch without serialising
-          // through `unknown` at runtime.
-          const ir = fromSchemaShape(args.projectData as unknown as SchemaProjectData)
-          const result = runJsonTranspiler(ir)
-          if (result.programSt === null || result.errors.length > 0) {
-            const message = result.errors.join('\n') || 'Failed to generate Structured Text'
-            log(message, 'error')
-            return { ok: false, errors: [{ message, line: 0, column: 0, severity: 'error' }] }
-          }
-          for (const warning of result.warnings) {
-            log(warning, 'info')
-          }
-          return { ok: true, programSt: result.programSt }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          log(`st-transpiler failed: ${message}`, 'error')
-          return { ok: false, errors: [{ message, line: 0, column: 0, severity: 'error' }] }
-        }
+    transpileToSt(args: TranspileToStArgs, log: PlatformLog): Promise<TranspileToStResult> {
+      const result = runInProcessTranspile(args)
+      if (!result.ok) {
+        const message = result.errors?.map((e) => e.message).join('\n') || 'Failed to generate Structured Text'
+        log(message, 'error')
       }
-
-      const xmlResult = XmlGenerator(args.projectData as never, 'old-editor')
-      if (!xmlResult.ok || !xmlResult.data) {
-        log(`XML generation failed: ${xmlResult.message}`, 'error')
-        return { ok: false, errors: [{ message: xmlResult.message, line: 0, column: 0, severity: 'error' }] }
-      }
-      const xmlPath = join(context.sourceTargetFolderPath, 'plc.xml')
-      try {
-        await fs.mkdir(dirname(xmlPath), { recursive: true })
-        await fs.writeFile(xmlPath, xmlResult.data, 'utf-8')
-
-        await handlers.handleTranspileXMLtoST(
-          xmlPath,
-          (chunk, level) => {
-            const message = typeof chunk === 'string' ? chunk : chunk.toString()
-            log(message, level ?? 'info')
-          },
-          ['--keep-structs'],
-        )
-
-        const programStPath = join(context.sourceTargetFolderPath, 'program.st')
-        const programSt = await fs.readFile(programStPath, 'utf-8')
-        return { ok: true, programSt }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        log(`xml2st failed: ${message}`, 'error')
-        return { ok: false, errors: [{ message, line: 0, column: 0, severity: 'error' }] }
-      }
+      return Promise.resolve(result)
     },
 
     /**
@@ -234,6 +229,12 @@ export function createEditorCompilerPlatformPort(
      * `handleCoreInstallation` already takes a core id and a log
      * callback — direct passthrough modulo the log-shape
      * translation.
+     *
+     * `args.boardManagerUrl` (the VPP's `target.boardManagerUrl`) is
+     * forwarded so vendor cores outside arduino-cli's built-in index
+     * install automatically rather than failing with "Platform not
+     * found".  `handleCoreInstallation` refreshes the index against
+     * that URL before installing.
      */
     async installArduinoCore(args: InstallArduinoCoreArgs, log: PlatformLog): Promise<UploadResult> {
       try {
@@ -244,6 +245,7 @@ export function createEditorCompilerPlatformPort(
             log(message, level ?? 'info')
           },
           args.coreVersion,
+          args.boardManagerUrl,
         )
         return { ok: true }
       } catch (error) {
@@ -269,6 +271,7 @@ export function createEditorCompilerPlatformPort(
             const message = typeof chunk === 'string' ? chunk : chunk.toString()
             log(message, level ?? 'info')
           },
+          args.thirdPartyLibraries ?? [],
           args.includeLegacyGlobalLibraries ?? true,
         )
         return { ok: true }
@@ -373,16 +376,42 @@ export function createEditorCompilerPlatformPort(
     async uploadRuntimeV4(args: UploadRuntimeV4Args, log: PlatformLog): Promise<UploadResult> {
       const deviceContext = assertEditorHttpsContext(args.context)
       try {
-        // Materialise the bundle to disk under sourceTargetFolderPath
-        // so the existing `compressSourceFolder` can zip it.
-        await Promise.all(
-          Object.entries(args.bundle).map(async ([relPath, content]) => {
-            const absPath = join(context.sourceTargetFolderPath, relPath)
-            await fs.mkdir(dirname(absPath), { recursive: true })
-            await fs.writeFile(absPath, content, 'utf-8')
-          }),
-        )
+        // The bundle is already on disk: the pipeline calls
+        // `materializeRuntimeV4Bundle` for every v4 compile, upload or not. This
+        // used to write it here, which is precisely why a compile-only build
+        // produced no artifacts.
         const fileBuffer = await context.compressSourceFolder(context.sourceTargetFolderPath)
+
+        // The source project, stored on the device beside the artifacts so it
+        // can be retrieved later. Never fatal: the device runs the new program
+        // either way, and failing an upload over the optional half of it would
+        // be a worse outcome than losing retrievability.
+        let snapshot: { archive: Buffer; metadata: string; missingLibraries: string[] } | null = null
+        if (!args.supportsProjectSnapshot) {
+          // Asked and answered by the pre-upload capability check. Building one
+          // anyway would spend the user's time compressing a project this
+          // device discards on arrival, and leave them a device they cannot
+          // retrieve from with nothing said about why.
+          log(
+            'This runtime does not store source projects, so the project will not be sent with the program and cannot be retrieved from this device later.',
+            'warning',
+          )
+        } else {
+          try {
+            snapshot = (await context.buildUploadSnapshot?.()) ?? null
+            if (snapshot && snapshot.missingLibraries.length > 0) {
+              log(
+                `Stored project will not include these libraries, which are not installed here: ${snapshot.missingLibraries.join(', ')}`,
+                'warning',
+              )
+            }
+          } catch (error) {
+            log(
+              `Could not prepare the project for storage on the device: ${error instanceof Error ? error.message : String(error)}`,
+              'warning',
+            )
+          }
+        }
 
         const deployOutcome = await deployRuntimeProgram({
           uploadProgram: () =>
@@ -392,7 +421,15 @@ export function createEditorCompilerPlatformPort(
               contentType: 'application/zip',
               fileBuffer,
               cleanBuild: context.cleanBuild,
+              snapshotBuffer: snapshot?.archive,
+              snapshotMetadata: snapshot?.metadata,
               onUploadAccepted: (responseBody) => {
+                // The device may have accepted the program and refused the
+                // project beside it. Saying so here is the difference between
+                // "not retrievable" being found out now and being found out by
+                // whoever needed the project back.
+                const warning = readSnapshotUploadWarning(responseBody)
+                if (warning) log(describeSnapshotUploadWarning(warning), 'warning')
                 try {
                   const response = JSON.parse(responseBody) as { CompilationStatus?: string }
                   log(`Runtime compilation started: ${response.CompilationStatus || 'COMPILING'}`, 'info')
@@ -432,7 +469,11 @@ export function createEditorCompilerPlatformPort(
           startIntervalMs: context.startIntervalMs,
         })
 
-        return { ok: deployOutcome === 'STARTED' }
+        // 'STARTED' is not the only success: a runtime that refused to start
+        // because its hardware mode switch reads STOP has still taken the
+        // program. deployReachedDevice keeps that judgement in one place, shared
+        // with the web adapter.
+        return { ok: deployReachedDevice(deployOutcome) }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         log(`Runtime v4 upload failed: ${message}`, 'error')
@@ -461,6 +502,12 @@ export function createEditorCompilerPlatformPort(
           arduinoPlatform: args.fqbn,
           compilationPath: context.compilationPath,
           communicationPort: args.port || undefined,
+          uploadMethod: args.uploadMethod,
+          // Declared on UploadArduinoBoardArgs since the ethernet-upload work
+          // landed, populated only now: without it an ethernet build ignored
+          // the address the caller gave and used whatever the project file
+          // remembered.
+          ipAddress: args.ipAddress,
           handleOutputData: (chunk, level) => {
             const message = typeof chunk === 'string' ? chunk : chunk.toString()
             log(message, level ?? 'info')
@@ -493,6 +540,12 @@ export function createEditorCompilerPlatformPort(
               fileBuffer,
               cleanBuild: context.cleanBuild,
               onUploadAccepted: (responseBody) => {
+                // The device may have accepted the program and refused the
+                // project beside it. Saying so here is the difference between
+                // "not retrievable" being found out now and being found out by
+                // whoever needed the project back.
+                const warning = readSnapshotUploadWarning(responseBody)
+                if (warning) log(describeSnapshotUploadWarning(warning), 'warning')
                 try {
                   const response = JSON.parse(responseBody) as { CompilationStatus?: string }
                   log(`Runtime compilation started: ${response.CompilationStatus || 'COMPILING'}`, 'info')
@@ -531,7 +584,11 @@ export function createEditorCompilerPlatformPort(
           startTimeoutMs: context.startTimeoutMs,
           startIntervalMs: context.startIntervalMs,
         })
-        return { ok: deployOutcome === 'STARTED' }
+        // 'STARTED' is not the only success: a runtime that refused to start
+        // because its hardware mode switch reads STOP has still taken the
+        // program. deployReachedDevice keeps that judgement in one place, shared
+        // with the web adapter.
+        return { ok: deployReachedDevice(deployOutcome) }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         log(`Runtime v3 upload failed: ${message}`, 'error')
@@ -540,8 +597,14 @@ export function createEditorCompilerPlatformPort(
     },
 
     /**
-     * Probe the device's `/api/version` (unauthenticated) so the
-     * pipeline can short-circuit uploads to pre-4.1.0 runtimes.
+     * Probe the device (unauthenticated) so the pipeline can
+     * short-circuit uploads in both directions: to a runtime too old
+     * for this editor, and from an editor too old for this runtime.
+     *
+     * Tries `/api/capabilities` first — it carries the runtime version
+     * AND the runtime's `minEditorVersion` in one round-trip — and
+     * falls back to `/api/version` for runtimes that predate it
+     * (DOPE-448).
      *
      * Transport: Electron's HTTPS bridge → device IP.
      * Response parsing + null-fallback live in the shared
@@ -550,19 +613,21 @@ export function createEditorCompilerPlatformPort(
      */
     async checkRuntimeVersion(args: CheckRuntimeVersionArgs, log: PlatformLog): Promise<CheckRuntimeVersionResult> {
       const deviceContext = assertEditorHttpsContext(args.context)
-      const { version } = await probeRuntimeVersion({
-        fetchVersion: async () => {
-          const result = await context.mainProcessBridge.makeRuntimeApiRequest<{ version: string }>(
-            deviceContext.ip,
-            '/api/version',
-            (data: string) => JSON.parse(data) as { version: string },
-          )
-          if (!result.success) return { success: false, error: result.error }
-          return { success: true, body: result.data }
-        },
+      const getJson = async (endpoint: string) => {
+        const result = await context.mainProcessBridge.makeRuntimeApiRequest<unknown>(
+          deviceContext.ip,
+          endpoint,
+          (data: string) => JSON.parse(data) as unknown,
+        )
+        if (!result.success) return { success: false as const, error: result.error }
+        return { success: true as const, body: result.data }
+      }
+      const { version, minEditorVersion, supportsProjectSnapshot } = await probeRuntimeVersion({
+        fetchCapabilities: () => getJson('/api/capabilities'),
+        fetchVersion: () => getJson('/api/version'),
         log,
       })
-      return { ok: true, version }
+      return { ok: true, version, minEditorVersion, supportsProjectSnapshot }
     },
 
     /**
@@ -587,6 +652,41 @@ export function createEditorCompilerPlatformPort(
      * disk layer is already the source of truth for the editor; web's
      * adapter will need to surface them in the returned map instead.
      */
+    /**
+     * Write the composed v4 bundle into `build/<target>/src`.
+     *
+     * The same directory `compressSourceFolder` zips for the upload, so a
+     * compile-only build and a build-and-upload leave byte-identical artifacts —
+     * which is what lets a test inspect a compile without touching a device.
+     */
+    async materializeRuntimeV4Bundle(
+      args: MaterializeRuntimeV4BundleArgs,
+      log: PlatformLog,
+    ): Promise<MaterializeRuntimeV4BundleResult> {
+      try {
+        const entries = Object.entries(args.bundle)
+        await Promise.all(
+          entries.map(async ([relPath, content]) => {
+            const absPath = join(context.sourceTargetFolderPath, relPath)
+            await fs.mkdir(dirname(absPath), { recursive: true })
+            // A VPP plugin payload may be precompiled objects rather than
+            // source, so bytes are written as bytes; the encoding argument
+            // only applies to the text entries the pipeline composes.
+            if (typeof content === 'string') {
+              await fs.writeFile(absPath, content, 'utf-8')
+            } else {
+              await fs.writeFile(absPath, content)
+            }
+          }),
+        )
+        return { written: entries.length }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log(`Could not write build artifacts: ${message}`, 'error')
+        return { written: 0, errors: [{ message, line: 0, column: 0, severity: 'error' }] }
+      }
+    },
+
     async packageVppPlugin(args: PackageVppPluginArgs, log: PlatformLog): Promise<PackageVppPluginResult> {
       try {
         await handlers.handleVendorPluginPackaging(
@@ -605,7 +705,12 @@ export function createEditorCompilerPlatformPort(
             log(message, logLevel ?? 'info')
           },
         )
-        return { files: {} }
+        // Surface the package's runtime floor so the pipeline can compare
+        // it against the connected runtime after the version probe
+        // (DOPE-448). Read here rather than inside the handler because
+        // the handler returns void and writes straight to disk; the
+        // registry lookup is cheap next to the packaging work that ran.
+        return { files: {}, minRuntimeVersion: readVppRuntimeFloor(context, args.boardTarget) }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         return {
@@ -633,6 +738,24 @@ export function assertEditorHttpsContext(
     throw new Error(`Editor compiler platform port received non-editor context: ${context.kind}`)
   }
   return context
+}
+
+/**
+ * `package.minRuntimeVersion` of the VPP providing `boardTarget`, or
+ * null when no resolver was injected, the board is not from a VPP, is
+ * not a `runtime-v4` target, or the package declares no floor.
+ *
+ * Never throws: a missing or unreadable registry means "no declared
+ * floor", which the pipeline treats as no constraint. A version gate
+ * that failed the build because it could not read its own metadata
+ * would be worse than the mismatch it exists to catch.
+ */
+function readVppRuntimeFloor(context: EditorCompilerPlatformPortContext, boardTarget: string): string | null {
+  try {
+    return context.getVppRuntimeFloor?.(boardTarget) ?? null
+  } catch {
+    return null
+  }
 }
 
 /**

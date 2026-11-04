@@ -1,4 +1,5 @@
 import { MagnifierIcon } from '@root/frontend/assets/icons/interface/Magnifier'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { buildLibraryTree, type LibraryTreeNode } from '@root/frontend/utils/library-tree'
 import type { SystemLibraryPou } from '@root/middleware/shared/ports/library-types'
@@ -16,12 +17,9 @@ export const ModalBlockLibrary = ({
   setSelectedFileKey: (string: string) => void
 }) => {
   const pouName = useBoundPou()
-  const {
-    project: {
-      data: { pous },
-    },
-    libraries: { system, user },
-  } = useOpenPLCStore()
+  const pous = useOpenPLCStore((state) => state.project.data.pous)
+  const system = useOpenPLCStore((state) => state.libraries.system)
+  const user = useOpenPLCStore((state) => state.libraries.user)
   // Scope the visible system pool to bundled (canonical) +
   // project-enabled libraries — same gate the FBD picker and the
   // explorer's library tree use.
@@ -57,7 +55,7 @@ export const ModalBlockLibrary = ({
         <InputWithRef
           className='h-full w-full bg-inherit outline-none'
           id='Search-File'
-          placeholder='Search'
+          placeholder={tr('Search')}
           type='text'
           value={filterText}
           onChange={handleFilterChange}

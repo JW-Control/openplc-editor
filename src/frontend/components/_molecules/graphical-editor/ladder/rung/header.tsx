@@ -4,6 +4,7 @@
  */
 
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useRef, useState } from 'react'
 
 import { CloseIcon } from '../../../../../assets/icons/interface/Close'
@@ -26,10 +27,8 @@ type RungHeaderProps = {
 
 export const RungHeader = ({ rung, isOpen, draggableHandleProps, className, onClick }: RungHeaderProps) => {
   const editorName = useBoundPou()
-  const {
-    ladderFlowActions: { addComment, duplicateRung },
-    modalActions: { openModal },
-  } = useOpenPLCStore()
+  const { addComment, duplicateRung } = useOpenPLCStore((state) => state.ladderFlowActions)
+  const openModal = useOpenPLCStore((state) => state.modalActions.openModal)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -67,7 +66,7 @@ export const RungHeader = ({ rung, isOpen, draggableHandleProps, className, onCl
       </div>
       <div className='flex w-full items-center rounded-lg border border-transparent px-1' ref={containerRef}>
         <HighlightedTextArea
-          placeholder='Start typing to add a comment to this rung'
+          placeholder={tr('Start typing to add a comment to this rung')}
           textAreaClassName='text-xs'
           highlightClassName='text-xs'
           ref={textAreaRef}

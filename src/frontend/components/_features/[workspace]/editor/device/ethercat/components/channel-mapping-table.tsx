@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIChannel, EtherCATChannelMapping } from '@root/middleware/shared/ports/esi-types'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -41,7 +42,7 @@ const AliasCell = React.memo(
         value={localAlias}
         onChange={(e) => setLocalAlias(e.target.value)}
         onBlur={handleBlur}
-        placeholder='Alias'
+        placeholder={tr('Alias')}
         className='h-[24px] w-full rounded border border-neutral-300 bg-white px-1.5 font-mono text-xs text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300'
       />
     )
@@ -123,7 +124,7 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            All ({channels.length})
+            {tr('All ({{length}})', { length: channels.length })}
           </button>
           <button
             onClick={() => setFilterDirection('input')}
@@ -134,7 +135,7 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            Inputs ({inputCount})
+            {tr('Inputs ({{inputCount}})', { inputCount })}
           </button>
           <button
             onClick={() => setFilterDirection('output')}
@@ -145,14 +146,14 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 : 'bg-neutral-100 text-brand-light dark:bg-neutral-900 dark:text-neutral-700',
             )}
           >
-            Outputs ({outputCount})
+            {tr('Outputs ({{outputCount}})', { outputCount })}
           </button>
         </div>
 
         {/* Search */}
         <input
           type='text'
-          placeholder='Search channels...'
+          placeholder={tr('Search channels...')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className='h-[30px] rounded-md border border-neutral-300 bg-white px-2 text-xs text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
@@ -168,15 +169,17 @@ const ChannelMappingTable = ({ channels, mappings, onAliasChange }: ChannelMappi
                 #
               </th>
               <th className='w-[10%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Dir
+                {tr('Dir')}
               </th>
               <th className='w-[14%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                IEC Type
+                {tr('IEC Type')}
               </th>
               <th className='w-[22%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Address
+                {tr('Address')}
               </th>
-              <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Alias</th>
+              <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                {tr('Alias')}
+              </th>
             </tr>
           </thead>
           <tbody>

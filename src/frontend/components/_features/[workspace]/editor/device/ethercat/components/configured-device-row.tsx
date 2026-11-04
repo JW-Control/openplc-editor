@@ -1,5 +1,6 @@
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
 import { useDeviceConfiguration } from '@root/frontend/hooks/use-device-configuration'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type {
   ConfiguredEtherCATDevice,
@@ -137,43 +138,43 @@ const ConfiguredDeviceRow = ({
             <td colSpan={5} className='px-2 py-2'>
               <div className='rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900'>
                 <h5 className='mb-2 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
-                  Device Info
+                  {tr('Device Info')}
                 </h5>
                 <div className='grid grid-cols-2 gap-x-6 gap-y-1 text-xs md:grid-cols-4'>
                   <div>
-                    <span className='text-neutral-500 dark:text-neutral-400'>Vendor:</span>{' '}
+                    <span className='text-neutral-500 dark:text-neutral-400'>{tr('Vendor:')}</span>{' '}
                     <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.vendor.name || 'Unknown'}</span>
                   </div>
                   <div>
-                    <span className='text-neutral-500 dark:text-neutral-400'>Vendor ID:</span>{' '}
+                    <span className='text-neutral-500 dark:text-neutral-400'>{tr('Vendor ID:')}</span>{' '}
                     <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.vendorId}</span>
                   </div>
                   <div>
-                    <span className='text-neutral-500 dark:text-neutral-400'>Product Code:</span>{' '}
+                    <span className='text-neutral-500 dark:text-neutral-400'>{tr('Product Code:')}</span>{' '}
                     <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.productCode}</span>
                   </div>
                   <div>
-                    <span className='text-neutral-500 dark:text-neutral-400'>Revision:</span>{' '}
+                    <span className='text-neutral-500 dark:text-neutral-400'>{tr('Revision:')}</span>{' '}
                     <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.revisionNo}</span>
                   </div>
                   <div>
-                    <span className='text-neutral-500 dark:text-neutral-400'>ESI File:</span>{' '}
+                    <span className='text-neutral-500 dark:text-neutral-400'>{tr('ESI File:')}</span>{' '}
                     <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.filename || 'Not found'}</span>
                   </div>
                   {esiDevice?.groupName && (
                     <div>
-                      <span className='text-neutral-500 dark:text-neutral-400'>Group:</span>{' '}
+                      <span className='text-neutral-500 dark:text-neutral-400'>{tr('Group:')}</span>{' '}
                       <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.groupName}</span>
                     </div>
                   )}
                   {esiDevice && (
                     <>
                       <div>
-                        <span className='text-neutral-500 dark:text-neutral-400'>Input Channels:</span>{' '}
+                        <span className='text-neutral-500 dark:text-neutral-400'>{tr('Input Channels:')}</span>{' '}
                         <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.inputChannelCount}</span>
                       </div>
                       <div>
-                        <span className='text-neutral-500 dark:text-neutral-400'>Output Channels:</span>{' '}
+                        <span className='text-neutral-500 dark:text-neutral-400'>{tr('Output Channels:')}</span>{' '}
                         <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.outputChannelCount}</span>
                       </div>
                     </>
@@ -189,7 +190,7 @@ const ConfiguredDeviceRow = ({
             <td colSpan={5} className='px-2 py-2'>
               <div className='rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900'>
                 <h5 className='mb-3 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
-                  Configuration
+                  {tr('Configuration')}
                 </h5>
                 <DeviceConfigurationForm config={device.config} updateConfig={updateConfig} />
               </div>
@@ -202,7 +203,7 @@ const ConfiguredDeviceRow = ({
             <td colSpan={5} className='px-2 py-2'>
               <div className='rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900'>
                 <h5 className='mb-3 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
-                  Startup Parameters (SDO)
+                  {tr('Startup Parameters (SDO)')}
                 </h5>
                 <SdoParametersSection
                   isLoading={isLoadingChannels}
@@ -221,7 +222,7 @@ const ConfiguredDeviceRow = ({
             <td colSpan={5} className='px-2 py-2'>
               <div className='rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900'>
                 <h5 className='mb-3 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
-                  Channel Mappings
+                  {tr('Channel Mappings')}
                 </h5>
                 <ChannelMappingsSection
                   isLoading={isLoadingChannels}

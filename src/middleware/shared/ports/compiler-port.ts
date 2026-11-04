@@ -1,7 +1,7 @@
 /**
  * CompilerPort — Abstracts the PLC compilation pipeline.
  *
- * Editor adapter: Delegates to main process via IPC (local tools: xml2st, STruC++, arduino-cli).
+ * Editor adapter: Delegates to main process via IPC (local tools: STruC++, arduino-cli).
  * Web adapter:    Delegates to remote API at compile.getedge.me (callGenerateSt, callCompileSt, etc.).
  *
  * The UI only knows "compile this project" and receives progress events.
@@ -10,12 +10,6 @@
  * ## Editor IPC methods replaced:
  *   - window.bridge.runCompileProgram()
  *   - window.bridge.runDebugCompilation()
- *   - window.bridge.exportProjectXml()
- *   - window.bridge.createBuildDirectory()
- *   - window.bridge.createXmlFileToBuild()
- *   - window.bridge.compileRequest()
- *   - window.bridge.generateCFilesRequest()
- *   - window.bridge.setupCompilerEnvironment()
  *
  * ## Web service methods replaced:
  *   - callGenerateSt()
@@ -31,7 +25,6 @@ import type {
   CompileResult,
   DebugCompileResult,
   PLCProjectData,
-  Result,
   Unsubscribe,
 } from './types'
 
@@ -60,12 +53,6 @@ export interface DebugCompileArgs {
   projectPath: string
 }
 
-export interface ExportXmlArgs {
-  projectData: PLCProjectData
-  projectPath: string
-  format: 'old-editor' | 'codesys'
-}
-
 /**
  * Inputs for a library build.  The backend reads `library.json` from
  * the project root fresh on each invocation (the manifest tab's
@@ -77,22 +64,11 @@ export interface ExportXmlArgs {
 export interface CompileLibraryArgs {
   projectData: PLCProjectData
   projectPath: string
-  /**
-   * Skip the verification-result cache for this run.  The MD5 cache
-   * normally short-circuits the slow simulator-target verification
-   * when the program.st coming out of xml2st hasn't changed since
-   * the last successful (or failed) verify; `cleanBuild: true`
-   * forces a fresh compile.
-   *
-   * Pure UX gate — the artefact build itself is always fresh; only
-   * the verification step is cached.
-   */
-  cleanBuild?: boolean
 }
 
 export interface CompilerPort {
   /**
-   * Run the full compilation pipeline (XML -> ST -> C -> binary).
+   * Run the full compilation pipeline (project IR -> ST -> strucpp -> binary).
    * Emits progress events for UI feedback.
    */
   compileProgram(args: CompileProgramArgs, onProgress: (event: CompileProgressEvent) => void): Promise<CompileResult>
@@ -107,15 +83,8 @@ export interface CompilerPort {
   ): Promise<DebugCompileResult>
 
   /**
-   * Export the project as IEC 61131-3 XML.
-   * Editor: writes XML file to disk.
-   * Web: returns XML string (or triggers download).
-   */
-  exportProjectXml(args: ExportXmlArgs): Promise<Result<{ message: string }>>
-
-  /**
    * Build a `.stlib` archive from a Library Project on disk.
-   * Editor: validates the manifest, runs the local xml2st binary,
+   * Editor: validates the manifest, runs the in-process ST transpiler,
    *   pipes the result through strucpp's library compiler, and
    *   writes the archive to `<projectPath>/build/<name>.stlib`.
    * Web (future): posts the project + manifest to a remote service
@@ -126,9 +95,10 @@ export interface CompilerPort {
    * `projectCapabilities(meta).hasLibraryBuild`.
    *
    * Returns the artefact path on success, or an error string the
-   * console renders directly.  The optional `verification` field
-   * reports the Phase-8 avr-gcc verification result when wired —
-   * a verification failure does NOT fail the build.
+   * console renders directly.  The build is target-neutral: it runs
+   * strucpp and nothing else, so a library that could never link on
+   * one particular board still produces a valid archive.  Executing
+   * the library is a separate action — see `composeLibraryDebugHarness`.
    */
   compileLibrary?(
     args: CompileLibraryArgs,

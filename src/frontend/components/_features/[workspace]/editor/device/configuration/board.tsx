@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
-import type { TimingStats } from '@root/middleware/shared/ports/types'
-import { useCapabilities, useDevice, useRuntime } from '@root/middleware/shared/providers/platform-context'
+import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
+import { describeVppPinDrift, type VppPackagePin } from '@root/backend/shared/utils/vpp/vpp-package-pin'
+import { tr } from '@root/frontend/locales/tr'
+import { useCapabilities, useDevice, usePackages } from '@root/middleware/shared/providers/platform-context'
+import { evaluateVppBackplaneGate, vppGateStateFor } from '@root/middleware/shared/utils/build-gate/vpp-backplane-gate'
 import { resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -8,26 +11,32 @@ import { MagnifierIcon } from '../../../../../../assets/icons/interface/Magnifie
 import { MinusIcon } from '../../../../../../assets/icons/interface/Minus'
 import { PlusIcon } from '../../../../../../assets/icons/interface/Plus'
 import { RefreshIcon } from '../../../../../../assets/icons/interface/Refresh'
+import { useDeviceConnect } from '../../../../../../hooks/use-device-connect'
+import { useDeviceLicense } from '../../../../../../hooks/use-device-license'
+import { useRuntimeConnect } from '../../../../../../hooks/use-runtime-connect'
 import { boardSelectors, pinSelectors } from '../../../../../../hooks/use-store-selectors'
-import { useOpenPLCStore } from '../../../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../../store'
 import type { RuntimeConnection } from '../../../../../../store/slices/device/types'
 import { cn } from '../../../../../../utils/cn'
-import { isOpenPLCRuntimeTarget, isSimulatorTarget, validateRuntimeVersion } from '../../../../../../utils/device'
+import { isEthernetUploadTarget, isOpenPLCRuntimeTarget, isSimulatorTarget } from '../../../../../../utils/device'
+import { explainLicenseOutcome } from '../../../../../../utils/license-outcome-dialog'
+import { serialPortDisplay } from '../../../../../../utils/serial-port-label'
 import { DropdownSearchInput } from '../../../../../_atoms/dropdown-search-input'
 import { Label } from '../../../../../_atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
 import TableActions from '../../../../../_atoms/table-actions'
-import { EtherCATStats } from '../../../../../_molecules/ethercat-stats'
+import { DeviceConnectButton } from '../../../../../_molecules/device-connect-button'
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '../../../../../_molecules/modal'
-import { PluginStatsPanel } from '../../../../../_molecules/plugin-stats-panel'
-import { ScanCycleStats } from '../../../../../_molecules/scan-cycle-stats'
 import { DeviceEditorSlot } from '../../../../../_templates/[editors]/device-editor-slot'
+import { DeviceLicenseStatus } from './components/device-license-status'
+import { HmiDesignerLauncher } from './components/hmi-designer-launcher'
 import { PinMappingTable } from './components/pin-mapping-table'
 
 const Board = memo(function () {
+  const store = useOpenPLCStoreApi()
   const capabilities = useCapabilities()
   const device = useDevice()
-  const runtime = useRuntime()
+  const packages = usePackages()
 
   const {
     deviceAvailableOptions: { availableBoards },
@@ -54,28 +63,58 @@ const Board = memo(function () {
 
   const currentBoardInfo = availableBoards.get(deviceBoard)
 
+  // CONNECT flow (D72): open the device channel, classify it, and drive the
+  // flash follow-up when nothing answered the debug protocol. `deviceLinkStatus`
+  // mirrors the MAIN process's session — it flips to 'connected' for a held
+  // serial/TCP link and for a runtime (REST) session alike, so it is the one
+  // signal that a session actually exists, whatever the medium.
+  const {
+    connect: connectDevice,
+    disconnect: disconnectDevice,
+    isConnected,
+    status: deviceLinkStatus,
+  } = useDeviceConnect(currentBoardInfo)
+
+  // VPP licensing. Inert for every board whose VPP is not sold licensed, which is
+  // every built-in board — `isLicensable` gates the whole affordance. This mount
+  // OWNS the purchase watch: `useDeviceConnect` above holds a second instance of
+  // the hook, and without a single owner both would poll on every watch tick.
+  const licensing = useDeviceLicense(currentBoardInfo, { ownsWatch: true })
+
   // Whether this target exposes the GPIO pin-mapping table. Arduino boards
   // enable it via their preset; runtime-v4 GPIO boards (e.g. the Raspberry
   // Pi HAL) opt in with `capabilities.pinMapping` in their VPP manifest.
   const pinMappingEnabled = resolveTargetCapabilities(currentBoardInfo).pinMapping
 
   const runtimeIpAddress = useOpenPLCStore((state) => state.deviceDefinitions.configuration.runtimeIpAddress || '')
+  // Read from the same place the connection resolver reads it, so the button and
+  // the resolution never disagree about whether a network path exists.
+  const modbusTcpConfigured = useOpenPLCStore(
+    (state) =>
+      (
+        (state.deviceDefinitions.configuration.vendorScreenData ?? {}) as Record<
+          string,
+          Record<string, unknown> | undefined
+        >
+      )['modbus_tcp']?.['enabled'] === true,
+  )
   const connectionStatus = useOpenPLCStore((state) => state.runtimeConnection.connectionStatus)
   const setRuntimeIpAddress = useOpenPLCStore((state) => state.deviceActions.setRuntimeIpAddress)
-  const setRuntimeConnectionStatus = useOpenPLCStore((state) => state.deviceActions.setRuntimeConnectionStatus)
-  const setRuntimeJwtToken = useOpenPLCStore((state) => state.deviceActions.setRuntimeJwtToken)
+  const setVppPackagePin = useOpenPLCStore((state) => state.deviceActions.setVppPackagePin)
+  const recordedPins = useOpenPLCStore(
+    (state): Record<string, VppPackagePin> | undefined => state.deviceDefinitions.configuration.vppPackagePinsByBoard,
+  )
   const openModal = useOpenPLCStore((state) => state.modalActions.openModal)
   const plcStatus = useOpenPLCStore((state): RuntimeConnection['plcStatus'] => state.runtimeConnection.plcStatus)
-  const timingStats = useOpenPLCStore((state): TimingStats | null => state.runtimeConnection.timingStats)
-  const setIncludeTimingStatsInPolling = useOpenPLCStore(
-    (state): ((include: boolean) => void) => state.deviceActions.setIncludeTimingStatsInPolling,
-  )
-  const setIncludeEthercatStatsInPolling = useOpenPLCStore(
-    (state): ((include: boolean) => void) => state.deviceActions.setIncludeEthercatStatsInPolling,
+  // The vPLC the board list is being offered for. Null on every target that is
+  // not an orchestrator device, which the gate reads as "do not gate".
+  const selectedDevice = useOpenPLCStore(
+    (state): RuntimeConnection['selectedDevice'] => state.runtimeConnection.selectedDevice,
   )
 
   const [isPressed, setIsPressed] = useState(false)
   const [previewImage, setPreviewImage] = useState('')
+  const [pinDrift, setPinDrift] = useState<string | null>(null)
   const [formattedBoardState, setFormattedBoardState] = useState('')
   const [showPythonWarning, setShowPythonWarning] = useState(false)
   // Human-readable label of the function-block kind(s) the target can't
@@ -177,6 +216,16 @@ const Board = memo(function () {
     handleDeviceValueAtFirstRender()
   }, [])
 
+  // The project's board can stop being resolvable underneath it: on web the
+  // board list is the selected vPLC's package, so switching to a vPLC that
+  // runs another package takes those boards away. Keep the name showing as the
+  // selection rather than falling back to a placeholder — a board that vanishes
+  // silently reads as lost work, and the build refuses with the reason anyway.
+  const boardIsUnavailable = deviceBoard !== '' && currentBoardInfo === undefined
+  useEffect(() => {
+    if (boardIsUnavailable) setFormattedBoardState(deviceBoard)
+  }, [boardIsUnavailable, deviceBoard])
+
   // A target switch no longer needs to touch program variables: their
   // `location` holds a stable alias name (resolved at compile) or a literal
   // address — neither changes with the board. Producer address recompaction
@@ -222,6 +271,42 @@ const Board = memo(function () {
     void fetchPreviewImage()
   }, [deviceBoard, device, availableBoards])
 
+  // Pin the vendor package the moment a VPP board is selected, and compare it
+  // with what is installed whenever the board or the package set changes. The
+  // pin is what lets the editor say the package moved underneath a program
+  // that was laid out against the old one — a mismatch the device would
+  // otherwise only show as wrong I/O.
+  const vppPackageId = availableBoards.get(deviceBoard)?.vpp?.packageId
+  const targetVpp = selectedDevice?.vpp
+  useEffect(() => {
+    if (!packages || !vppPackageId) {
+      setPinDrift(null)
+      return
+    }
+    let cancelled = false
+    // The vPLC's own binding is authoritative: the host decided which bytes
+    // that vPLC runs, and the browser's copy is only what it managed to fetch.
+    // Fall back to the loaded package when no vPLC is the target — the desktop,
+    // and a host that reports no binding.
+    const authoritative =
+      targetVpp !== undefined ? Promise.resolve<VppPackagePin | null>(targetVpp) : packages.getPackagePin(vppPackageId)
+    void authoritative.then((installed) => {
+      if (cancelled) return
+      const recorded = recordedPins?.[deviceBoard]
+      // First time on this board: record what it is being authored against
+      // rather than warning about a pin that was never taken.
+      if (!recorded && installed) {
+        setVppPackagePin(deviceBoard, installed)
+        setPinDrift(null)
+        return
+      }
+      setPinDrift(describeVppPinDrift(recorded, installed))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [deviceBoard, vppPackageId, targetVpp, packages, recordedPins, setVppPackagePin])
+
   const refreshCommunicationPorts = useCallback(
     async (e: React.MouseEvent) => {
       e.preventDefault()
@@ -253,7 +338,7 @@ const Board = memo(function () {
   const handleSetDeviceBoard = useCallback(
     (board: string) => {
       if (board === '__install_additional_boards__') {
-        const { tabsActions, editorActions } = useOpenPLCStore.getState()
+        const { tabsActions, editorActions } = store.getState()
         const tab = {
           name: 'Package Manager',
           path: '/package-manager',
@@ -333,6 +418,7 @@ const Board = memo(function () {
       setDeviceBoard(normalizedBoard)
     },
     [
+      store,
       connectionStatus,
       deviceBoard,
       setDeviceBoard,
@@ -346,112 +432,101 @@ const Board = memo(function () {
   )
   const handleRowClick = (row: HTMLTableRowElement) => setCurrentSelectedPinTableRow(parseInt(row.id))
 
-  const handleConnectToRuntime = useCallback(async () => {
-    if (connectionStatus === 'connected') {
-      // Disconnect - global polling hook will handle resetting failure counter
-      setRuntimeJwtToken(null)
-      setRuntimeConnectionStatus('disconnected')
-      await runtime.clearCredentials()
+  // The runtime CONNECT lives in `useRuntimeConnect` so the debugger's
+  // offer-to-connect runs the same one. Keeping a second copy here is how the
+  // two would drift -- the version gate, the login/first-user choice and the
+  // licence teardown all have to behave identically wherever connect is
+  // invoked from.
+  const { toggle: handleConnectToRuntime } = useRuntimeConnect()
+
+  // Timing and EtherCAT stats polling now belongs to the Runtime Status screen
+  // (RTOP-283), which is where those statistics are displayed. Polling for them
+  // here would fetch data nobody is looking at, and would leave Runtime Status
+  // with nothing to show when opened on its own.
+
+  // Settle the licence for a RUNTIME target once its session is up — once per
+  // session PER BOARD.
+  //
+  // The serial flow settles it INSIDE `connect()`: one held link, awaited, so
+  // the user cannot race the sequence. A runtime target has no such moment in
+  // the renderer — login opens the session MAIN-side (useDeviceConnectionMonitor
+  // reacts to the REST login and calls `openRuntimeSession`), and the device
+  // link status flipping to 'connected' is the announcement that it exists.
+  // Keying on the REST login alone would race that IPC call; keying on BOTH
+  // means the licence FCs only ever run against an established session, over
+  // the debug WebSocket the main process acquires per call.
+  //
+  // The ref holds the BOARD the settle ran for, not a boolean: a board switch
+  // over a live session (confirm-device-switch allows it) clears the report via
+  // resetDeviceLicense, and a boolean ref would leave the new board unchecked
+  // and badge-less until a manual reconnect (review 2026-08-20). A ref, not
+  // state: the re-render caused by the report landing must not re-run the flow.
+  const runtimeLicenseSettledForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!isOpenPLCRuntimeTarget(currentBoardInfo) || !licensing.isLicensable) return
+    // A platform whose device port cannot carry the licensing calls has nothing
+    // to settle — STRUCTURAL inertness, not incidental: on openplc-web nothing
+    // publishes a device link today, but the day one is published this gate is
+    // what keeps a capability the platform never had from popping error dialogs
+    // (web review 2026-08-20, finding 1).
+    if (!device.refreshLicense) return
+    if (connectionStatus !== 'connected' || deviceLinkStatus !== 'connected') {
+      runtimeLicenseSettledForRef.current = null
       return
     }
-
-    if (!runtimeIpAddress) {
-      return
+    if (runtimeLicenseSettledForRef.current === deviceBoard) return
+    runtimeLicenseSettledForRef.current = deviceBoard
+    // Cleanup guard: `refresh` can take seconds (device read + backend round
+    // trip). A dialog for a screen the user already left is noise at best and
+    // a modal over an unrelated screen at worst.
+    let cancelled = false
+    void licensing.refresh().then((report) => {
+      if (cancelled || !report) return
+      explainLicenseOutcome(report, {
+        openModal,
+        buy: licensing.buy,
+        // AUTO flow: a check-failed outcome stays on the badge instead of
+        // opening an error modal the user did not ask for — the loudest case
+        // it suppresses is a runtime that predates the licence FCs, where
+        // every connect would otherwise open "Licence Check Failed" on a
+        // working device. User-initiated paths (serial connect, the badge's
+        // own retry) keep the dialog.
+        quietCheckFailed: true,
+        // A retry re-runs the flow and explains the NEW outcome, so a transient
+        // failure or a purchase completed in the browser resolves in place.
+        // NO quietCheckFailed here: a retry CLICK is user-initiated — the user
+        // asked a question, and silence would read as success (review
+        // 2026-08-20, E3). Only the unprompted auto-settle above stays quiet.
+        retry: async () => {
+          const next = await licensing.refresh()
+          if (next && !cancelled) {
+            explainLicenseOutcome(next, { openModal, buy: licensing.buy })
+          }
+        },
+      })
+    })
+    return () => {
+      cancelled = true
     }
-
-    setRuntimeConnectionStatus('connecting')
-
-    try {
-      const result = await runtime.getUsersInfo()
-
-      if (result.error) {
-        setRuntimeConnectionStatus('error')
-        return
-      }
-
-      // Validate runtime version matches the selected board target
-      const versionValidation = validateRuntimeVersion(deviceBoard, result.runtimeVersion)
-
-      // Helper to proceed with connection after validation
-      const proceedWithConnection = () => {
-        if (result.hasUsers) {
-          openModal('runtime-login', null)
-        } else {
-          openModal('runtime-create-user', null)
-        }
-      }
-
-      if (versionValidation.status === 'mismatch') {
-        // Hard error for version mismatch - cannot proceed
-        setRuntimeConnectionStatus('error')
-        openModal('debugger-message', {
-          type: 'error',
-          title: 'Runtime Version Mismatch',
-          message: versionValidation.message || 'Unknown version mismatch error',
-          buttons: ['OK'],
-          onResponse: () => {
-            // No action needed, just close the modal
-          },
-        })
-        return
-      }
-
-      if (versionValidation.status === 'missing') {
-        // Warning for older runtimes - allow user to continue anyway
-        // Note: buttons ordered as ['Continue Anyway', 'Cancel'] so Cancel (index 1) is the default
-        // when closing the modal (DebuggerMessageModal calls onResponse with last button index on close)
-        openModal('debugger-message', {
-          type: 'warning',
-          title: 'Older Runtime Detected',
-          message: versionValidation.message || 'Could not detect runtime version.',
-          buttons: ['Continue Anyway', 'Cancel'],
-          onResponse: (buttonIndex: number) => {
-            if (buttonIndex === 0) {
-              // User clicked "Continue Anyway" - proceed with connection
-              proceedWithConnection()
-            } else {
-              // User clicked "Cancel" or closed the modal - stay disconnected
-              setRuntimeConnectionStatus('disconnected')
-            }
-          },
-        })
-        return
-      }
-
-      // Version is OK - proceed normally
-      proceedWithConnection()
-    } catch (_error) {
-      setRuntimeConnectionStatus('error')
-    }
+    // Deps are the STABLE fields, never the `licensing` object (review
+    // 2026-08-20, E4): the hook returns a fresh literal each render, and
+    // `refresh()` itself flips `phase` in the store — an object dep re-ran this
+    // effect mid-flight and its cleanup set `cancelled` on the very run that
+    // started the refresh, so the report never reached the dialog. `refresh`
+    // and `buy` are useCallback'd on inputs that do not change during the
+    // flight (`buy`'s `report?.deviceId` only moves after the resolve).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    runtime,
-    runtimeIpAddress,
     connectionStatus,
-    setRuntimeConnectionStatus,
-    setRuntimeJwtToken,
-    openModal,
+    deviceLinkStatus,
+    currentBoardInfo,
     deviceBoard,
+    device.refreshLicense,
+    licensing.isLicensable,
+    licensing.refresh,
+    licensing.buy,
+    openModal,
   ])
-
-  // Enable timing stats in global polling when this screen is visible
-  useEffect(() => {
-    // Set the flag to include timing stats in the global status polling
-    setIncludeTimingStatsInPolling(true)
-
-    // Clear the flag when leaving this screen
-    return () => {
-      setIncludeTimingStatsInPolling(false)
-    }
-  }, [setIncludeTimingStatsInPolling])
-
-  // Only runtime targets expose the EtherCAT endpoint; skip the poll otherwise.
-  useEffect(() => {
-    if (!isOpenPLCRuntimeTarget(currentBoardInfo)) return
-    setIncludeEthercatStatsInPolling(true)
-    return () => {
-      setIncludeEthercatStatsInPolling(false)
-    }
-  }, [setIncludeEthercatStatsInPolling, currentBoardInfo])
 
   return (
     <DeviceEditorSlot>
@@ -461,11 +536,11 @@ const Board = memo(function () {
           className='flex w-[360px] flex-shrink-0 flex-col items-start justify-start gap-3'
         >
           <h2 id='slot-title' className='select-none text-lg font-medium text-neutral-950 dark:text-white'>
-            Board Settings
+            {tr('Board Settings')}
           </h2>
           <div id='board-selector' className='flex w-full items-center justify-start gap-1 pr-5'>
             <Label id='device-selector-label' className='w-fit text-xs text-neutral-950 dark:text-white'>
-              Device
+              {tr('Device')}
             </Label>
             <Select
               value={formattedBoardState}
@@ -512,9 +587,35 @@ const Board = memo(function () {
                   onChange={(e) => setDeviceSearchTerm(e.target.value)}
                   aria-label='Search devices'
                 />
+                {boardIsUnavailable && (
+                  <SelectItem
+                    key={deviceBoard}
+                    value={deviceBoard}
+                    disabled
+                    className='flex w-full cursor-not-allowed items-center px-2 py-[7px] pl-5 opacity-60 outline-none'
+                  >
+                    <span className='flex flex-col gap-0.5'>
+                      <span className='font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                        {deviceBoard}
+                      </span>
+                      <span className='font-caption text-[10px] leading-snug text-neutral-500 dark:text-neutral-400'>
+                        {evaluateVppBackplaneGate(
+                          vppGateStateFor({
+                            board: undefined,
+                            boardName: deviceBoard,
+                            target: selectedDevice,
+                            vplcProvidesVendorBoards: capabilities.hasOrchestratorDevices,
+                          }),
+                        ).kind === 'refuse'
+                          ? 'Not available on the selected vPLC. Select a vPLC created with the package this board comes from.'
+                          : 'Not available. The package this board comes from is not installed.'}
+                      </span>
+                    </span>
+                  </SelectItem>
+                )}
                 {groupedBoards.length === 0 ? (
                   <div className='px-3 py-6 text-center text-[11px] italic text-neutral-500 dark:text-neutral-400'>
-                    No devices match “{deviceSearchTerm}”.
+                    {tr('No devices match “{{deviceSearchTerm}}”.', { deviceSearchTerm })}
                   </div>
                 ) : (
                   groupedBoards.map(({ vendor, boards }) => (
@@ -525,17 +626,40 @@ const Board = memo(function () {
                       {boards.map(({ board, data }) => {
                         const showVersion = !isSimulatorTarget(data) && data.coreVersion
                         const formattedBoard = `${board}${showVersion ? ` [${data.coreVersion}]` : ''}`
+                        // The RULE lives in `evaluateVppBackplaneGate`, shared with
+                        // the deploy pre-check, so the list and the build refuse the
+                        // same boards with the same words. A refused board stays
+                        // listed and carries its explanation — hiding it would read
+                        // as "this package is not installed".
+                        const gate = evaluateVppBackplaneGate(
+                          vppGateStateFor({
+                            board: data,
+                            target: selectedDevice,
+                            vplcProvidesVendorBoards: capabilities.hasOrchestratorDevices,
+                          }),
+                        )
+                        const refusal = gate.kind === 'refuse' ? gate.reason : null
                         return (
                           <SelectItem
                             key={board}
+                            disabled={refusal !== null}
                             className={cn(
                               'data-[state=checked]:[&:not(:hover)]:bg-neutral-100 data-[state=checked]:dark:[&:not(:hover)]:bg-neutral-900',
                               'flex w-full cursor-pointer items-center px-2 py-[7px] pl-5 outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850',
+                              refusal !== null &&
+                                'cursor-not-allowed opacity-60 hover:bg-transparent dark:hover:bg-transparent',
                             )}
                             value={formattedBoard}
                           >
-                            <span className='flex items-center gap-2 font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
-                              {formattedBoard}
+                            <span className='flex flex-col gap-0.5'>
+                              <span className='flex items-center gap-2 font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                                {formattedBoard}
+                              </span>
+                              {refusal !== null && (
+                                <span className='font-caption text-[10px] leading-snug text-neutral-500 dark:text-neutral-400'>
+                                  {refusal}
+                                </span>
+                              )}
                             </span>
                           </SelectItem>
                         )
@@ -605,7 +729,7 @@ const Board = memo(function () {
           {isSimulatorTarget(currentBoardInfo) ? (
             <div id='simulator-info' className='flex w-full flex-col items-start justify-start gap-4'>
               <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-                Built-in simulator — no configuration required. Press Build to compile and run.
+                {tr('Built-in simulator — no configuration required. Press Build to compile and run.')}
               </p>
             </div>
           ) : isOpenPLCRuntimeTarget(currentBoardInfo) ? (
@@ -615,118 +739,194 @@ const Board = memo(function () {
                   id='runtime-ip-address-label'
                   className='whitespace-pre text-xs text-neutral-950 dark:text-white'
                 >
-                  IP Address
+                  {tr('IP Address')}
                 </Label>
                 <input
                   type='text'
                   value={runtimeIpAddress}
                   onChange={(e) => setRuntimeIpAddress(e.target.value)}
-                  placeholder='127.0.0.1 or localhost'
+                  placeholder={tr('127.0.0.1 or localhost')}
                   className='flex h-[30px] min-w-0 flex-1 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <button
                   type='button'
                   aria-label='Search for devices'
-                  title='Search for devices on the local network'
+                  title={tr('Search for devices on the local network')}
                   onClick={() => openModal('runtime-discover-devices', null)}
                   className='flex h-[30px] items-center gap-1 rounded-md bg-neutral-100 px-3 font-caption text-cp-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
                 >
                   <MagnifierIcon size='sm' className='h-4 w-4 stroke-neutral-1000 dark:stroke-neutral-100' />
-                  Search
+                  {tr('Search')}
                 </button>
               </div>
-              <div id='runtime-connect-button-container' className='flex w-full items-center justify-start'>
+              <DeviceConnectButton
+                containerId='runtime-connect-button-container'
+                status={connectionStatus}
+                onConnect={handleConnectToRuntime}
+                onDisconnect={handleConnectToRuntime}
+              >
+                {connectionStatus === 'connected' && plcStatus && (
+                  <span className='text-xs text-neutral-600 dark:text-neutral-400'>
+                    {tr('PLC: {{plcStatus}}', { plcStatus })}
+                  </span>
+                )}
+                {/* Same affordance as the serial connect row below: renders
+                    nothing at all unless this board's VPP is sold licensed AND a
+                    check has landed, so a plain runtime's row is unchanged. */}
+                {licensing.isLicensable ? (
+                  <DeviceLicenseStatus
+                    report={licensing.report}
+                    isChecking={licensing.isChecking}
+                    buyUrl={licensing.buyUrl}
+                    awaitingPurchase={licensing.awaitingPurchase}
+                    onBuy={() => void licensing.buy()}
+                    onRecheck={() => void licensing.refresh()}
+                    onCancelPurchaseWatch={licensing.cancelPurchaseWatch}
+                  />
+                ) : null}
+              </DeviceConnectButton>
+            </>
+          ) : isEthernetUploadTarget(currentBoardInfo) ? (
+            // Baremetal board programmed over Ethernet (e.g. Siemens LOGO! 8.2):
+            // a device-IP target + Search like a runtime board, but the baremetal
+            // Connect (Modbus TCP), not the v4 REST connect.
+            <>
+              <div id='device-ip-address-field' className='flex w-full items-center justify-start gap-1'>
+                <Label className='whitespace-pre text-xs text-neutral-950 dark:text-white'>{tr('IP Address')}</Label>
+                <input
+                  type='text'
+                  value={runtimeIpAddress}
+                  onChange={(e) => setRuntimeIpAddress(e.target.value)}
+                  placeholder='192.168.0.2'
+                  className='flex h-[30px] min-w-0 flex-1 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                />
                 <button
                   type='button'
-                  onClick={handleConnectToRuntime}
-                  disabled={connectionStatus === 'connecting'}
-                  className='h-[30px] rounded-md bg-brand px-4 py-1 font-caption text-cp-sm font-medium text-white hover:bg-brand-medium-dark disabled:opacity-50'
+                  aria-label='Search for devices'
+                  title={tr('Search for devices on the local network')}
+                  onClick={() => openModal('runtime-discover-devices', null)}
+                  className='flex h-[30px] items-center gap-1 rounded-md bg-neutral-100 px-3 font-caption text-cp-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
                 >
-                  {connectionStatus === 'connecting'
-                    ? 'Connecting...'
-                    : connectionStatus === 'connected'
-                      ? 'Disconnect'
-                      : 'Connect'}
+                  <MagnifierIcon size='sm' className='h-4 w-4 stroke-neutral-1000 dark:stroke-neutral-100' />
+                  {tr('Search')}
                 </button>
-                {connectionStatus === 'connected' && (
-                  <div className='ml-2 flex items-center gap-2'>
-                    <span className='text-xs text-green-600 dark:text-green-400'>● Connected</span>
-                    {plcStatus && (
-                      <span className='text-xs text-neutral-600 dark:text-neutral-400'>| PLC: {plcStatus}</span>
-                    )}
-                  </div>
-                )}
-                {connectionStatus === 'error' && (
-                  <span className='ml-2 text-xs text-red-600 dark:text-red-400'>● Connection failed</span>
-                )}
               </div>
+              <DeviceConnectButton
+                containerId='device-connect-button-container'
+                status={deviceLinkStatus}
+                onConnect={connectDevice}
+                onDisconnect={disconnectDevice}
+              >
+                {licensing.isLicensable ? (
+                  <DeviceLicenseStatus
+                    report={licensing.report}
+                    isChecking={licensing.isChecking}
+                    buyUrl={licensing.buyUrl}
+                    awaitingPurchase={licensing.awaitingPurchase}
+                    onBuy={() => void licensing.buy()}
+                    onRecheck={() => void licensing.refresh()}
+                    onCancelPurchaseWatch={licensing.cancelPurchaseWatch}
+                  />
+                ) : null}
+              </DeviceConnectButton>
             </>
           ) : capabilities.hasLocalSerialPorts ? (
-            <div id='communication-ports-selector' className='flex w-full items-center justify-start gap-1'>
-              <Label
-                id='communication-ports-selector-label'
-                className='whitespace-pre text-xs text-neutral-950 dark:text-white'
-              >
-                Communication Port
-              </Label>
-              <Select
-                value={communicationPort}
-                onValueChange={setCommunicationPort}
-                onOpenChange={setCommunicationSelectIsOpen}
-              >
-                <SelectTrigger
-                  aria-label='Communication port selection'
-                  placeholder='Select a communication port'
-                  withIndicator
-                  className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
-                />
-                <SelectContent
-                  className='h-fit max-h-[250px] w-[--radix-select-trigger-width] overflow-hidden rounded-lg border border-neutral-100 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'
-                  sideOffset={5}
-                  alignOffset={5}
-                  position='popper'
-                  align='center'
-                  side='bottom'
-                  viewportRef={communicationSelectRef}
+            <>
+              <div id='communication-ports-selector' className='flex w-full items-center justify-start gap-1'>
+                <Label
+                  id='communication-ports-selector-label'
+                  className='whitespace-pre text-xs text-neutral-950 dark:text-white'
                 >
-                  {availableCommunicationPorts.map((port) => {
-                    const portAddress = port.address?.trim()
-                    const portName = port.name?.trim()
-                    const displayName =
-                      portName && portName !== portAddress ? `${portAddress} (${portName})` : portAddress
-                    return (
-                      <SelectItem
-                        key={port.address}
-                        className={cn(
-                          'data-[state=checked]:[&:not(:hover)]:bg-neutral-100 data-[state=checked]:dark:[&:not(:hover)]:bg-neutral-900',
-                          'flex w-full cursor-pointer items-center px-2 py-[9px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850',
-                        )}
-                        value={port.address}
-                      >
-                        <span className='flex items-center gap-2 font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
-                          {displayName}
-                        </span>
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-              <button
-                type='button'
-                onClick={refreshCommunicationPorts}
-                disabled={isRefreshingPorts}
-                className={cn('group', isRefreshingPorts && 'cursor-not-allowed opacity-50')}
-                aria-pressed={isPressed}
-                aria-label='Refresh communication ports'
+                  {tr('Communication Port')}
+                </Label>
+                <Select
+                  value={communicationPort}
+                  onValueChange={setCommunicationPort}
+                  onOpenChange={setCommunicationSelectIsOpen}
+                >
+                  <SelectTrigger
+                    aria-label='Communication port selection'
+                    placeholder={tr('Select a communication port')}
+                    withIndicator
+                    className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                  />
+                  <SelectContent
+                    className='h-fit max-h-[250px] w-[--radix-select-trigger-width] overflow-hidden rounded-lg border border-neutral-100 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'
+                    sideOffset={5}
+                    alignOffset={5}
+                    position='popper'
+                    align='center'
+                    side='bottom'
+                    viewportRef={communicationSelectRef}
+                  >
+                    {availableCommunicationPorts.map((port) => {
+                      // Label by the OS-canonical port path (COM5 / /dev/ttyUSB0 /
+                      // /dev/tty.usbserial-*); the chip/vendor name rides as a hover hint.
+                      const { label, title } = serialPortDisplay(port)
+                      return (
+                        <SelectItem
+                          key={port.address}
+                          className={cn(
+                            'data-[state=checked]:[&:not(:hover)]:bg-neutral-100 data-[state=checked]:dark:[&:not(:hover)]:bg-neutral-900',
+                            'flex w-full cursor-pointer items-center px-2 py-[9px] outline-none hover:bg-neutral-200 dark:hover:bg-neutral-850',
+                          )}
+                          value={port.address}
+                          title={title}
+                        >
+                          <span className='flex items-center gap-2 font-caption text-cp-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                            {label}
+                          </span>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+                <button
+                  type='button'
+                  onClick={refreshCommunicationPorts}
+                  disabled={isRefreshingPorts}
+                  className={cn('group', isRefreshingPorts && 'cursor-not-allowed opacity-50')}
+                  aria-pressed={isPressed}
+                  aria-label='Refresh communication ports'
+                >
+                  <RefreshIcon size='sm' className={isPressed ? 'spin-refresh' : ''} />
+                </button>
+              </div>
+              <DeviceConnectButton
+                containerId='device-connect-button-container'
+                status={deviceLinkStatus}
+                onConnect={connectDevice}
+                onDisconnect={disconnectDevice}
+                // A missing port only blocks Connect when serial is the ONLY way in.
+                // With Modbus TCP enabled the connection can still be made over the
+                // network, so the button stays live and resolution reports the real
+                // reason if that path is not usable either.
+                {...(!isConnected && !communicationPort && !modbusTcpConfigured
+                  ? { blockedReason: 'Select a communication port first' }
+                  : {})}
               >
-                <RefreshIcon size='sm' className={isPressed ? 'spin-refresh' : ''} />
-              </button>
-            </div>
+                {/* Licensing sits in the connect row because it answers an adjacent
+                    question about the same device -- but it renders nothing at all
+                    unless this board's VPP is sold licensed AND a check has landed,
+                    so a free board's row is unchanged. */}
+                {licensing.isLicensable ? (
+                  <DeviceLicenseStatus
+                    report={licensing.report}
+                    isChecking={licensing.isChecking}
+                    buyUrl={licensing.buyUrl}
+                    awaitingPurchase={licensing.awaitingPurchase}
+                    onBuy={() => void licensing.buy()}
+                    onRecheck={() => void licensing.refresh()}
+                    onCancelPurchaseWatch={licensing.cancelPurchaseWatch}
+                  />
+                ) : null}
+              </DeviceConnectButton>
+            </>
           ) : null}
           {!isOpenPLCRuntimeTarget(currentBoardInfo) && !isSimulatorTarget(currentBoardInfo) && (
             <div id='board-specs' className='flex w-full flex-col items-start justify-start gap-4'>
               <Label id='board-specs-label' className='w-fit text-xs text-neutral-950 dark:text-white'>
-                Specs
+                {tr('Specs')}
               </Label>
               <div id='board-specs-container' className='grid grid-cols-2 place-content-around gap-2'>
                 {Object.entries(currentBoardInfo?.specs ?? {}).map(([spec, value]) => (
@@ -740,32 +940,42 @@ const Board = memo(function () {
               </div>
             </div>
           )}
+          {hasHmiDisplay(currentBoardInfo) && <HmiDesignerLauncher boardInfo={currentBoardInfo} />}
         </div>
         <div id='board-preview-container' className='flex flex-shrink-0 items-start'>
           <div className='h-[16rem] w-[20rem]'>
-            <img src={previewImage} alt='Device preview' className='h-full w-full object-contain' />
+            <img src={previewImage} alt={tr('Device preview')} className='h-full w-full object-contain' />
           </div>
         </div>
       </div>
+      {pinDrift && (
+        <div
+          data-testid='vpp-pin-drift'
+          className='mt-3 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400'
+        >
+          {pinDrift}
+        </div>
+      )}
       {(() => {
-        // Only draw the divider when there's actually content below it.
-        // Pin mapping renders for any non-simulator target that declares
-        // the pinMapping capability (Arduino boards, and runtime-v4 GPIO
-        // VPP boards like the Raspberry Pi). Runtime targets also render
-        // stats once connected — the two can coexist (a Pi shows the pin
-        // table always and the stats panels when connected).
+        // Only draw the divider when there's actually content below it, which
+        // now means the pin mapping table and nothing else. Pin mapping renders
+        // for any non-simulator target that declares the pinMapping capability
+        // (Arduino boards, and runtime-v4 GPIO VPP boards like the Raspberry Pi).
+        //
+        // A connected runtime target used to draw the divider too, for the stats
+        // panels that sat below it. Those moved to the Runtime Status screen (see
+        // the polling comment above) and the condition stayed, so connecting to a
+        // runtime target with no pin mapping drew a rule across the screen with
+        // nothing underneath it.
         const isSim = isSimulatorTarget(currentBoardInfo)
-        const isRuntime = isOpenPLCRuntimeTarget(currentBoardInfo)
-        const showStats = isRuntime && connectionStatus === 'connected'
-        const showPinMapping = !isSim && pinMappingEnabled
-        const showDivider = showStats || showPinMapping
+        const showDivider = !isSim && pinMappingEnabled
         return showDivider ? <hr id='container-split' className='h-[1px] w-full self-stretch bg-brand-light' /> : null
       })()}
       {!isSimulatorTarget(currentBoardInfo) && pinMappingEnabled && (
         <div id='pin-mapping-container' className='flex h-3/5 w-full flex-col gap-4'>
           <div id='pin-mapping-table-header-container' className='flex h-fit w-full justify-between'>
             <h2 id='slot-title' className='select-none text-lg font-medium text-neutral-950 dark:text-white'>
-              Pin Mapping
+              {tr('Pin Mapping')}
             </h2>
             <div className='flex items-center gap-2'>
               {currentBoardInfo?.vpp && (
@@ -773,9 +983,9 @@ const Board = memo(function () {
                   type='button'
                   onClick={loadDefaultPinMapping}
                   className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand'
-                  title='Replace this board pin mapping with the defaults declared by its package'
+                  title={tr('Replace this board pin mapping with the defaults declared by its package')}
                 >
-                  Load defaults
+                  {tr('Load defaults')}
                 </button>
               )}
               <button
@@ -783,9 +993,9 @@ const Board = memo(function () {
                 onClick={clearPinMapping}
                 disabled={pins.length === 0}
                 className='rounded-md border border-neutral-300 px-2 py-1 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
-                title='Clear this board pin mapping and free its IEC addresses'
+                title={tr('Clear this board pin mapping and free its IEC addresses')}
               >
-                Clear
+                {tr('Clear')}
               </button>
               <TableActions
                 className='w-fit *:rounded-md *:p-1'
@@ -810,28 +1020,25 @@ const Board = memo(function () {
           <PinMappingTable pins={pins} handleRowClick={handleRowClick} selectedRowId={currentSelectedPinTableRow} />
         </div>
       )}
-      {isOpenPLCRuntimeTarget(currentBoardInfo) && connectionStatus === 'connected' && (
-        <div className='flex w-full flex-col gap-6'>
-          {timingStats && <ScanCycleStats timingStats={timingStats} />}
-          <EtherCATStats />
-          <PluginStatsPanel pluginStats={timingStats?.plugin_stats} />
-        </div>
-      )}
-
       <Modal open={showPythonWarning} onOpenChange={setShowPythonWarning}>
         <ModalContent className='h-fit w-[500px]'>
           <ModalHeader>
-            <ModalTitle>{unsupportedBlocksLabel} Function Blocks Not Supported</ModalTitle>
+            <ModalTitle>
+              {tr('{{blocks}} Function Blocks Not Supported', { blocks: unsupportedBlocksLabel })}
+            </ModalTitle>
           </ModalHeader>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              The selected target ({pendingBoardChange?.formattedBoard}) does not support {unsupportedBlocksLabel}{' '}
-              Function Blocks.
+              {tr('The selected target ({{board}}) does not support {{blocks}} Function Blocks.', {
+                board: pendingBoardChange?.formattedBoard ?? '',
+                blocks: unsupportedBlocksLabel,
+              })}
             </p>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              Your project contains {unsupportedBlocksLabel} Function Blocks that will cause compilation to fail on this
-              target. To use this target, you must remove all {unsupportedBlocksLabel} Function Blocks from your
-              project.
+              {tr(
+                'Your project contains {{blocks}} Function Blocks that will cause compilation to fail on this target. To use this target, you must remove all {{blocks}} Function Blocks from your project.',
+                { blocks: unsupportedBlocksLabel },
+              )}
             </p>
           </div>
           <ModalFooter className='flex justify-end gap-2'>
@@ -843,7 +1050,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-neutral-100 px-4 font-caption text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-white dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'
@@ -857,7 +1064,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-brand px-4 font-caption text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Continue Anyway
+              {tr('Continue Anyway')}
             </button>
           </ModalFooter>
         </ModalContent>
@@ -876,13 +1083,15 @@ const Board = memo(function () {
           </ModalHeader>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              The selected target ({pendingBoardChange?.formattedBoard}) does not support{' '}
-              {v4FeaturesAffected.hasServers && v4FeaturesAffected.hasRemoteDevices
-                ? 'Modbus Server and Remote IO configurations'
-                : v4FeaturesAffected.hasServers
-                  ? 'Modbus Server configuration'
-                  : 'Remote IO configuration'}
-              .
+              {tr('The selected target ({{board}}) does not support {{features}}.', {
+                board: pendingBoardChange?.formattedBoard ?? '',
+                features:
+                  v4FeaturesAffected.hasServers && v4FeaturesAffected.hasRemoteDevices
+                    ? tr('Modbus Server and Remote IO configurations')
+                    : v4FeaturesAffected.hasServers
+                      ? tr('Modbus Server configuration')
+                      : tr('Remote IO configuration'),
+              })}
             </p>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
               Your project contains{' '}
@@ -909,7 +1118,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-neutral-100 px-4 font-caption text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-white dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'
@@ -923,7 +1132,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-brand px-4 font-caption text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Continue Anyway
+              {tr('Continue Anyway')}
             </button>
           </ModalFooter>
         </ModalContent>

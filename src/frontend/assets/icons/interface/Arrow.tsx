@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithRef, ElementType } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -45,7 +46,7 @@ export const ArrowIcon: ElementType<IArrowIconProps> = ({
       ref={ref}
       {...res}
     >
-      <title>Arrow Icon</title>
+      <title>{tr('Arrow Icon')}</title>
       <path
         d='M17.5002 21L10.5002 14L17.5002 7'
         stroke='current-color'

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { DiscoveredRuntimeDevice } from '../../../../middleware/shared/ports'
@@ -28,7 +29,7 @@ const RuntimeDiscoverDevicesModal = () => {
 
     const myScanId = ++scanIdRef.current
     if (!runtime.discoverDevices) {
-      setError('Device discovery is not supported by this platform.')
+      setError(tr('Device discovery is not supported by this platform.'))
       setPhase('done')
       return
     }
@@ -114,10 +115,10 @@ const RuntimeDiscoverDevicesModal = () => {
       }}
     >
       <ModalContent className='flex h-[480px] w-[480px] select-none flex-col rounded-lg p-6'>
-        <ModalTitle className='mb-2 text-xl font-semibold'>Search for Devices</ModalTitle>
+        <ModalTitle className='mb-2 text-xl font-semibold'>{tr('Search for Devices')}</ModalTitle>
 
         <p className='mb-4 text-sm text-neutral-600 dark:text-neutral-400'>
-          Broadcasting on the local network to find OpenPLC runtime devices.
+          {tr('Broadcasting on the local network to find OpenPLC runtime devices.')}
         </p>
 
         <div className='mb-3 flex items-center justify-between'>
@@ -133,7 +134,7 @@ const RuntimeDiscoverDevicesModal = () => {
             disabled={phase === 'scanning'}
             className='rounded-md bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-1000 hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            Rescan
+            {tr('Rescan')}
           </button>
         </div>
 
@@ -199,7 +200,7 @@ const RuntimeDiscoverDevicesModal = () => {
             onClick={handleClose}
             className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
         </div>
       </ModalContent>

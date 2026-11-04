@@ -1,9 +1,15 @@
 import type { NodeProps } from '@xyflow/react'
 
 import type { DiffStatus } from '../../../../../middleware/shared/ports/version-control-port'
+import {
+  blockInputVariables,
+  blockOutputVariables,
+  inOutVariableNames,
+} from '../../../../utils/graphical/in-out-pin-rules'
 import { BlockNodeVisual } from '../fbd/block-visual'
 import { CommentVisual } from '../fbd/comment-visual'
 import { ConnectionVisual } from '../fbd/connection-visual'
+import { getVariableNodeWidth } from '../fbd/utils/variable-size'
 import { VariableVisual } from '../fbd/variable-visual'
 import { DiffWrapper, renderFBDHandles } from './diff-wrapper'
 
@@ -15,8 +21,9 @@ export function ReadOnlyFBDBlock({ data, width, height }: NodeProps) {
   const blockName = variant?.name ?? '???'
   const blockType = variant?.type ?? ''
   const blockVars = variant?.variables ?? []
-  const inputs = blockVars.filter((v) => v.class === 'input' || v.class === 'inOut').map((v) => v.name)
-  const outputs = blockVars.filter((v) => v.class === 'output' || v.class === 'inOut').map((v) => v.name)
+  const inputs = blockInputVariables(blockVars).map((v) => v.name)
+  const outputs = blockOutputVariables(blockVars).map((v) => v.name)
+  const inOuts = inOutVariableNames(blockVars)
   const varName = (data.variable as { name?: string })?.name ?? ''
   const showInstanceName = blockType !== 'function' && blockType !== 'generic' && varName
   const w = (width as number) ?? 216
@@ -34,6 +41,7 @@ export function ReadOnlyFBDBlock({ data, width, height }: NodeProps) {
           blockName={blockName}
           inputConnectors={inputs}
           outputConnectors={outputs}
+          inOutConnectors={inOuts}
           width={w}
           height={h}
           disabled
@@ -44,13 +52,13 @@ export function ReadOnlyFBDBlock({ data, width, height }: NodeProps) {
   )
 }
 
-export function ReadOnlyFBDVariable({ data }: NodeProps) {
+export function ReadOnlyFBDVariable({ data, width }: NodeProps) {
   const status = (data.diffStatus as DiffStatus) ?? 'unchanged'
   const varName = (data.variable as { name?: string })?.name ?? ''
 
   return (
     <DiffWrapper status={status}>
-      <VariableVisual variableName={varName} />
+      <VariableVisual variableName={varName} width={getVariableNodeWidth({ width })} title={varName || undefined} />
       {renderFBDHandles(data.handles)}
     </DiffWrapper>
   )

@@ -17,6 +17,8 @@
  */
 
 import type { FbInstanceInfo, PLCPou } from '../../middleware/shared/ports/types'
+import { buildGlobalCompositeKey } from './debug-variable-finder'
+import { edgeTriggerInstanceName, edgeTriggerTypeForVariant } from './PLC/edge-trigger-instance'
 
 /**
  * Minimal state shape required by the debug polling filter.
@@ -31,6 +33,9 @@ export interface DebugPollingState {
     debugGraphList: string[]
     fbSelectedInstance: Map<string, string>
     fbDebugInstances: Map<string, FbInstanceInfo[]>
+    /** Generated program the session is running, when it runs one the
+     *  project does not contain — see the workspace slice. */
+    debugHarness: { programPou: PLCPou } | null
   }
   editor: { meta: { name: string; [key: string]: unknown } }
   ladderFlows: Array<{
@@ -74,7 +79,6 @@ export function buildActiveIndexSet(
 ): { activeIndexes: number[]; cacheResult: VisibleVarsCache } {
   const activeKeys = new Set<string>()
 
-  const { pous } = state.project.data
   const {
     debugVariableIndexes,
     debugForcedVariables,
@@ -82,7 +86,14 @@ export function buildActiveIndexSet(
     debugGraphList,
     fbSelectedInstance,
     fbDebugInstances,
+    debugHarness,
   } = state.workspace
+  // A library-debug session runs a generated harness program that is not
+  // part of the project.  Its variables (one instance per library block,
+  // all flagged for debug) have to be polled like any other watch, so it
+  // joins the project's own POUs here rather than replacing them — a flag
+  // the author ticks mid-session must still take effect.
+  const pous = debugHarness ? [...state.project.data.pous, debugHarness.programPou] : state.project.data.pous
   const { editor } = state
 
   // -----------------------------------------------------------------------
@@ -93,14 +104,25 @@ export function buildActiveIndexSet(
     const watched = variables.filter((v) => v.debug === true)
     if (watched.length === 0) continue
 
+    // VAR_EXTERNAL watches resolve to a shared global by its canonical,
+    // POU-independent key (Config0:<name>) — matching the debug tree — so a
+    // global watched from a program body, a function block, or any nesting polls
+    // the one global address regardless of POU kind or selected FB instance.
+    for (const v of watched) {
+      if (v.class === 'external') activeKeys.add(buildGlobalCompositeKey(v.name))
+    }
+
+    const localWatched = watched.filter((v) => v.class !== 'external')
+    if (localWatched.length === 0) continue
+
     if (pou.pouType === 'function-block') {
       const resolved = resolveFbInstance(pou.name, fbSelectedInstance, fbDebugInstances)
       if (!resolved) continue
-      for (const v of watched) {
+      for (const v of localWatched) {
         activeKeys.add(`${resolved.programName}:${resolved.fbVariableName}.${v.name}`)
       }
     } else {
-      for (const v of watched) {
+      for (const v of localWatched) {
         activeKeys.add(`${pou.name}:${v.name}`)
       }
     }
@@ -344,10 +366,16 @@ function collectLdVisibleKeys(
   for (const rung of currentFlow.rungs) {
     for (const node of rung.nodes) {
       if (node.type === 'contact' || node.type === 'coil') {
-        const nodeData = node.data as { variable?: { name?: string } }
+        const nodeData = node.data as { variable?: { name?: string }; variant?: string; numericId?: string }
         const varName = nodeData.variable?.name
         if (varName) {
           const key = makeKey(varName)
+          if (key) keys.add(key)
+        }
+        const edgeTriggerType = node.type === 'contact' ? edgeTriggerTypeForVariant(nodeData.variant ?? '') : null
+        const edgeTriggerName = edgeTriggerType ? edgeTriggerInstanceName(edgeTriggerType, nodeData.numericId) : null
+        if (edgeTriggerName) {
+          const key = makeKey(`${edgeTriggerName}.Q`)
           if (key) keys.add(key)
         }
       } else if (node.type === 'variable') {

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { OpcUaSecurityProfile } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -25,17 +26,30 @@ const inputStyles =
   'h-[30px] w-full rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
 
 const SECURITY_POLICIES: { value: SecurityPolicy; label: string }[] = [
-  { value: 'None', label: 'None (No Security)' },
-  { value: 'Basic128Rsa15', label: 'Basic128Rsa15' },
-  { value: 'Basic256', label: 'Basic256' },
-  { value: 'Basic256Sha256', label: 'Basic256Sha256 (Recommended)' },
+  { value: 'None', label: tr('None (No Security)') },
+  { value: 'Basic128Rsa15', label: tr('Basic128Rsa15') },
+  { value: 'Basic256', label: tr('Basic256') },
+  { value: 'Basic256Sha256', label: tr('Basic256Sha256 (Recommended)') },
 ]
 
 const SECURITY_MODES: { value: SecurityMode; label: string }[] = [
-  { value: 'None', label: 'None' },
-  { value: 'Sign', label: 'Sign Only' },
-  { value: 'SignAndEncrypt', label: 'Sign and Encrypt' },
+  { value: 'None', label: tr('None') },
+  { value: 'Sign', label: tr('Sign Only') },
+  { value: 'SignAndEncrypt', label: tr('Sign and Encrypt') },
 ]
+
+type UserRole = 'viewer' | 'operator' | 'engineer'
+
+// An anonymous session carries no identity, so the role it maps to is stated
+// explicitly here rather than inferred. Least-privilege 'viewer' is the default;
+// raising it is a deliberate choice to let unauthenticated clients write.
+const ANONYMOUS_ROLES: { value: UserRole; label: string }[] = [
+  { value: 'viewer', label: tr('Viewer (read-only)') },
+  { value: 'operator', label: tr('Operator (read/write per variable)') },
+  { value: 'engineer', label: tr('Engineer (full access)') },
+]
+
+const isUserRole = (value: string): value is UserRole => ANONYMOUS_ROLES.some((r) => r.value === value)
 
 export const SecurityProfileModal = ({
   isOpen,
@@ -52,6 +66,7 @@ export const SecurityProfileModal = ({
   const [securityPolicy, setSecurityPolicy] = useState<SecurityPolicy>('None')
   const [securityMode, setSecurityMode] = useState<SecurityMode>('None')
   const [authMethods, setAuthMethods] = useState<AuthMethod[]>(['Anonymous'])
+  const [anonymousRole, setAnonymousRole] = useState<UserRole>('viewer')
 
   // Reset form when modal opens/closes or profile changes
   useEffect(() => {
@@ -61,6 +76,8 @@ export const SecurityProfileModal = ({
       setSecurityPolicy(existingProfile.securityPolicy)
       setSecurityMode(existingProfile.securityMode)
       setAuthMethods(existingProfile.authMethods)
+      // Projects authored before this field default to viewer (least privilege).
+      setAnonymousRole(existingProfile.anonymousRole ?? 'viewer')
     } else if (isOpen && !existingProfile) {
       // Reset to defaults for new profile
       setName('')
@@ -68,6 +85,7 @@ export const SecurityProfileModal = ({
       setSecurityPolicy('None')
       setSecurityMode('None')
       setAuthMethods(['Anonymous'])
+      setAnonymousRole('viewer')
     }
   }, [isOpen, existingProfile])
 
@@ -167,15 +185,27 @@ export const SecurityProfileModal = ({
       securityPolicy,
       securityMode,
       authMethods,
+      anonymousRole,
     }
 
     onSave(profile)
     onClose()
-  }, [isValid, name, enabled, securityPolicy, securityMode, authMethods, existingProfile, onSave, onClose])
+  }, [
+    isValid,
+    name,
+    enabled,
+    securityPolicy,
+    securityMode,
+    authMethods,
+    anonymousRole,
+    existingProfile,
+    onSave,
+    onClose,
+  ])
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className='h-auto max-h-[90vh] w-[500px]' onClose={onClose}>
+      <ModalContent className='max-h-[90vh] w-[500px]' onClose={onClose}>
         <ModalHeader>
           <ModalTitle>{isEditing ? 'Edit Security Profile' : 'Add Security Profile'}</ModalTitle>
         </ModalHeader>
@@ -183,21 +213,23 @@ export const SecurityProfileModal = ({
         <div className='flex flex-1 flex-col gap-4 overflow-y-auto'>
           {/* Profile Name */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Profile Name</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Profile Name')}</Label>
             <InputWithRef
               type='text'
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder='e.g., secure_encrypted'
+              placeholder={tr('e.g., secure_encrypted')}
               maxLength={64}
               className={inputStyles}
             />
-            <span className='text-xs text-neutral-500 dark:text-neutral-400'>Unique identifier for this profile</span>
+            <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+              {tr('Unique identifier for this profile')}
+            </span>
           </div>
 
           {/* Enable Toggle */}
           <div className='flex items-center gap-4'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Enabled</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Enabled')}</Label>
             <label className='relative inline-flex cursor-pointer items-center'>
               <input
                 type='checkbox'
@@ -217,15 +249,17 @@ export const SecurityProfileModal = ({
 
           {/* Security Settings Section */}
           <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>Security Settings</h4>
+            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
+              {tr('Security Settings')}
+            </h4>
 
             {/* Security Policy */}
             <div className='flex flex-col gap-2'>
-              <Label className='text-xs text-neutral-950 dark:text-white'>Security Policy</Label>
+              <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Security Policy')}</Label>
               <Select value={securityPolicy} onValueChange={(v) => handleSecurityPolicyChange(v as SecurityPolicy)}>
                 <SelectTrigger
                   withIndicator
-                  placeholder='Select policy'
+                  placeholder={tr('Select policy')}
                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -249,7 +283,7 @@ export const SecurityProfileModal = ({
 
             {/* Security Mode */}
             <div className='flex flex-col gap-2'>
-              <Label className='text-xs text-neutral-950 dark:text-white'>Security Mode</Label>
+              <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Security Mode')}</Label>
               <Select
                 value={securityMode}
                 onValueChange={(v) => setSecurityMode(v as SecurityMode)}
@@ -257,7 +291,7 @@ export const SecurityProfileModal = ({
               >
                 <SelectTrigger
                   withIndicator
-                  placeholder='Select mode'
+                  placeholder={tr('Select mode')}
                   className={cn(
                     'flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300',
                     securityPolicy === 'None' && 'cursor-not-allowed opacity-50',
@@ -284,7 +318,7 @@ export const SecurityProfileModal = ({
               </Select>
               {securityPolicy === 'None' && (
                 <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                  Security Mode is fixed to "None" when Security Policy is "None"
+                  {tr('Security Mode is fixed to "None" when Security Policy is "None"')}
                 </span>
               )}
             </div>
@@ -293,10 +327,10 @@ export const SecurityProfileModal = ({
           {/* Authentication Methods Section */}
           <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
             <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-              Authentication Methods
+              {tr('Authentication Methods')}
             </h4>
             <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-              Select at least one authentication method for this profile.
+              {tr('Select at least one authentication method for this profile.')}
             </p>
 
             {/* Anonymous */}
@@ -310,7 +344,7 @@ export const SecurityProfileModal = ({
                 <Label
                   className={cn('text-xs text-neutral-950 dark:text-white', securityPolicy !== 'None' && 'opacity-50')}
                 >
-                  Anonymous
+                  {tr('Anonymous')}
                 </Label>
                 <span className='text-xs text-neutral-500 dark:text-neutral-400'>
                   {securityPolicy !== 'None'
@@ -320,6 +354,45 @@ export const SecurityProfileModal = ({
               </div>
             </div>
 
+            {/* Anonymous session role — only relevant when Anonymous is enabled */}
+            {authMethods.includes('Anonymous') && (
+              <div className='flex flex-col gap-2 pl-8'>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Anonymous session role')}</Label>
+                <Select
+                  value={anonymousRole}
+                  onValueChange={(v) => {
+                    if (isUserRole(v)) setAnonymousRole(v)
+                  }}
+                >
+                  <SelectTrigger
+                    withIndicator
+                    placeholder={tr('Select role')}
+                    className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
+                  />
+                  <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
+                    {ANONYMOUS_ROLES.map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        className={cn(
+                          'data-[state=checked]:[&:not(:hover)]:bg-neutral-100 data-[state=checked]:dark:[&:not(:hover)]:bg-neutral-900',
+                          'flex w-full cursor-pointer items-center justify-start px-2 py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-800',
+                        )}
+                      >
+                        <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
+                          {option.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                  Role granted to anonymous clients. Per-variable permissions still apply. Defaults to Viewer
+                  (read-only); raise it only to deliberately allow unauthenticated writes.
+                </span>
+              </div>
+            )}
+
             {/* Username */}
             <div className='flex items-center gap-3'>
               <Checkbox
@@ -327,9 +400,9 @@ export const SecurityProfileModal = ({
                 onCheckedChange={() => toggleAuthMethod('Username')}
               />
               <div className='flex flex-col'>
-                <Label className='text-xs text-neutral-950 dark:text-white'>Username / Password</Label>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Username / Password')}</Label>
                 <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                  Users must be configured in the Users tab
+                  {tr('Users must be configured in the Users tab')}
                 </span>
               </div>
             </div>
@@ -341,9 +414,9 @@ export const SecurityProfileModal = ({
                 onCheckedChange={() => toggleAuthMethod('Certificate')}
               />
               <div className='flex flex-col'>
-                <Label className='text-xs text-neutral-950 dark:text-white'>Certificate</Label>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Certificate')}</Label>
                 <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                  Client certificates must be added to trusted list
+                  {tr('Client certificates must be added to trusted list')}
                 </span>
               </div>
             </div>
@@ -369,7 +442,7 @@ export const SecurityProfileModal = ({
             onClick={onClose}
             className='h-[32px] rounded-md border border-neutral-300 bg-white px-4 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'

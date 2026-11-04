@@ -1,5 +1,6 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Node } from '@xyflow/react'
-import { ComponentPropsWithRef, forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
+import { ComponentPropsWithRef, forwardRef, useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import { PLCVariable } from '../../../../../../middleware/shared/ports'
@@ -9,14 +10,15 @@ import {
   type ScopeCompletion,
   scopeCompletionToVariable,
 } from '../../../../../services/graphical-scope'
-import { useOpenPLCStore } from '../../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../store'
+import type { CreateGraphicalVariableModalData } from '../../../../../store/slices/modal/types'
 import { cn } from '../../../../../utils/cn'
 import { getLiteralType, isLegalIdentifier } from '../../../../../utils/keywords'
-import { validateVariableType } from '../../../../../utils/PLC/validate-variable-type'
-import { findFunctionBlockVariables, findStructureVariables, PouVariable } from '../../../../../utils/pou-helpers'
+import type { BoundBlockPin } from '../../../../../utils/PLC/validate-variable-type'
+import { isGenericTypeName } from '../../../../../utils/PLC/validate-variable-type'
 import { toast } from '../../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../../_features/[workspace]/editor/graphical/active-context'
-import { AutocompleteVariableItem, GraphicalEditorAutocomplete } from '../../autocomplete'
+import { GraphicalEditorAutocomplete } from '../../autocomplete'
 import { getLadderPouVariablesRungNodeAndEdges } from '../utils'
 import { BasicNodeData, BlockNodeData, BlockVariant, LadderBlockConnectedVariables, VariableNode } from '../utils/types'
 
@@ -27,10 +29,6 @@ type VariablesBlockAutoCompleteProps = ComponentPropsWithRef<'div'> & {
   setIsOpen?: (isOpen: boolean) => void
   keyPressed?: string
   valueToSearch: string
-  keepOpenForElementId?: string
-  keepOpenForSelector?: string
-  onBeforeSubmit?: (variableName: string) => void
-  onDrillDown?: (instanceName: string) => void
 }
 
 /**
@@ -54,39 +52,43 @@ const expectedTypeForBlock = (
   }
 }
 
+/**
+ * The pins of the same block instance that already carry a variable. A generic
+ * pin (`ANY`, `ANY_NUM`, …) has no type of its own, so a variable created on it
+ * takes the concrete type the block already settled on elsewhere (#479).
+ *
+ * Read from the rung's own variable nodes: each one knows both its pin's
+ * declared type and the variable bound to it.
+ */
+const boundPinsOfSameBlock = (nodes: Node[], variableNode: VariableNode): BoundBlockPin[] => {
+  const blockId = variableNode.data.block?.id
+  if (!blockId) return []
+
+  const pins: BoundBlockPin[] = []
+  for (const node of nodes) {
+    if (node.id === variableNode.id) continue
+    const data = node.data as Partial<VariableNode['data']>
+    if (data.block?.id !== blockId) continue
+
+    const pinType = data.block.variableType?.type?.value
+    const variable = data.variable
+    const variableType = variable && 'type' in variable ? variable.type.value : undefined
+    if (pinType && variableType) pins.push({ pinType, variableType })
+  }
+  return pins
+}
+
 const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAutoCompleteProps>(
   (
-    {
-      block,
-      blockType = 'other',
-      isOpen,
-      setIsOpen,
-      keyPressed,
-      valueToSearch,
-      keepOpenForElementId,
-      keepOpenForSelector,
-      onBeforeSubmit,
-      onDrillDown,
-    }: VariablesBlockAutoCompleteProps,
+    { block, blockType = 'other', isOpen, setIsOpen, keyPressed, valueToSearch }: VariablesBlockAutoCompleteProps,
     ref,
   ) => {
+    const store = useOpenPLCStoreApi()
     const pouName = useBoundPou()
-    // Mounted whenever a coil/contact/variable/block's name field is opened
-    // for editing — the exact "montado por elemento + suscripción sin
-    // selector" pattern documented in UPDATE.md. Every field renders this
-    // with unstable `pous`/`libraries`/etc. references, which fed
-    // `autocompleteItems` a new array on every unrelated store change and
-    // cascaded into the child dropdown's per-item refs. `ladderFlows` is
-    // only read inside the submit handlers below (never during render), so
-    // it's read via getState() there instead of subscribed to reactively.
-    const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
-    const dataTypes = useOpenPLCStore(useCallback((s) => s.project.data.dataTypes, []))
-    const globalVariables = useOpenPLCStore(
-      useCallback((s) => s.project.data.configurations.resource?.globalVariables, []),
-    )
-    const librariesSystem = useOpenPLCStore(useCallback((s) => s.libraries.system, []))
-    const { createVariable } = useOpenPLCStore(useCallback((s) => s.projectActions, []))
-    const { updateNode } = useOpenPLCStore(useCallback((s) => s.ladderFlowActions, []))
+    const pous = useOpenPLCStore((state) => state.project.data.pous)
+    const createVariable = useOpenPLCStore((state) => state.projectActions.createVariable)
+    const updateNode = useOpenPLCStore((state) => state.ladderFlowActions.updateNode)
+    const openModal = useOpenPLCStore((state) => state.modalActions.openModal)
 
     const expectedType = expectedTypeForBlock(block, blockType)
 
@@ -100,149 +102,24 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         return
       }
       let cancelled = false
-      void getScopeCompletions(pouName, valueToSearch, expectedType).then((items) => {
+      void getScopeCompletions(store, pouName, valueToSearch, expectedType).then((items) => {
         if (!cancelled) setCandidates(items)
       })
       return () => {
         cancelled = true
       }
-    }, [pouName, valueToSearch, expectedType, blockType, pous])
-
-    const allVariables = useMemo<PLCVariable[]>(() => {
-      const pouVars = pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []
-      const globalVars = globalVariables ?? []
-      return [...pouVars, ...globalVars]
-    }, [pous, pouName, globalVariables])
-
-    const getCompatibleMembers = (varType: string | undefined): PouVariable[] => {
-      if (!varType) return []
-      const fbVars = findFunctionBlockVariables(varType, pous, librariesSystem ?? [])
-      const members = fbVars ?? findStructureVariables(varType, dataTypes ?? []) ?? []
-      if (!expectedType) return members
-      return members.filter((m) => {
-        const memberType = m.type?.value
-        return memberType ? validateVariableType(memberType, expectedType).isValid : false
-      })
-    }
-
-    const autocompleteItems = useMemo<AutocompleteVariableItem[]>(() => {
-      if (blockType === 'block') return []
-
-      // If valueToSearch contains a dot '.', we are completing members of an instance/struct
-      if (valueToSearch.includes('.')) {
-        const dotIndex = valueToSearch.lastIndexOf('.')
-        const prefix = valueToSearch.slice(0, dotIndex).trim()
-        const memberSearch = valueToSearch
-          .slice(dotIndex + 1)
-          .trim()
-          .toLowerCase()
-
-        const instanceVar = allVariables.find((v) => v.name.toLowerCase() === prefix.toLowerCase())
-        let localMembers: AutocompleteVariableItem[] = []
-        if (instanceVar) {
-          const compMembers = getCompatibleMembers(instanceVar.type?.value)
-          localMembers = compMembers
-            .filter((m) => m.name.toLowerCase().includes(memberSearch))
-            .map((m) => ({
-              id: `${instanceVar.name}.${m.name}`,
-              name: `${instanceVar.name}.${m.name}`,
-              type: m.type?.value,
-              isInstance: false,
-            }))
-        }
-
-        // Merge with LSP candidates for the dotted expression
-        const byName = new Map<string, AutocompleteVariableItem>()
-        for (const item of localMembers) {
-          byName.set(item.name.toLowerCase(), item)
-        }
-        for (const c of candidates) {
-          const key = c.insertText.toLowerCase()
-          if (!byName.has(key)) {
-            byName.set(key, {
-              id: c.insertText,
-              name: c.insertText,
-              type: c.type,
-              isInstance: false,
-            })
-          }
-        }
-        return [...byName.values()]
-      }
-
-      // valueToSearch does NOT contain a dot:
-      // Show direct variables matching expectedType, a separator '------', and FB instances below.
-      const needle = valueToSearch.trim().toLowerCase()
-
-      const directVars: AutocompleteVariableItem[] = allVariables
-        .filter((v) => v.name.toLowerCase().includes(needle))
-        .filter((v) => {
-          if (!expectedType) return true
-          const vt = v.type?.value
-          if (!vt) return false
-          return validateVariableType(vt, expectedType).isValid
-        })
-        .map((v) => ({
-          id: v.name,
-          name: v.name,
-          type: v.type?.value,
-          isInstance: false,
-        }))
-
-      // Instances (variables that have compatible members)
-      const instanceVars: AutocompleteVariableItem[] = allVariables
-        .filter((v) => v.name.toLowerCase().includes(needle))
-        .filter((v) => {
-          const members = getCompatibleMembers(v.type?.value)
-          return members.length > 0
-        })
-        .map((v) => ({
-          id: v.name,
-          name: v.name,
-          type: v.type?.value,
-          isInstance: true,
-        }))
-
-      // Merge direct vars with LSP candidates (non-dotted)
-      const directMap = new Map<string, AutocompleteVariableItem>()
-      for (const dv of directVars) {
-        directMap.set(dv.name.toLowerCase(), dv)
-      }
-      for (const c of candidates) {
-        if (!c.insertText.includes('.')) {
-          const key = c.insertText.toLowerCase()
-          if (!directMap.has(key)) {
-            directMap.set(key, {
-              id: c.insertText,
-              name: c.insertText,
-              type: c.type,
-              isInstance: false,
-            })
-          }
-        }
-      }
-
-      const result: AutocompleteVariableItem[] = [...directMap.values()]
-
-      if (instanceVars.length > 0) {
-        if (result.length > 0) {
-          result.push({
-            id: '__separator__',
-            name: '------',
-            isSeparator: true,
-          })
-        }
-        result.push(...instanceVars)
-      }
-
-      return result
-    }, [blockType, valueToSearch, allVariables, pous, librariesSystem, dataTypes, expectedType, candidates])
+    }, [store, pouName, valueToSearch, expectedType, blockType, pous])
 
     const submitVariableToBlock = (variable: PLCVariable) => {
-      const { ladderFlows } = useOpenPLCStore.getState()
-      const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
-        nodeId: (block as Node<BasicNodeData>).id,
-      })
+      const { project, ladderFlows } = store.getState()
+      const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(
+        pouName,
+        project.data.pous,
+        ladderFlows,
+        {
+          nodeId: (block as Node<BasicNodeData>).id,
+        },
+      )
       if (!rung || !variableNode) return
 
       updateNode({
@@ -299,14 +176,19 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
     }
 
     const submitAddVariable = ({ variableName }: { variableName: string }) => {
-      const { ladderFlows } = useOpenPLCStore.getState()
+      const { project, ladderFlows } = store.getState()
       if (!variableName.trim()) {
         // For variable nodes on block handles, clearing the name resets the variable
         // so that a branch (contacts/coils) can be placed on the handle instead.
         if (blockType === 'variable') {
-          const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
-            nodeId: (block as Node<BasicNodeData>).id,
-          })
+          const { rung, node: variableNode } = getLadderPouVariablesRungNodeAndEdges(
+            pouName,
+            project.data.pous,
+            ladderFlows,
+            {
+              nodeId: (block as Node<BasicNodeData>).id,
+            },
+          )
           if (rung && variableNode) {
             updateNode({
               editorName: pouName,
@@ -325,14 +207,14 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         }
 
         toast({
-          title: 'Invalid variable name',
-          description: 'Variable name cannot be empty',
+          title: tr('Invalid variable name'),
+          description: tr('Variable name cannot be empty'),
           variant: 'fail',
         })
         return
       }
 
-      const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+      const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
         nodeId: (block as Node<BasicNodeData>).id,
       })
       if (!rung || !node) return
@@ -352,17 +234,78 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         return
       }
 
-      const variableType = newVariableTypeForExpected(expectedType)
+      const variableType = newVariableTypeForExpected(
+        expectedType,
+        blockType === 'variable' ? boundPinsOfSameBlock(rung.nodes, block as VariableNode) : [],
+      )
+
+      // A generic pin accepts several types, so the inferred one is a proposal,
+      // not a fact — let the user confirm it instead of creating silently
+      // (issue #479). Concrete pins (BOOL contacts/coils, a TIME pin, …) leave
+      // no room for choice and keep creating straight away.
+      if (expectedType && isGenericTypeName(expectedType)) {
+        openModal('create-graphical-variable', {
+          pinType: expectedType,
+          name: variableName,
+          suggestedType: variableType,
+          onConfirm: (choice) => createAndBindVariable(choice),
+          onCancel: clearBoundVariable,
+        } satisfies CreateGraphicalVariableModalData)
+        return
+      }
+
+      createAndBindVariable({ name: variableName, class: 'local', type: variableType })
+    }
+
+    /**
+     * Empty this box. Opening the type dialog blurs the box, which binds the
+     * typed text as a raw reference — abandoning the dialog must not leave that
+     * dangling name behind.
+     */
+    const clearBoundVariable = () => {
+      const { project, ladderFlows } = store.getState()
+      const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
+        nodeId: (block as Node<BasicNodeData>).id,
+      })
+      if (!rung || !node) return
+
+      updateNode({
+        editorName: pouName,
+        rungId: rung.id,
+        nodeId: node.id,
+        node: { ...node, data: { ...node.data, variable: { id: '', name: '' } } },
+      })
+    }
+
+    /**
+     * Create the local variable and bind it to this box. Reads the rung/node
+     * fresh from the store because the type dialog may have resolved long after
+     * the dropdown that started this closed.
+     */
+    const createAndBindVariable = ({
+      name,
+      class: variableClass,
+      type,
+    }: {
+      name: string
+      class: PLCVariable['class']
+      type: { definition: PLCVariable['type']['definition']; value: string }
+    }) => {
+      const { project, ladderFlows } = store.getState()
+      const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
+        nodeId: (block as Node<BasicNodeData>).id,
+      })
+      if (!rung || !node) return
 
       const res = createVariable({
         data: {
           id: uuidv4(),
-          name: variableName,
+          name,
           type: {
-            definition: variableType.definition,
-            value: variableType.value,
+            definition: type.definition,
+            value: type.value,
           },
-          class: 'local',
+          class: variableClass,
           location: '',
           documentation: '',
           debug: false,
@@ -407,26 +350,12 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         return
       }
 
-      // Check if it matches an autocomplete item
-      const item = autocompleteItems.find((c) => c.name.toLowerCase() === variable.name.toLowerCase())
-      if (item && !item.isSeparator && !item.isInstance) {
-        submitVariableToBlock(
-          scopeCompletionToVariable({
-            label: item.name,
-            insertText: item.name,
-            type: item.type,
-          }),
-        )
-        return
-      }
-
+      // The dropdown items are LSP candidates keyed by their full insert text
+      // (e.g. `TON0.Q`); bind the node to the chosen one, carrying its type.
       const candidate = candidates.find((c) => c.insertText.toLowerCase() === variable.name.toLowerCase())
-      if (candidate) {
-        submitVariableToBlock(scopeCompletionToVariable(candidate))
-        return
-      }
+      if (!candidate) return
 
-      submitVariableToBlock({ name: variable.name } as PLCVariable)
+      submitVariableToBlock(scopeCompletionToVariable(candidate))
     }
 
     return (
@@ -437,14 +366,8 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         setIsOpen={setIsOpen}
         keyPressed={keyPressed}
         searchValue={valueToSearch}
-        variables={autocompleteItems}
-        onSelectInstance={(instanceName) => {
-          onDrillDown?.(instanceName)
-        }}
+        variables={candidates.map((c) => ({ id: c.insertText, name: c.insertText }))}
         submit={submit}
-        keepOpenForElementId={keepOpenForElementId}
-        keepOpenForSelector={keepOpenForSelector}
-        onBeforeSubmit={({ variable }) => onBeforeSubmit?.(variable.name)}
       />
     )
   },

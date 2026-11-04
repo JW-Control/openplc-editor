@@ -2,13 +2,15 @@ import { RefreshIcon } from '@root/frontend/assets/icons/interface/Refresh'
 import { Label } from '@root/frontend/components/_atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend/components/_atoms/select'
 import { ToggleSwitch } from '@root/frontend/components/_atoms/toggle-switch'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@root/frontend/components/_atoms/tooltip'
+import { FieldHelpIcon, TooltipProvider } from '@root/frontend/components/_atoms/tooltip'
 import { boardSelectors } from '@root/frontend/hooks/use-store-selectors'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { evalVisible, type VisibleCondition } from '@root/frontend/utils/vpp/eval-visible'
+import { resolveFieldOptions } from '@root/frontend/utils/vpp/field-options'
 import { getSectionPersistenceKey } from '@root/frontend/utils/vpp/persistence-keys'
-import { useDevice } from '@root/middleware/shared/providers/platform-context'
-import { type MouseEvent, useCallback, useRef, useState } from 'react'
+import { useOptionalDevice } from '@root/middleware/shared/providers/platform-context'
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from 'react'
 
 import type { ScreenSection } from '../index'
 
@@ -23,6 +25,14 @@ type FieldDef = {
   unit?: string
   help?: string
   options?: string[] | Array<{ value: string; label: string }>
+  // Dynamic option source (VPP screen schema): a dotted path resolved against
+  // per-board context, e.g. "board.serialPorts". Wins over `options` when it
+  // resolves to a non-empty array; otherwise `options` is the fallback.
+  optionsRef?: string
+  // Honored by text-like inputs (text, password, ip-address, mac-address).
+  // Mirrors the VPP screen schema's optional field props — empty strings
+  // are skipped so HTML5 placeholder/maxLength/pattern stay unset when
+  // the screen author didn't supply them.
   placeholder?: string
   fallbackLabel?: string
   maxLength?: number
@@ -36,6 +46,27 @@ type FieldDef = {
 const TEXT_INPUT_CLASS =
   'flex h-[30px] w-48 items-center rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
 
+/**
+ * The field types this layout knows how to render. A vendor package is
+ * untrusted input, so dispatch is an allowlist: a field whose type is not here
+ * renders NOTHING and never enters the value map, so it cannot be persisted
+ * into `vendorScreenData` or reach the generated plugin config. The previous
+ * behaviour — falling back to a text input — meant an unrecognised type still
+ * produced a value the device would be configured with.
+ */
+// JWPLC Edition: 'communication-port' and 'jwplc-device-discovery' have their own renderers below.
+const SUPPORTED_FIELD_TYPES = new Set([
+  'boolean',
+  'number',
+  'select',
+  'password',
+  'ip-address',
+  'mac-address',
+  'text',
+  'communication-port',
+  'jwplc-device-discovery',
+])
+
 // Anchor-less HTML5 patterns for the formatted text types. The schema's
 // per-field `validation` (when present) is more specific and wins via the
 // runtime override below, but these defaults give a sensible UX hint when
@@ -48,34 +79,11 @@ type FormLayoutProps = {
   section: ScreenSection
 }
 
-// Small "info" glyph that reveals the field's help text on hover.
-function FieldHelpIcon({ text }: { text: string }) {
-  return (
-    <Tooltip delayDuration={150}>
-      <TooltipTrigger asChild>
-        <span
-          tabIndex={0}
-          aria-label='Field help'
-          className='inline-flex h-3.5 w-3.5 cursor-help select-none items-center justify-center rounded-full text-neutral-400 hover:text-neutral-600 focus:outline-none focus-visible:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300'
-        >
-          <svg viewBox='0 0 16 16' fill='none' className='h-3.5 w-3.5'>
-            <circle cx='8' cy='8' r='7' stroke='currentColor' strokeWidth='1.5' />
-            <path d='M8 7.25v4.25' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' />
-            <circle cx='8' cy='4.75' r='0.85' fill='currentColor' />
-          </svg>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side='right' align='start' sideOffset={6} className='text-xs'>
-        {text}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
 function FormLayout({ section }: FormLayoutProps) {
-  const fields = (section.fields ?? []) as FieldDef[]
+  const declared = (section.fields ?? []) as FieldDef[]
+  const fields = declared.filter((field) => typeof field?.id === 'string' && SUPPORTED_FIELD_TYPES.has(field.type))
 
-  const device = useDevice()
+  const device = useOptionalDevice()
   const availableCommunicationPorts = boardSelectors.useAvailableCommunicationPorts()
   const setAvailableOptions = boardSelectors.useSetAvailableOptions()
   const portsReqIdRef = useRef<number>(0)
@@ -102,6 +110,14 @@ function FormLayout({ section }: FormLayoutProps) {
 
   const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
   const setVendorScreenData = useOpenPLCStore((s) => s.deviceActions.setVendorScreenData)
+  // Board context for dynamic `optionsRef` resolution (e.g. the Modbus RTU
+  // serial-port picker reading `board.serialPorts`).
+  const deviceBoard = useOpenPLCStore((s) => s.deviceDefinitions.configuration.deviceBoard)
+  const currentBoardInfo = useOpenPLCStore((s) => s.deviceAvailableOptions.availableBoards.get(deviceBoard))
+
+  // Board context for `optionsRef`. `modbusSerialPorts` is derived rather than
+  // declared by the package: it is the board's UART list with the default one
+
   // Single-source-of-truth for the per-section storage key — see
   // `getSectionPersistenceKey` in ../index.tsx.  Every layout that
   // persists must derive its key through this helper so the
@@ -119,8 +135,53 @@ function FormLayout({ section }: FormLayoutProps) {
 
   const updateField = (id: string, value: string | number | boolean) => {
     if (persistenceKey === null) return
-    setVendorScreenData(persistenceKey, { ...storedValues, [id]: value })
+    // A `default` the user can see has to be a `default` the build gets.
+    // Above, defaults fill `values` for rendering, but only what someone
+    // actually typed was ever stored -- so a project that switched the
+    // network on without opening the Interface dropdown compiled with no
+    // carrier at all, and a Pico showing "17" for its chip select compiled
+    // against the library's pin 10. Seed every default that is visible after
+    // this edit and has nothing stored yet. Scoped to an edit the user is
+    // already making in this section, so nothing is written behind their
+    // back, and evaluated against the post-edit values so flipping a
+    // section's switch on seeds the fields it reveals.
+    const next = { ...values, [id]: value }
+    const seeded: Record<string, string | number | boolean> = {}
+    for (const field of fields) {
+      if (field.id === id || field.default === undefined) continue
+      if (storedValues?.[field.id] !== undefined) continue
+      if (!evalVisible(field.visible, next)) continue
+      seeded[field.id] = field.default as string | number | boolean
+    }
+    setVendorScreenData(persistenceKey, { ...storedValues, ...seeded, [id]: value })
   }
+
+  // Persist visible defaults when the screen is SHOWN, not only when the user
+  // edits it. `updateField` seeds defaults on an edit, but a user who opens a
+  // screen, agrees with every default and changes nothing left those defaults
+  // unstored — so the build fell back to the library value (a Pico showing
+  // "17" for chip select compiled against pin 10). Per-board storage already
+  // keeps each target's data in its own bucket, so this writes into the active
+  // board's bucket only. Runs on mount and whenever the section or board
+  // changes; writes nothing when there is nothing new to seed, so it does not
+  // dirty a project just by being viewed once everything is already stored.
+  useEffect(() => {
+    if (persistenceKey === null) return
+    const seeded: Record<string, string | number | boolean> = {}
+    for (const field of fields) {
+      if (field.default === undefined) continue
+      if (storedValues?.[field.id] !== undefined) continue
+      if (!evalVisible(field.visible, values)) continue
+      seeded[field.id] = field.default as string | number | boolean
+    }
+    if (Object.keys(seeded).length > 0) {
+      setVendorScreenData(persistenceKey, { ...storedValues, ...seeded })
+    }
+    // `values`/`storedValues` are derived from the two deps below every render;
+    // depending on them directly would loop. The board key stands in for "the
+    // active bucket changed".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistenceKey, deviceBoard])
 
   const updateFields = (updates: Record<string, string | number | boolean>) => {
     if (persistenceKey === null) return
@@ -138,6 +199,7 @@ function FormLayout({ section }: FormLayoutProps) {
         portsReqIdRef.current += 1
         const currentReqId = portsReqIdRef.current
 
+        if (!device) return
         const ports = await device.refreshCommunicationPorts()
 
         if (currentReqId === portsReqIdRef.current) {
@@ -163,6 +225,7 @@ function FormLayout({ section }: FormLayoutProps) {
         setJwplcDiscoveryResults([])
         setHasJwplcDiscoverySearched(true)
 
+        if (!device) return
         const result = await device.discoverJwplcDevices()
 
         if (!result.success) {
@@ -325,7 +388,7 @@ function FormLayout({ section }: FormLayoutProps) {
                                   }}
                                   className='inline-flex h-[26px] shrink-0 items-center justify-center rounded-md bg-brand px-2 font-caption text-xs font-medium text-white hover:opacity-90'
                                 >
-                                  Usar para Debug
+                                  {tr('Usar para Debug')}
                                 </button>
                               </div>
                             )
@@ -338,21 +401,23 @@ function FormLayout({ section }: FormLayoutProps) {
                         jwplcDiscoveryResults.length === 0 &&
                         !jwplcDiscoveryError && (
                           <span className='text-xs text-amber-500'>
-                            No se encontraron dispositivos. Verifica que el JWPLC est? encendido, conectado a la red y
-                            con Modbus TCP activo.
+                            {tr(
+                              'No se encontraron dispositivos. Verifica que el JWPLC est? encendido, conectado a la red y con Modbus TCP activo.',
+                            )}
                           </span>
                         )}
 
                       {!isDiscoveringJwplc && !hasJwplcDiscoverySearched && !jwplcDiscoveryError && (
                         <span className='text-xs text-neutral-400 dark:text-neutral-500'>
-                          Busca JWPLC Basic por discovery nativo. Si no responde, se usa respaldo por Modbus TCP puerto
-                          502.
+                          {tr(
+                            'Busca JWPLC Basic por discovery nativo. Si no responde, se usa respaldo por Modbus TCP puerto 502.',
+                          )}
                         </span>
                       )}
 
                       {values.enable_dhcp === true && !String(values.tcp_debug_ip_address ?? '').trim() && (
                         <span className='text-[11px] text-neutral-400 dark:text-neutral-500'>
-                          Con DHCP activo, usa Discovery o escribe la IP asignada en Debug IP Address.
+                          {tr('Con DHCP activo, usa Discovery o escribe la IP asignada en Debug IP Address.')}
                         </span>
                       )}
                     </div>
@@ -390,7 +455,7 @@ function FormLayout({ section }: FormLayoutProps) {
 
                           {availableCommunicationPorts.map((port) => {
                             const portAddress = String(port.address ?? '').trim()
-                            const portName = String(port.name ?? '').trim()
+                            const portName = String(port.boardName ?? port.manufacturer ?? '').trim()
                             if (!portAddress) return null
 
                             const displayName =
@@ -425,7 +490,7 @@ function FormLayout({ section }: FormLayoutProps) {
                     <Select value={String(values[field.id] ?? '')} onValueChange={(v) => updateField(field.id, v)}>
                       <SelectTrigger
                         aria-label={field.label}
-                        placeholder='Select...'
+                        placeholder={tr('Select...')}
                         withIndicator
                         className='flex h-[30px] w-48 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                       />
@@ -436,7 +501,7 @@ function FormLayout({ section }: FormLayoutProps) {
                         align='center'
                         side='bottom'
                       >
-                        {(field.options ?? []).map((opt) => {
+                        {resolveFieldOptions(field, { board: currentBoardInfo }).map((opt) => {
                           const value = typeof opt === 'string' ? opt : opt.value
                           const label = typeof opt === 'string' ? opt : opt.label
                           return (
@@ -486,6 +551,7 @@ function FormLayout({ section }: FormLayoutProps) {
                       className={TEXT_INPUT_CLASS}
                     />
                   ) : (
+                    // `text` — the only remaining allowlisted type.
                     <input
                       type='text'
                       value={String(values[field.id] ?? '')}

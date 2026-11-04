@@ -2,7 +2,6 @@ import { BrowserWindow, dialog } from 'electron'
 import { promises } from 'fs'
 import { join } from 'path'
 
-
 type GetProjectPathProps = InstanceType<typeof BrowserWindow>
 
 const getProjectPath = async (serviceManager: GetProjectPathProps) => {
@@ -24,7 +23,6 @@ const getProjectPath = async (serviceManager: GetProjectPathProps) => {
   }
 
   const [filePath] = filePaths
-
 
   return {
     success: true,
@@ -67,4 +65,88 @@ const getOpenProjectPath = async (serviceManager: GetProjectPathProps) => {
   }
 }
 
-export { getOpenProjectPath, getProjectPath }
+const getPlcopenImportFilePath = async (serviceManager: GetProjectPathProps) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(serviceManager, {
+    title: 'Select a PLCopen XML file to import',
+    properties: ['openFile'],
+    filters: [{ name: 'PLCopen XML', extensions: ['xml'] }],
+  })
+  if (canceled) {
+    return {
+      success: false,
+      error: {
+        title: 'Operation canceled',
+        description: 'Operation canceled by the user.',
+      },
+    }
+  }
+
+  const [filePath] = filePaths
+
+  try {
+    const content = await promises.readFile(filePath, 'utf-8')
+    return { success: true, content }
+  } catch {
+    return {
+      success: false,
+      error: {
+        title: 'Error reading file',
+        description: 'Failed to read the selected PLCopen XML file.',
+      },
+    }
+  }
+}
+
+const getPlcopenExportSavePath = async (serviceManager: GetProjectPathProps, defaultFileName: string, xml: string) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(serviceManager, {
+    title: 'Export PLCopen XML',
+    defaultPath: defaultFileName,
+    filters: [{ name: 'PLCopen XML', extensions: ['xml'] }],
+  })
+  if (canceled || !filePath) {
+    return { success: false, canceled: true }
+  }
+
+  try {
+    await promises.writeFile(filePath, xml, 'utf-8')
+    return { success: true }
+  } catch {
+    return {
+      success: false,
+      error: {
+        title: 'Error writing file',
+        description: 'Failed to write the PLCopen XML file.',
+      },
+    }
+  }
+}
+
+const getPdfExportSavePath = async (
+  serviceManager: GetProjectPathProps,
+  defaultFileName: string,
+  bytes: Uint8Array,
+) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(serviceManager, {
+    title: 'Export PDF',
+    defaultPath: defaultFileName,
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  })
+  if (canceled || !filePath) {
+    return { success: false, canceled: true }
+  }
+
+  try {
+    await promises.writeFile(filePath, bytes)
+    return { success: true }
+  } catch {
+    return {
+      success: false,
+      error: {
+        title: 'Error writing file',
+        description: 'Failed to write the PDF file.',
+      },
+    }
+  }
+}
+
+export { getOpenProjectPath, getPdfExportSavePath, getPlcopenExportSavePath, getPlcopenImportFilePath, getProjectPath }

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
+import { tr } from '@root/frontend/locales/tr'
 import { useState } from 'react'
 import { Controller, SubmitHandler, useForm } from 'react-hook-form'
 
@@ -69,7 +70,7 @@ const Step3 = ({ onPrev, onFinish, onClose }: { onPrev: () => void; onFinish: ()
       <form onSubmit={handleSubmit(handleFormSubmit)} className='flex flex-grow flex-col justify-between'>
         <div className=' flex flex-col items-center justify-center'>
           <h2 className=' select-none text-center text-lg font-semibold text-neutral-900 dark:text-white'>
-            Choose the language for the base program:
+            {tr('Choose the language for the base program:')}
           </h2>
           <div id='pou-language-form-container' className='flex w-full max-w-sm flex-col items-center rounded-md  p-4 '>
             <Controller
@@ -82,7 +83,7 @@ const Step3 = ({ onPrev, onFinish, onClose }: { onPrev: () => void; onFinish: ()
                     <SelectTrigger
                       withIndicator
                       aria-label='pou-language'
-                      placeholder='Select a language'
+                      placeholder={tr('Select a language')}
                       className='flex h-[40px] w-64 items-center justify-between gap-2 rounded-md border border-neutral-300 bg-white px-3 py-2 font-medium text-neutral-700 shadow-sm outline-none transition-colors duration-200 ease-in-out hover:border-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-300'
                     />
                     <SelectContent
@@ -119,7 +120,7 @@ const Step3 = ({ onPrev, onFinish, onClose }: { onPrev: () => void; onFinish: ()
 
         <div className='flex flex-col items-center justify-between gap-1'>
           <h2 className='select-none text-center text-lg font-semibold text-neutral-1000 dark:text-white'>
-            Define the time for the cyclic task:
+            {tr('Define the time for the cyclic task:')}
           </h2>
           <button
             type='button'
@@ -153,7 +154,7 @@ const Step3 = ({ onPrev, onFinish, onClose }: { onPrev: () => void; onFinish: ()
             )}
             onClick={onPrev}
           >
-            Prev
+            {tr('Prev')}
           </button>
           <button
             type='submit'
@@ -162,7 +163,7 @@ const Step3 = ({ onPrev, onFinish, onClose }: { onPrev: () => void; onFinish: ()
             })}
             disabled={!language}
           >
-            Create Project
+            {tr('Create Project')}
           </button>
         </div>
       </form>

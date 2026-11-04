@@ -6,16 +6,15 @@
  *
  *   1. `prepareXmlForLibraryBuild(project, manifest)` — synthesizes
  *      a stub main program / task / instance into a transient
- *      PLCProject (the on-disk project remains untouched) and runs
- *      the canonical XmlGenerator on it.  xml2st rejects programless
- *      projects, so the stub is mandatory; the stub's POU body is
- *      intentionally non-empty (`LocalVar := 3;` against a single
- *      INT local) because some xml2st codepaths also reject empty
- *      program bodies.
+ *      PLCProject (the on-disk project remains untouched) for the ST
+ *      transpiler.  A library project declares no program of its own,
+ *      and strucpp's verification path assumes one, so the stub is
+ *      mandatory.  Its body is non-empty for
+ *      readability only — the transpiler stopped refusing empty POUs
+ *      in DOPE-650.
  *
- *   2. *(caller runs xml2st on the resulting plc.xml — Electron
- *      spawns a local binary, web backend posts to its xml2st
- *      service — produces `program.st`.)*
+ *   2. *(the in-process ST transpiler runs on the project and
+ *      produces `program.st`.)*
  *
  *   3. `libraryBuildFromTranspiledSt(programSt, knownPous, manifest)`
  *      — splits `program.st` per-POU via the shared splitter, drops
@@ -23,12 +22,6 @@
  *      the remaining sources + the parsed manifest, and returns
  *      the archive blob + serialized bytes ready for `.stlib`
  *      write-out.
- *
- *   4. `composeVerificationProject(project)` — produces the same
- *      stubbed PLCProject the verification compile path needs
- *      (Phase 8 — feeds the existing `compileProgram` flow against
- *      the OpenPLC Simulator target to surface generated-C++
- *      compile errors).
  *
  * Everything here is pure: no fs, no spawn, no electron.  The
  * Electron compiler module and the web backend service both
@@ -74,8 +67,8 @@ export interface LibraryBuildManifest {
  * console can render through the existing diagnostic pipeline.
  *
  * Strucpp itself validates manifests during compile, but doing it
- * here lets the build fail BEFORE running xml2st when the manifest
- * is obviously broken — saves a slow xml2st spawn on every
+ * here lets the build fail early when the manifest
+ * is obviously broken — saves wasted transpile work on every
  * mis-edited save.
  */
 function parseLibraryManifest(json: string): ManifestParseResult {
@@ -128,14 +121,14 @@ function parseLibraryManifest(json: string): ManifestParseResult {
 }
 
 // ---------------------------------------------------------------------------
-// Stub program — makes xml2st accept a programless library project
+// Stub program — makes the ST transpiler accept a programless library project
 // ---------------------------------------------------------------------------
 
 /**
  * Names of the synthetic program / task / instance the library
  * pipeline injects.  The program is literally named `main` because
- * `XmlGenerator` hard-requires a `type === 'program'` POU named
- * `main` and bails otherwise.  Library projects forbid the user from
+ * the transpiler's "requires a main POU" guard looks for a
+ * `type === 'program'` POU of that name.  Library projects forbid the user from
  * creating program POUs (see `projectCapabilities.hasPrograms`), so
  * the stub can never collide with a real `main` program.  Task and
  * instance names are unambiguous strings — they never leave memory.
@@ -146,15 +139,15 @@ const STUB_INSTANCE_NAME = '__openplc_library_stub_instance__'
 
 /**
  * Build a transient PLCProject with a stub main program added on
- * top of the library's POUs / data types.  The stub is what
- * satisfies xml2st (and strucpp's main-program assumption later in
- * the verification path).  Caller drops the stub's per-POU output
- * before handing the remaining sources to compileStlib.
+ * top of the library's POUs / data types.  The stub satisfies
+ * strucpp's main-program assumption in the verification path.  Caller
+ * drops the stub's per-POU output before handing the remaining
+ * sources to compileStlib.
  *
- * The stub's body is non-empty (`LocalVar := 3;`) because xml2st
- * has been observed to reject programs with completely empty bodies
- * — a single trivial assignment + a single INT local is the smallest
- * shape that gets accepted across every xml2st version.
+ * The body (`LocalVar := 3;`) is a deliberate no-op rather than an
+ * empty one: an empty POU compiles fine since DOPE-650, but a stub
+ * that reads as a stub is easier to recognise if it ever leaks into
+ * output the user sees.
  */
 function stubProgramFor(project: PLCProject): PLCProject {
   return {
@@ -204,14 +197,14 @@ function stubProgramFor(project: PLCProject): PLCProject {
  * Synthetic filename the splitter emits for the stub program.  The
  * splitter writes its file keys using the caller-side POU name
  * verbatim (case preserved), so this matches what `splitProgramSt`
- * returns regardless of how xml2st upper-cases identifiers in the
+ * returns regardless of how the transpiler upper-cases identifiers in the
  * monolithic ST output.  Caller drops this entry before feeding the
  * rest to compileStlib.
  */
 const STUB_SPLIT_FILENAME = `${STUB_PROGRAM_NAME}.st`
 
 // ---------------------------------------------------------------------------
-// Stage 1: pre-xml2st (pure)
+// Stage 1: pre-transpile (pure)
 // ---------------------------------------------------------------------------
 
 export interface PrepareXmlResult {
@@ -257,7 +250,7 @@ export function prepareXmlForLibraryBuild(project: PLCProject, manifestJson: str
 }
 
 // ---------------------------------------------------------------------------
-// Stage 2: post-xml2st (pure)
+// Stage 2: post-transpile (pure)
 // ---------------------------------------------------------------------------
 
 export interface LibraryBuildResult {
@@ -296,48 +289,42 @@ export interface LibraryBuildResult {
  *     transitive deps without re-reading every archive on disk.
  */
 /**
- * C/C++ function block carried verbatim through the `.stlib`.
- * Strucpp's library compiler is ST/IL-only, so the editor pulls
- * these out of the strucpp input set and re-attaches them on the
- * resulting archive as a separate field.  At consume time, the
- * editor reads them back, synthesizes user-POU-equivalent entries
- * into the consumer project (with a library-name prefix on the
- * POU name to avoid collisions), and feeds them through the
- * existing user-defined C/C++ block pipeline.  Strucpp never sees
- * them — same shape user-defined C++ POUs use today.
+ * One native (C/C++, Python) library source, exactly as the author wrote it.
+ *
+ * Handed straight to `compileStlib` alongside the ST sources. Strucpp routes
+ * by extension: it recovers the interface from the file's ST header, emits no
+ * chunk, and carries the file verbatim in the archive. The consumer re-derives
+ * the native bridge at its own build time, which is what keeps a published
+ * library working across bridge revisions — see
+ * `backend/shared/library/inject-library-blocks.ts`.
+ *
+ * The editor's own lowering of these POUs (the `generateCppSTCode` /
+ * Python-bridge ST that `preprocessPous` produces) is deliberately kept OUT of
+ * the archive: shipping it would freeze the building editor's bridge ABI into
+ * every library built with it.
  */
-export interface LibraryCppBlock {
-  /** FB name as the library author wrote it.  The consumer-side
-   *  injection renames this to `<library_name>__<name>` before
-   *  feeding to `preprocessPous`, so collisions with the
-   *  consumer's own POUs are impossible by construction. */
-  name: string
-  /** Raw user-authored C++ source.  Same shape `originalCppPous`
-   *  carries today (the body of `void setup()` / `void loop()`
-   *  plus any helpers). */
-  code: string
-  /** Variable declarations on the FB (inputs / outputs / etc.).
-   *  Same shape `PLCVariable` uses elsewhere; carried opaquely
-   *  here so this module stays free of the variable-schema
-   *  import. */
-  variables: unknown[]
-  /** Optional documentation surfaced in the library tree picker. */
-  documentation?: string
+export interface LibraryNativeSource {
+  /** File name as authored, e.g. `TCP_CLIENT.cpp`. The extension is how
+   *  strucpp decides the block's language, so it must be preserved. */
+  fileName: string
+  /** The whole authored file: ST header (`FUNCTION_BLOCK` + `VAR_*` blocks)
+   *  followed by the native body. */
+  source: string
 }
 
 export interface LibraryBuildAux {
   pouDocs?: Record<string, string>
   dependencyArchives?: unknown[]
   dependencyRefs?: Array<{ name: string; version: string }>
-  /** C/C++ POUs from the library's project.  Filtered OUT of
-   *  strucpp's input set and stamped onto the archive's
-   *  `cppBlocks` field after compileStlib returns.  See
-   *  `LibraryCppBlock` for the per-entry shape. */
-  cppBlocks?: LibraryCppBlock[]
+  /** Verbatim C/C++ and Python sources from the library's project,
+   *  passed through to `compileStlib` next to the ST. Their lowered
+   *  bridge ST is filtered out of the strucpp input in exchange —
+   *  see `LibraryNativeSource`. */
+  nativeSources?: LibraryNativeSource[]
 }
 
 /**
- * Stage 2.  Given xml2st's monolithic `program.st`, the POU
+ * Stage 2.  Given the transpiler's monolithic `program.st`, the POU
  * inventory from Stage 1, and the parsed manifest: split program.st
  * per-POU, drop the stub, hand the remaining sources to strucpp's
  * compileStlib.
@@ -369,30 +356,25 @@ export function libraryBuildFromTranspiledSt(
   //
   //   - The stub program's `.st` file (the library doesn't ship
   //     the stub).
-  //   - `_config.st` (xml2st's CONFIGURATION block references the
+  //   - `_config.st` (the transpiler's CONFIGURATION block references the
   //     stub program, which we've just removed — leaving it in
   //     causes strucpp to emit "Unknown program type 'MAIN'"
   //     diagnostics).  Libraries don't carry configurations
   //     anyway — they ship POUs + types for consumer projects to
   //     instantiate.
-  //   - Every per-POU file whose source POU was originally a
-  //     C/C++ function block.  Those POUs' ST bodies are
-  //     `generateCppSTCode`-emitted stubs that reference
-  //     `c_blocks.h` externs strucpp's library compiler can't
-  //     resolve (no `pouIncludes` on `compileStlib`).  We
-  //     re-attach the verbatim C++ source on the archive's
-  //     `cppBlocks` field after `compileStlib` returns; the
-  //     consumer's program compile reads it back and routes it
-  //     through the existing user-C++-block path.
+  //   - Every per-POU file whose source POU was originally a C/C++ or
+  //     Python function block.  See `LibraryNativeSource`.
   //
   // Keep `_types.st` and `_globals.st`: they may carry user-defined
   // types and library-internal globals the POUs reference.
-  const cppBlockFilenames = new Set((aux?.cppBlocks ?? []).map((b) => `${b.name}.st`))
+  // Drop the per-POU file for every native block; the authored source goes
+  // to strucpp instead, below. See `LibraryNativeSource`.
+  const nativeStFilenames = new Set((aux?.nativeSources ?? []).map((n) => `${n.fileName.replace(/\.[^.]+$/, '')}.st`))
   const sources: CompileStlibSource[] = []
   for (const [fileName, source] of split.files.entries()) {
     if (fileName === STUB_SPLIT_FILENAME) continue
     if (fileName === '_config.st') continue
-    if (cppBlockFilenames.has(fileName)) continue
+    if (nativeStFilenames.has(fileName)) continue
     sources.push({
       fileName,
       source,
@@ -400,20 +382,16 @@ export function libraryBuildFromTranspiledSt(
     })
   }
 
-  // No real POU files left?  That means the library has no
-  // functions / function-blocks / types — a degenerate case but a
-  // valid one (a library project may be opened fresh before the
-  // user has added any symbols).  Refuse with a clear message
-  // rather than producing an empty .stlib that strucpp would
-  // accept silently.
+  // Nothing to ship at all?  A library project may legitimately be opened
+  // fresh, before the user has added any symbols.  Refuse with a clear
+  // message rather than producing an empty `.stlib`.
   //
-  // C/C++ blocks count as "real content" — a library that ships
-  // only C/C++ FBs is still useful (no strucpp-compiled chunks,
-  // just `cppBlocks` riding through the archive for the consumer
-  // to consume).
+  // Native blocks count as real content: a library of nothing but C/C++ or
+  // Python FBs is useful, and strucpp handles an ST-empty input set — it
+  // recovers each block's interface from its ST header and emits no chunk.
   const hasRealSources = sources.some((s) => s.fileName !== '_globals.st')
-  const hasCppBlocks = (aux?.cppBlocks?.length ?? 0) > 0
-  if (!hasRealSources && !hasCppBlocks) {
+  const nativeSources = aux?.nativeSources ?? []
+  if (!hasRealSources && nativeSources.length === 0) {
     return {
       success: false,
       errors: [
@@ -425,7 +403,9 @@ export function libraryBuildFromTranspiledSt(
     }
   }
 
-  const compileRes = compileStlib(sources, {
+  // Native sources ride in the same input array; strucpp routes on the file
+  // extension.  Appended after the ST so `sourceFiles` ordering stays stable.
+  const compileRes = compileStlib([...sources, ...nativeSources.map((n) => ({ ...n }))], {
     name: manifest.name,
     version: manifest.version,
     namespace: manifest.namespace,
@@ -473,7 +453,6 @@ function decorateArchive(archive: unknown, manifest: LibraryBuildManifest, aux: 
       types?: Array<{ name: string; documentation?: string }>
     }
     dependencies?: Array<{ name: string; version: string }>
-    cppBlocks?: LibraryCppBlock[]
   }
   if (!arch.manifest) return
 
@@ -511,21 +490,6 @@ function decorateArchive(archive: unknown, manifest: LibraryBuildManifest, aux: 
   if (aux?.dependencyRefs && aux.dependencyRefs.length > 0) {
     arch.dependencies = aux.dependencyRefs.map((ref) => ({ name: ref.name, version: ref.version }))
   }
-
-  // C/C++ blocks ride through the archive verbatim — strucpp has
-  // no notion of them, the consumer-side editor reads them back
-  // at program-compile time and grafts them into the project's
-  // own C++-POU pipeline.  JSON.stringify preserves the field, so
-  // attaching it on the in-memory archive is enough to round-trip
-  // to disk.
-  if (aux?.cppBlocks && aux.cppBlocks.length > 0) {
-    arch.cppBlocks = aux.cppBlocks.map((b) => ({
-      name: b.name,
-      code: b.code,
-      variables: b.variables,
-      ...(b.documentation && b.documentation.length > 0 ? { documentation: b.documentation } : {}),
-    }))
-  }
 }
 
 /**
@@ -542,30 +506,6 @@ function inferCategory(fileName: string): string | undefined {
   // this to group functions vs function-blocks in the manifest, but
   // accepts `undefined` and falls back to detecting from the body.
   return undefined
-}
-
-// ---------------------------------------------------------------------------
-// Stage 4: verification project (Phase 8)
-// ---------------------------------------------------------------------------
-
-/**
- * Build a transient PLCProject the verification compile path
- * consumes.  Same stub-program shape as `stubProgramFor`, but
- * tagged `plc-project` so the existing `compileProgram` flow
- * (Phase 8) doesn't try to recurse back into the library branch.
- *
- * Verification runs the resulting project through the standard
- * ST→C++→arduino-cli pipeline against the OpenPLC Simulator
- * target.  Compile failures there are surfaced as warnings — the
- * `.stlib` is still produced (the user may legitimately target a
- * platform with more memory than the AVR simulator).
- */
-export function composeVerificationProject(project: PLCProject): PLCProject {
-  const stubbed = stubProgramFor(project)
-  return {
-    meta: { ...project.meta, type: 'plc-project' },
-    data: stubbed.data,
-  }
 }
 
 // Exposed for test ergonomics only — keeps the stub-name constants

@@ -1,9 +1,10 @@
 import { isHmiVendorScreen } from '@root/backend/shared/compile/jwplc-hmi'
+import { tr } from '@root/frontend/locales/tr'
 import type { BoardInfo } from '@root/middleware/shared/ports/types'
 import { useDevice } from '@root/middleware/shared/providers/platform-context'
 import { useEffect, useRef, useState } from 'react'
 
-import { openPLCStoreBase, useOpenPLCStore } from '../../../../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../../../store'
 import { Label } from '../../../../../../_atoms/label'
 import { openHmiDesigner } from '../../../hmi-designer'
 import { VendorScreenRenderer } from '../vendor-screen'
@@ -20,6 +21,7 @@ const CONFIGURATION_FILE = 'Configuration'
  */
 export const HmiDesignerLauncher = ({ boardInfo }: { boardInfo?: BoardInfo }) => {
   const device = useDevice()
+  const store = useOpenPLCStoreApi()
   const [error, setError] = useState<string | null>(null)
   const screens = boardInfo?.vpp?.screens ?? {}
   const hmiScreen = Object.values(screens).find((definition) => isHmiVendorScreen(definition)) ?? null
@@ -37,24 +39,24 @@ export const HmiDesignerLauncher = ({ boardInfo }: { boardInfo?: BoardInfo }) =>
   useEffect(() => {
     if (owned === firstOwned.current) return
     firstOwned.current = owned
-    const { fileActions, workspaceActions } = openPLCStoreBase.getState()
+    const { fileActions, workspaceActions } = store.getState()
     if (fileActions.getFile({ name: CONFIGURATION_FILE }).file) {
       fileActions.updateFile({ name: CONFIGURATION_FILE, saved: false })
       workspaceActions.setEditingState('unsaved')
     }
-  }, [owned])
+  }, [owned, store])
 
   if (!device.prepareHmiDesigner) return null
 
   const open = async () => {
     setError(null)
-    const result = await openHmiDesigner(device)
+    const result = await openHmiDesigner(store, device)
     if (!result.ok) setError(result.error ?? 'No se pudo abrir el HMI Designer.')
   }
 
   return (
     <div id='hmi-designer-launcher' className='flex w-full flex-col items-start justify-start gap-2'>
-      <Label className='w-fit text-xs text-neutral-950 dark:text-white'>Pantalla HMI</Label>
+      <Label className='w-fit text-xs text-neutral-950 dark:text-white'>{tr('Pantalla HMI')}</Label>
       <p className='font-caption text-cp-sm font-light text-neutral-600 dark:text-neutral-400'>
         Diseña la pantalla del equipo con JWPLC HMI Designer; se guarda en la carpeta hmi/ del proyecto y se incluye al
         compilar. En la pestaña «HMI Designer» ves la pantalla y enlazas cada objeto a una variable del PLC.
@@ -64,7 +66,7 @@ export const HmiDesignerLauncher = ({ boardInfo }: { boardInfo?: BoardInfo }) =>
         onClick={() => void open()}
         className='h-[30px] rounded-md bg-brand px-4 py-1 font-caption text-cp-sm font-medium text-white hover:bg-brand-medium-dark'
       >
-        Abrir HMI Designer
+        {tr('Abrir HMI Designer')}
       </button>
       {error && <p className='text-xs text-red-600 dark:text-red-400'>{error}</p>}
       {hmiScreen !== null && (

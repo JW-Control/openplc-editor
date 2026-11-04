@@ -3,13 +3,19 @@ import { createDefaultSlaveConfig } from '@root/backend/shared/ethercat/device-c
 import { matchDevicesToRepository } from '@root/backend/shared/ethercat/device-matcher'
 import { enrichDeviceData } from '@root/backend/shared/ethercat/enrich-device-data'
 import type { EtherCATMasterConfig } from '@root/backend/shared/types/PLC/open-plc'
+import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { Modal, ModalContent, ModalTitle } from '@root/frontend/components/_molecules/modal'
-import { useOpenPLCStore } from '@root/frontend/store'
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
+import type { OpenPLCStore } from '@root/frontend/store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
+import { elementNameCollision } from '@root/frontend/store/slices/shared/name-collision'
 import { cn } from '@root/frontend/utils/cn'
 import { getShortDeviceName } from '@root/frontend/utils/short-device-name'
-import { collectAllSlaveNames, generateUniqueSlaveName } from '@root/frontend/utils/unique-slave-name'
+import { generateUniqueSlaveName } from '@root/frontend/utils/unique-slave-name'
 import type {
   ConfiguredEtherCATDevice,
+  DeviceMatch,
   ESIDeviceRef,
   ESIDeviceSummary,
   ESIRepositoryItemLight,
@@ -17,8 +23,9 @@ import type {
 } from '@root/middleware/shared/ports/esi-types'
 import type { EtherCATDevice, NetworkInterface } from '@root/middleware/shared/ports/ethercat-types'
 import { useEsi, useRuntime } from '@root/middleware/shared/providers/platform-context'
+import { sanitizeAxisName } from '@root/middleware/shared/utils/ethercat'
 import { buildAddressPool } from '@root/middleware/shared/utils/iec-address'
-import { resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
+import { resolveAddressProducerCapabilities } from '@root/middleware/shared/utils/target-capabilities'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -38,13 +45,10 @@ type EditorTab = 'scan-bus' | 'repository' | 'advanced'
  * is naturally store-driven and the two callers here both live in
  * this file; lifting to a util buys nothing.
  */
-function buildClaimedAddressSet(
-  remoteDevices: ReturnType<typeof useOpenPLCStore.getState>['project']['data']['remoteDevices'],
-  vendorScreenData: ReturnType<
-    typeof useOpenPLCStore.getState
-  >['deviceDefinitions']['configuration']['vendorScreenData'],
-): Set<string> {
-  const state = useOpenPLCStore.getState()
+function buildClaimedAddressSet(store: OpenPLCStore): Set<string> {
+  const state = store.getState()
+  const remoteDevices = state.project.data.remoteDevices
+  const vendorScreenData = state.deviceDefinitions.configuration.vendorScreenData
   const boardInfo = state.deviceAvailableOptions.availableBoards.get(state.deviceDefinitions.configuration.deviceBoard)
   const ioMapping =
     (
@@ -60,7 +64,7 @@ function buildClaimedAddressSet(
       vendorIoMapping: { entries: ioMapping },
       remoteDevices,
     },
-    resolveTargetCapabilities(boardInfo),
+    resolveAddressProducerCapabilities(boardInfo),
   )
   return new Set(pool.byAddress.keys())
 }
@@ -104,6 +108,7 @@ const TabItem = ({
  * EtherCATDeviceEditor, opened from the project tree.
  */
 const EtherCATEditor = () => {
+  const store = useOpenPLCStoreApi()
   const {
     editor,
     runtimeConnection,
@@ -113,7 +118,6 @@ const EtherCATEditor = () => {
     sharedWorkspaceActions,
     editorActions,
   } = useOpenPLCStore()
-  const vendorScreenData = useOpenPLCStore((s) => s.deviceDefinitions.configuration.vendorScreenData)
   const runtime = useRuntime()
   const esi = useEsi()
 
@@ -153,12 +157,25 @@ const EtherCATEditor = () => {
     )
   }, [remoteDevice])
 
+  // Read at write time: an add awaits ESI loads, so the render-time config can be stale by then.
+  const readEthercatConfig = useCallback(
+    () => store.getState().project.data.remoteDevices?.find((d) => d.name === deviceName)?.ethercatConfig,
+    [store, deviceName],
+  )
+  const readConfiguredDevices = useCallback(
+    (): ConfiguredEtherCATDevice[] => readEthercatConfig()?.devices ?? [],
+    [readEthercatConfig],
+  )
+
   const syncDevicesToStore = useCallback(
     (devices: ConfiguredEtherCATDevice[]) => {
-      projectActions.updateEthercatConfig(deviceName, { masterConfig, devices })
+      projectActions.updateEthercatConfig(deviceName, {
+        masterConfig: readEthercatConfig()?.masterConfig ?? masterConfig,
+        devices,
+      })
       workspaceActions.setEditingState('unsaved')
     },
-    [deviceName, projectActions, masterConfig, workspaceActions],
+    [deviceName, projectActions, readEthercatConfig, masterConfig, workspaceActions],
   )
 
   const handleUpdateMasterConfig = useCallback(
@@ -211,6 +228,11 @@ const EtherCATEditor = () => {
   // When non-empty the warning modal is open.
   const [unmatchedAddAttempt, setUnmatchedAddAttempt] = useState<ScannedDeviceMatch['device'][]>([])
 
+  // Only one add runs at a time; the ref guards reentry before the state update renders.
+  const isAddingRef = useRef(false)
+  const [addProgress, setAddProgress] = useState<{ current: number; total: number } | null>(null)
+  const isAdding = addProgress !== null
+
   // Matched devices
   const deviceMatches = useMemo<ScannedDeviceMatch[]>(() => {
     return matchDevicesToRepository(scannedDevices, repository)
@@ -243,7 +265,7 @@ const EtherCATEditor = () => {
   const fetchInterfaces = useCallback(async () => {
     if (!isConnectedToRuntime) {
       setInterfaces([])
-      setInterfaceError('Not connected to runtime')
+      setInterfaceError(tr('Not connected to runtime'))
       return
     }
 
@@ -279,8 +301,9 @@ const EtherCATEditor = () => {
 
   // Scan for EtherCAT devices
   const scanDevices = useCallback(async () => {
+    if (isAddingRef.current) return
     if (!isConnectedToRuntime || !selectedInterface) {
-      setScanError('Please select a network interface')
+      setScanError(tr('Please select a network interface'))
       return
     }
 
@@ -303,7 +326,7 @@ const EtherCATEditor = () => {
         setScanTimeMs(result.data.scan_time_ms)
 
         if (result.data.status !== 'success') {
-          setScanError(`Scan completed with status: ${result.data.status}`)
+          setScanError(tr('Scan completed with status: {{status}}', { status: result.data.status }))
         }
       } else {
         setScanError(!result.success ? (result.error ?? 'Failed') : 'Scan failed')
@@ -416,94 +439,111 @@ const EtherCATEditor = () => {
   )
 
   const handleAddSelectedFromScan = useCallback(async () => {
-    const newDevices: ConfiguredEtherCATDevice[] = []
-    const unmatched: ScannedDeviceMatch['device'][] = []
-    const existingPositions = new Set(configuredDevices.map((d) => d.position))
-    const usedAddresses = buildClaimedAddressSet(project.data.remoteDevices, vendorScreenData)
-    // Names already taken across every master — extended as we add each
-    // device so the batch can't collide with itself either.
-    const takenNames = collectAllSlaveNames(project.data.remoteDevices)
+    if (isAddingRef.current) return
+    isAddingRef.current = true
 
-    for (const position of selectedScannedDevices) {
-      // Skip devices already configured at this position
-      if (existingPositions.has(position)) continue
-      const match = deviceMatches.find((dm) => dm.device.position === position)
-      if (!match) continue
+    try {
+      const newDevices: ConfiguredEtherCATDevice[] = []
+      const unmatched: ScannedDeviceMatch['device'][] = []
+      const existingPositions = new Set(readConfiguredDevices().map((d) => d.position))
+      const usedAddresses = buildClaimedAddressSet(store)
+      // Every element name in the project, plus the batch so it cannot collide with itself.
+      const batch = new Set<string>()
+      const nameTaken = (name: string) =>
+        batch.has(name) || elementNameCollision(store.getState(), name, 'ethercat-slave') !== null
 
-      // No ESI XML in repository → collect for the warning modal and skip add.
-      if (match.matches.length === 0) {
-        unmatched.push(match.device)
-        continue
+      const toLoad: { match: ScannedDeviceMatch; bestMatch: DeviceMatch; repoItem: ESIRepositoryItemLight }[] = []
+      for (const position of selectedScannedDevices) {
+        // Skip devices already configured at this position
+        if (existingPositions.has(position)) continue
+        const match = deviceMatches.find((dm) => dm.device.position === position)
+        if (!match) continue
+
+        // No ESI XML in repository → collect for the warning modal and skip add.
+        if (match.matches.length === 0) {
+          unmatched.push(match.device)
+          continue
+        }
+
+        // Use the best match (first one, which is sorted by quality)
+        const bestMatch = match.matches[0]
+        const repoItem = repository.find((r) => r.id === bestMatch.repositoryItemId)
+        if (!repoItem) continue
+        toLoad.push({ match, bestMatch, repoItem })
       }
 
-      // Use the best match (first one, which is sorted by quality)
-      const bestMatch = match.matches[0]
-      const repoItem = repository.find((r) => r.id === bestMatch.repositoryItemId)
-      if (!repoItem) continue
+      for (const [index, { match, bestMatch, repoItem }] of toLoad.entries()) {
+        setAddProgress({ current: index + 1, total: toLoad.length })
 
-      let enriched: Partial<ConfiguredEtherCATDevice> = { channelMappings: [] }
-      const result = await esi!.loadDeviceFull(bestMatch.repositoryItemId, bestMatch.deviceIndex)
-      if (result.success && result.device) {
-        enriched = enrichDeviceData(result.device, usedAddresses)
-        // Reserve the freshly assigned addresses so the next device in the
-        // batch doesn't collide with them.
-        for (const m of enriched.channelMappings ?? []) usedAddresses.add(m.iecLocation)
+        let enriched: Partial<ConfiguredEtherCATDevice> & {
+          coeFlags?: NonNullable<ReturnType<typeof enrichDeviceData>>['coeFlags']
+        } = { channelMappings: [] }
+        const result = await esi!.loadDeviceFull(bestMatch.repositoryItemId, bestMatch.deviceIndex)
+        if (result.success && result.device) {
+          enriched = enrichDeviceData(result.device, usedAddresses)
+          // Reserve the freshly assigned addresses so the next device in the
+          // batch doesn't collide with them.
+          for (const m of enriched.channelMappings ?? []) usedAddresses.add(m.iecLocation)
+        }
+
+        // SoftMotion drive names become axis variable names — keep them valid.
+        const rawName = getShortDeviceName(bestMatch.esiDevice)
+        const baseName = enriched.cia402?.enabled ? sanitizeAxisName(rawName) : rawName
+        const uniqueName = generateUniqueSlaveName(baseName, nameTaken)
+        batch.add(uniqueName)
+
+        // Lift the CoE flags off `enriched` so they land on `config` —
+        // spreading `enriched` after `config` would otherwise drop them at the top level.
+        const { coeFlags: enrichedCoeFlags, ...enrichedRest } = enriched
+        newDevices.push({
+          id: uuidv4(),
+          position: match.device.position,
+          name: uniqueName,
+          esiDeviceRef: {
+            repositoryItemId: bestMatch.repositoryItemId,
+            deviceIndex: bestMatch.deviceIndex,
+          },
+          vendorId: repoItem.vendor.id,
+          productCode: bestMatch.esiDevice.type.productCode,
+          revisionNo: bestMatch.esiDevice.type.revisionNo,
+          addedFrom: 'scan',
+          config: { ...createDefaultSlaveConfig(), ...(enrichedCoeFlags && { coeFlags: enrichedCoeFlags }) },
+          channelMappings: [],
+          ...enrichedRest,
+        })
       }
 
-      const baseName = getShortDeviceName(bestMatch.esiDevice)
-      const uniqueName = generateUniqueSlaveName(baseName, takenNames)
-      takenNames.add(uniqueName)
+      const latestDevices = readConfiguredDevices()
+      const takenPositions = new Set(latestDevices.map((d) => d.position))
+      const toAdd = newDevices.filter((d) => !takenPositions.has(d.position))
+      if (toAdd.length > 0) {
+        syncDevicesToStore([...latestDevices, ...toAdd])
+      }
 
-      newDevices.push({
-        id: uuidv4(),
-        position: match.device.position,
-        name: uniqueName,
-        esiDeviceRef: {
-          repositoryItemId: bestMatch.repositoryItemId,
-          deviceIndex: bestMatch.deviceIndex,
-        },
-        vendorId: repoItem.vendor.id,
-        productCode: bestMatch.esiDevice.type.productCode,
-        revisionNo: bestMatch.esiDevice.type.revisionNo,
-        addedFrom: 'scan',
-        config: createDefaultSlaveConfig(),
-        channelMappings: [],
-        ...enriched,
-      })
-    }
+      // Keep unmatched selected so the user can see which ones failed; clear
+      // the successfully-added ones from the selection. We compute the new set
+      // as `prev minus added` rather than rebuilding from `unmatched` so that
+      // selections of already-configured positions (silently skipped above)
+      // and any state changes that happened while the loop ran are preserved.
+      if (toAdd.length > 0) {
+        setSelectedScannedDevices((prev) => {
+          const next = new Set(prev)
+          // position is optional in the device type but always set when added here.
+          for (const d of toAdd) if (d.position !== undefined) next.delete(d.position)
+          return next
+        })
+      }
 
-    if (newDevices.length > 0) {
-      syncDevicesToStore([...configuredDevices, ...newDevices])
+      if (unmatched.length > 0) {
+        setUnmatchedAddAttempt(unmatched)
+      }
+    } catch (error) {
+      toast({ title: tr('Failed to add EtherCAT devices'), description: String(error), variant: 'fail' })
+    } finally {
+      isAddingRef.current = false
+      setAddProgress(null)
     }
-
-    // Keep unmatched selected so the user can see which ones failed; clear
-    // the successfully-added ones from the selection. We compute the new set
-    // as `prev minus added` rather than rebuilding from `unmatched` so that
-    // selections of already-configured positions (silently skipped above)
-    // and any state changes that happened while the loop ran are preserved.
-    if (newDevices.length > 0) {
-      setSelectedScannedDevices((prev) => {
-        const next = new Set(prev)
-        // position is optional in the device type but always set when added here.
-        for (const d of newDevices) if (d.position !== undefined) next.delete(d.position)
-        return next
-      })
-    }
-
-    if (unmatched.length > 0) {
-      setUnmatchedAddAttempt(unmatched)
-    }
-  }, [
-    selectedScannedDevices,
-    deviceMatches,
-    repository,
-    configuredDevices,
-    syncDevicesToStore,
-    projectPath,
-    project.data.remoteDevices,
-    vendorScreenData,
-    esi,
-  ])
+  }, [store, selectedScannedDevices, deviceMatches, repository, readConfiguredDevices, syncDevicesToStore, esi])
 
   const handleRetryRepository = useCallback(() => {
     setRepositoryError(null)
@@ -513,40 +553,61 @@ const EtherCATEditor = () => {
 
   const handleAddDeviceFromBrowser = useCallback(
     async (ref: ESIDeviceRef, device: ESIDeviceSummary, repoItem: ESIRepositoryItemLight) => {
-      let enriched: Partial<ConfiguredEtherCATDevice> = { channelMappings: [] }
-      const result = await esi!.loadDeviceFull(ref.repositoryItemId, ref.deviceIndex)
-      if (result.success && result.device) {
-        const usedAddresses = buildClaimedAddressSet(project.data.remoteDevices, vendorScreenData)
-        enriched = enrichDeviceData(result.device, usedAddresses)
+      if (isAddingRef.current) return
+      isAddingRef.current = true
+      setAddProgress({ current: 1, total: 1 })
+
+      try {
+        let enriched: Partial<ConfiguredEtherCATDevice> & {
+          coeFlags?: NonNullable<ReturnType<typeof enrichDeviceData>>['coeFlags']
+        } = { channelMappings: [] }
+        const result = await esi!.loadDeviceFull(ref.repositoryItemId, ref.deviceIndex)
+        if (result.success && result.device) {
+          enriched = enrichDeviceData(result.device, buildClaimedAddressSet(store))
+        }
+
+        const currentDevices = readConfiguredDevices()
+        const nextPosition = currentDevices.length > 0 ? Math.max(...currentDevices.map((d) => d.position ?? 0)) + 1 : 1
+
+        // A SoftMotion drive's name becomes the axis variable name in generated
+        // code, so it must be a valid IEC identifier from the start.
+        const rawName = getShortDeviceName(device)
+        const baseName = enriched.cia402?.enabled ? sanitizeAxisName(rawName) : rawName
+        const uniqueName = generateUniqueSlaveName(
+          baseName,
+          (name) => elementNameCollision(store.getState(), name, 'ethercat-slave') !== null,
+        )
+
+        // Lift the CoE flags off `enriched` so they land on `config` —
+        // spreading `enriched` after `config` would otherwise drop them at the top level.
+        const { coeFlags: enrichedCoeFlags, ...enrichedRest } = enriched
+        const newDevice: ConfiguredEtherCATDevice = {
+          id: uuidv4(),
+          position: nextPosition,
+          name: uniqueName,
+          esiDeviceRef: ref,
+          vendorId: repoItem.vendor.id,
+          productCode: device.type.productCode,
+          revisionNo: device.type.revisionNo,
+          addedFrom: 'repository',
+          config: { ...createDefaultSlaveConfig(), ...(enrichedCoeFlags && { coeFlags: enrichedCoeFlags }) },
+          channelMappings: [],
+          ...enrichedRest,
+        }
+
+        syncDevicesToStore([...currentDevices, newDevice])
+
+        // Register file entry for the new slave so Ctrl+S and dirty tracking work
+        const { fileActions } = store.getState()
+        fileActions.addFile({ name: newDevice.name, type: 'ethercat-device', filePath: deviceName })
+      } catch (error) {
+        toast({ title: tr('Failed to add EtherCAT device'), description: String(error), variant: 'fail' })
+      } finally {
+        isAddingRef.current = false
+        setAddProgress(null)
       }
-
-      const nextPosition =
-        configuredDevices.length > 0 ? Math.max(...configuredDevices.map((d) => d.position ?? 0)) + 1 : 1
-
-      const baseName = getShortDeviceName(device)
-      const uniqueName = generateUniqueSlaveName(baseName, collectAllSlaveNames(project.data.remoteDevices))
-
-      const newDevice: ConfiguredEtherCATDevice = {
-        id: uuidv4(),
-        position: nextPosition,
-        name: uniqueName,
-        esiDeviceRef: ref,
-        vendorId: repoItem.vendor.id,
-        productCode: device.type.productCode,
-        revisionNo: device.type.revisionNo,
-        addedFrom: 'repository',
-        config: createDefaultSlaveConfig(),
-        channelMappings: [],
-        ...enriched,
-      }
-
-      syncDevicesToStore([...configuredDevices, newDevice])
-
-      // Register file entry for the new slave so Ctrl+S and dirty tracking work
-      const { fileActions } = useOpenPLCStore.getState()
-      fileActions.addFile({ name: newDevice.name, type: 'ethercat-device', filePath: deviceName })
     },
-    [configuredDevices, syncDevicesToStore, deviceName, project.data.remoteDevices, vendorScreenData, esi],
+    [store, readConfiguredDevices, syncDevicesToStore, deviceName, esi],
   )
 
   const handleRemoveDevice = useCallback(
@@ -556,7 +617,7 @@ const EtherCATEditor = () => {
         // Remove cached editor model to avoid stale deviceId on re-add
         editorActions.removeModel(device.name)
         // Close the device tab only if it's open (without switching away from current tab)
-        const { tabs, tabsActions } = useOpenPLCStore.getState()
+        const { tabs, tabsActions } = store.getState()
         const hasTab = tabs.some((t) => t.name === device.name)
         if (hasTab) {
           tabsActions.removeTab(device.name)
@@ -564,15 +625,17 @@ const EtherCATEditor = () => {
       }
       syncDevicesToStore(configuredDevices.filter((d) => d.id !== deviceId))
     },
-    [configuredDevices, syncDevicesToStore, sharedWorkspaceActions, editorActions],
+    [store, configuredDevices, syncDevicesToStore, sharedWorkspaceActions, editorActions],
   )
 
   return (
     <div aria-label='EtherCAT editor container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       {/* Header */}
       <div className='mb-4 shrink-0'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>EtherCAT Bus: {deviceName}</h2>
-        <p className='text-sm text-neutral-600 dark:text-neutral-400'>EtherCAT Master Configuration</p>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('EtherCAT Bus: {{deviceName}}', { deviceName })}
+        </h2>
+        <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('EtherCAT Master Configuration')}</p>
       </div>
 
       {/* Tabs */}
@@ -582,9 +645,9 @@ const EtherCATEditor = () => {
         className='flex min-h-0 flex-1 flex-col overflow-hidden'
       >
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='scan-bus' label='Bus' isActive={activeTab === 'scan-bus'} />
-          <TabItem value='repository' label='Repository' isActive={activeTab === 'repository'} />
-          <TabItem value='advanced' label='Advanced' isActive={activeTab === 'advanced'} />
+          <TabItem value='scan-bus' label={tr('Bus')} isActive={activeTab === 'scan-bus'} />
+          <TabItem value='repository' label={tr('Repository')} isActive={activeTab === 'repository'} />
+          <TabItem value='advanced' label={tr('Advanced')} isActive={activeTab === 'advanced'} />
         </Tabs.List>
 
         {/* Scan Bus Tab */}
@@ -612,6 +675,8 @@ const EtherCATEditor = () => {
             onSelectScannedDevice={handleSelectScannedDevice}
             onSelectAllScanned={handleSelectAllScanned}
             onAddSelectedFromScan={() => void handleAddSelectedFromScan()}
+            isAdding={isAdding}
+            addProgress={addProgress}
             configuredDevices={configuredDevices}
             repository={repository}
             onAddDeviceFromBrowser={(...args) => void handleAddDeviceFromBrowser(...args)}
@@ -654,7 +719,7 @@ const EtherCATEditor = () => {
           onClose={() => setUnmatchedAddAttempt([])}
           className='!inset-x-0 !bottom-auto !top-1/2 !h-auto max-h-[80vh] w-[540px] !-translate-y-1/2 p-6'
         >
-          <ModalTitle>Missing ESI XML for some devices</ModalTitle>
+          <ModalTitle>{tr('Missing ESI XML for some devices')}</ModalTitle>
           <p className='text-sm text-neutral-700 dark:text-neutral-300'>
             {unmatchedAddAttempt.length === 1
               ? 'The device below could not be added because its ESI XML is not in the repository.'
@@ -666,16 +731,16 @@ const EtherCATEditor = () => {
               <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-900'>
                 <tr>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Pos
+                    {tr('Pos')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Name
+                    {tr('Name')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Vendor
+                    {tr('Vendor')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Product
+                    {tr('Product')}
                   </th>
                 </tr>
               </thead>
@@ -697,11 +762,13 @@ const EtherCATEditor = () => {
           </div>
 
           <div className='rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200'>
-            <p className='mb-1 font-medium'>How to fix</p>
+            <p className='mb-1 font-medium'>{tr('How to fix')}</p>
             <ol className='list-decimal pl-4'>
               <li>Download the ESI XML for each device from the manufacturer&apos;s website.</li>
               <li>
-                Open the <strong>Repository</strong> tab and import the XML files there.
+                {trRich('Open the {{tab}} tab and import the XML files there.', {
+                  tab: <strong>{tr('Repository')}</strong>,
+                })}
               </li>
               <li>Re-run the scan and click &quot;Add Selected&quot; again.</li>
             </ol>
@@ -715,7 +782,7 @@ const EtherCATEditor = () => {
               }}
               className='h-8 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
             >
-              Go to Repository
+              {tr('Go to Repository')}
             </button>
             <button
               onClick={() => setUnmatchedAddAttempt([])}
@@ -731,4 +798,5 @@ const EtherCATEditor = () => {
 }
 
 export { EtherCATDeviceEditor } from './ethercat-device-editor'
+export { EtherCATModuleEditor } from './ethercat-module-editor'
 export { EtherCATEditor }

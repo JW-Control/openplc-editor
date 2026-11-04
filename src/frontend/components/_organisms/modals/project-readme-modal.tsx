@@ -15,6 +15,8 @@
  * a UI-only transition that doesn't matter outside the open panel.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useEffect, useMemo, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -138,7 +140,7 @@ const ProjectReadmeModal = () => {
         <ModalTitle className='flex items-center gap-2 text-base font-semibold text-neutral-1000 dark:text-neutral-100'>
           <span className='text-neutral-500'>{headerSubtitle}</span>
           <span className='text-neutral-400'>/</span>
-          <span>README.md</span>
+          <span>{tr('README.md')}</span>
         </ModalTitle>
 
         {mode === 'view' && (
@@ -209,14 +211,14 @@ function ViewMode({
         ) : (
           <div className='flex flex-col items-center justify-center py-8 text-center'>
             <p className='mb-3 text-sm font-medium text-neutral-700 dark:text-neutral-300'>
-              This project has no README yet.
+              {tr('This project has no README yet.')}
             </p>
             {canEdit && (
               <button
                 onClick={() => onEdit(`# Project\n\nDescribe what this project does and how to run it.\n`)}
                 className='cursor-pointer rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-medium'
               >
-                Create README
+                {tr('Create README')}
               </button>
             )}
           </div>
@@ -229,7 +231,7 @@ function ViewMode({
             onClick={onDelete}
             className='cursor-pointer rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800/40 dark:bg-neutral-950 dark:text-red-400 dark:hover:bg-red-950/30'
           >
-            Delete README
+            {tr('Delete README')}
           </button>
         )}
         {canEdit && hasContent && (
@@ -237,14 +239,14 @@ function ViewMode({
             onClick={() => onEdit()}
             className='cursor-pointer rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-1000 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800'
           >
-            Edit
+            {tr('Edit')}
           </button>
         )}
         <button
           onClick={onClose}
           className='cursor-pointer rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-medium'
         >
-          Close
+          {tr('Close')}
         </button>
       </div>
     </>
@@ -284,10 +286,10 @@ function EditMode({
     <>
       <div className='flex items-center gap-0 border-b border-neutral-200 dark:border-neutral-800'>
         <TabButton active={activeTab === 'edit'} onClick={() => onTabChange('edit')}>
-          Edit
+          {tr('Edit')}
         </TabButton>
         <TabButton active={activeTab === 'preview'} onClick={() => onTabChange('preview')}>
-          Preview
+          {tr('Preview')}
         </TabButton>
       </div>
 
@@ -295,7 +297,7 @@ function EditMode({
         <textarea
           value={draftContent}
           onChange={(e) => onDraftChange(e.target.value)}
-          placeholder='Write your README in markdown...'
+          placeholder={tr('Write your README in markdown...')}
           spellCheck={false}
           className='max-h-[60vh] min-h-[260px] w-full resize-y rounded-lg border border-neutral-200 bg-white p-3 font-mono text-sm leading-relaxed text-neutral-1000 outline-none focus:border-brand dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
         />
@@ -304,7 +306,7 @@ function EditMode({
           {draftContent.trim() ? (
             <ReadmePreview content={draftContent} />
           ) : (
-            <p className='text-center text-sm italic text-neutral-400'>Nothing to preview</p>
+            <p className='text-center text-sm italic text-neutral-400'>{tr('Nothing to preview')}</p>
           )}
         </div>
       )}
@@ -314,7 +316,7 @@ function EditMode({
           htmlFor='readme-commit-message'
           className='text-xs font-semibold text-neutral-1000 dark:text-neutral-200'
         >
-          Commit message
+          {tr('Commit message')}
         </label>
         <input
           id='readme-commit-message'
@@ -332,7 +334,7 @@ function EditMode({
             disabled={isPending}
             className='cursor-pointer rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-1000 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={onSave}
@@ -369,10 +371,12 @@ function DeleteMode({
   return (
     <>
       <div className='rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200'>
-        <p className='font-semibold'>Delete README</p>
+        <p className='font-semibold'>{tr('Delete README')}</p>
         <p className='mt-1 text-xs'>
-          This creates a commit removing <strong>README.md</strong> from the project. The file stays in the history and
-          can be recovered from any prior commit.
+          {trRich(
+            'This creates a commit removing {{file}} from the project. The file stays in the history and can be recovered from any prior commit.',
+            { file: <strong>{tr('README.md')}</strong> },
+          )}
         </p>
       </div>
 
@@ -381,7 +385,7 @@ function DeleteMode({
           htmlFor='readme-delete-commit-message'
           className='text-xs font-semibold text-neutral-1000 dark:text-neutral-200'
         >
-          Commit message
+          {tr('Commit message')}
         </label>
         <input
           id='readme-delete-commit-message'
@@ -399,7 +403,7 @@ function DeleteMode({
             disabled={isPending}
             className='cursor-pointer rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-1000 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={onConfirm}

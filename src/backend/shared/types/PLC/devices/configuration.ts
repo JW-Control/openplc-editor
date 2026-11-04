@@ -1,5 +1,36 @@
 import { z } from 'zod'
 
+const persistentStorageSchema = z.object({
+  enabled: z.boolean().default(false),
+  path: z.string().default(''),
+  flushSeconds: z.number().int().default(5),
+})
+
+/**
+ * The vendor package a VPP board was authored against.
+ *
+ * `contentHash` is what makes this a pin rather than a label: a package can be
+ * republished under the same version, and the hash is what notices. Recorded
+ * per board, mirroring `vendorScreenDataByBoard` — a pin belongs to the target
+ * it was authored for, so retargeting must not carry it across.
+ */
+const vppPackagePinSchema = z.object({
+  packageId: z.string(),
+  version: z.string(),
+  contentHash: z.string(),
+})
+
+/**
+ * The vPLC this project targets on web, so reopening the project selects it
+ * again. Identifies the device only: the binding (package, backplane access)
+ * is re-read from the live device listing when the selection is restored.
+ */
+const targetDeviceSchema = z.object({
+  orchestratorId: z.string(),
+  deviceId: z.string(),
+  deviceName: z.string(),
+})
+
 const deviceConfigurationSchema = z.object({
   deviceBoard: z.string().default('OpenPLC Simulator'),
   communicationPort: z.string().default(''),
@@ -12,14 +43,36 @@ const deviceConfigurationSchema = z.object({
   // view rather than bleeding stale modules across targets. Legacy projects
   // (flat vendorScreenData only) are migrated on load.
   vendorScreenDataByBoard: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+  // Persistent storage (RETAIN) for the runtime's built-in file store.
+  //
+  // A PROJECT property, not a device one. It travels with the project, is
+  // configurable offline, and reaches the device as `retain.conf` in the upload
+  // — the same shape as VPP plugin config. Optional so every project written
+  // before this field still validates; absent means "this project does not use
+  // persistent storage", which is also what tells the runtime's built-in store
+  // to stay switched off.
+  //
+  // An empty `path` means "use the runtime's default". The editor deliberately
+  // does not hardcode a device filesystem layout — the runtime fills it in.
+  persistentStorage: persistentStorageSchema.optional(),
+  // Per-board archive, mirroring `vendorScreenDataByBoard`: a storage path is a
+  // property of the target box, not of the program, so retargeting must not
+  // silently carry one device's path onto another.
+  persistentStorageByBoard: z.record(z.string(), persistentStorageSchema).optional(),
   // User picks from VPP `target.platformOptions` (e.g. Nano cpu=atmega328old).
   // Keyed by option `key`, value is the chosen `values[].id`. The compile and
   // upload pipelines fall back to each manifest option's `default` when a key
   // is missing here.
   selectedPlatformOptions: z.record(z.string(), z.string()).default({}),
+  // Optional so every project written before pinning existed still validates;
+  // absent simply means "no pin recorded", which warns about nothing.
+  vppPackagePinsByBoard: z.record(z.string(), vppPackagePinSchema).optional(),
+  // Optional so every project written before it still validates; absent means no vPLC to restore.
+  targetDevice: targetDeviceSchema.optional(),
 })
 
 type DeviceConfiguration = z.infer<typeof deviceConfigurationSchema>
+type VppPackagePin = z.infer<typeof vppPackagePinSchema>
 
-export { deviceConfigurationSchema }
-export type { DeviceConfiguration }
+export { deviceConfigurationSchema, persistentStorageSchema, targetDeviceSchema, vppPackagePinSchema }
+export type { DeviceConfiguration, VppPackagePin }

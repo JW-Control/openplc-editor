@@ -14,6 +14,9 @@ export const store = new Store<TStoreType>({
     theme: {
       type: 'string',
     },
+    language: {
+      type: 'string',
+    },
     window: {
       type: 'object',
       properties: {
@@ -51,6 +54,19 @@ export const store = new Store<TStoreType>({
         },
       },
     },
+    // Deliberately absent from `defaults`: no key at all is the signed-out state.
+    edge_session: {
+      type: 'object',
+      properties: {
+        refreshToken: {
+          type: 'string',
+        },
+      },
+      required: ['refreshToken'],
+    },
+    auto_update_check: {
+      type: 'boolean',
+    },
   },
   defaults: {
     last_projects: [],
@@ -63,5 +79,6 @@ export const store = new Store<TStoreType>({
         y: 0,
       },
     },
+    auto_update_check: true,
   },
 })

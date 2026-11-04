@@ -21,6 +21,7 @@ import type {
   S7CommDataBlock,
 } from '../../../middleware/shared/ports/types'
 import { generateIecVariablesToString } from '../../utils/generate-iec-variables-to-string'
+import { serializeDataTypeToText } from '../../utils/PLC/data-type-serializer'
 import { createConsoleSlice } from '../slices/console'
 import { createDeviceSlice } from '../slices/device'
 import { createEditorSlice } from '../slices/editor'
@@ -46,6 +47,19 @@ function makeStore() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function openDatatypeInCodeMode(store: ReturnType<typeof makeStore>, name: string, code: string) {
+  store.getState().editorActions.addModel({
+    type: 'plc-datatype',
+    meta: { name, derivation: 'enumerated' },
+    structure: { display: 'code', code },
+  })
+}
+
+function codeOf(store: ReturnType<typeof makeStore>, name: string): string | undefined {
+  const model = store.getState().editors.find((e) => e.meta.name === name)
+  return model?.type === 'plc-datatype' && model.structure.display === 'code' ? model.structure.code : undefined
+}
 
 function makeVariable(name: string, cls: PLCVariable['class'] = 'local'): PLCVariable {
   return {
@@ -278,7 +292,11 @@ function locVar(name: string, location: string, cls: PLCVariable['class'] = 'loc
  *  Modbus claims. Producer-edit actions (addIOGroup, updateIOGroup …)
  *  rely on `caps.modbusTcpRemote = true` to count sibling groups when
  *  allocating addresses. */
-function seedRuntimeV4Board(store: ReturnType<typeof makeStore>) {
+/** Land the board catalogue WITHOUT selecting a board — the project-load moment
+ *  where discovery finishes and target capabilities become resolvable. Split out
+ *  of `seedRuntimeV4Board` so a test can land the catalogue while the project's
+ *  own board stays unresolved. */
+function landBoardCatalogue(store: ReturnType<typeof makeStore>) {
   store.getState().deviceActions.setAvailableOptions({
     availableBoards: new Map<string, BoardInfo>([
       [
@@ -307,6 +325,21 @@ function seedRuntimeV4Board(store: ReturnType<typeof makeStore>) {
       ],
     ]),
   })
+}
+
+/** Seed a microcontroller target — `compiler: 'arduino-cli'` is what makes a
+ *  board baremetal, and what decides the transport a new Modbus server gets. */
+function seedBaremetalBoard(store: ReturnType<typeof makeStore>) {
+  store.getState().deviceActions.setAvailableOptions({
+    availableBoards: new Map<string, BoardInfo>([
+      ['Arduino Uno', { compiler: 'arduino-cli', core: 'arduino:avr', preview: '', specs: {} }],
+    ]),
+  })
+  store.getState().deviceActions.setDeviceBoard('Arduino Uno')
+}
+
+function seedRuntimeV4Board(store: ReturnType<typeof makeStore>) {
+  landBoardCatalogue(store)
   store.getState().deviceActions.setDeviceBoard('OpenPLC Runtime v4')
 }
 
@@ -342,6 +375,48 @@ function seedVppBoard(store: ReturnType<typeof makeStore>) {
     ]),
   })
   store.getState().deviceActions.setDeviceBoard('VPP Board')
+}
+
+/** Seed a Runtime v3 target: a target that RESOLVED and genuinely declares no
+ *  remote I/O. Distinct from an unresolved board — allocation must keep
+ *  honouring the declaration here (DOPE-440). */
+function seedRuntimeV3Board(store: ReturnType<typeof makeStore>) {
+  store.getState().deviceActions.setAvailableOptions({
+    availableBoards: new Map<string, BoardInfo>([
+      [
+        'OpenPLC Runtime v3',
+        {
+          compiler: 'openplc-compiler',
+          core: 'rt-v3',
+          preview: '',
+          specs: {},
+          capabilities: {
+            pinMapping: false,
+            vppIo: false,
+            modbusTcpRemote: false,
+            ethercat: false,
+            modbusTcpServer: false,
+            opcuaServer: false,
+            s7Server: false,
+            debuggerTransports: ['modbus-tcp'],
+            pythonFunctionBlocks: true,
+            arduinoApiCompletions: false,
+            hasRuntimeStats: false,
+            isInProcessSimulator: false,
+            directUsbUpload: false,
+          },
+        },
+      ],
+    ]),
+  })
+  store.getState().deviceActions.setDeviceBoard('OpenPLC Runtime v3')
+}
+
+/** Point the project at a board id that is NOT in `availableBoards` — a VPP
+ *  board whose package isn't installed, or a project authored elsewhere.
+ *  `resolveTargetCapabilities(undefined)` answers EMPTY_CAPABILITIES there. */
+function selectUnresolvedBoard(store: ReturnType<typeof makeStore>) {
+  store.getState().deviceActions.setDeviceBoard('Uninstalled VPP Board')
 }
 
 // ===========================================================================
@@ -746,6 +821,59 @@ describe('createProjectSlice', () => {
       expect((result.data as { name: string }).name).not.toBe('gx')
     })
 
+    it('steps a new global past a POU name the same way it steps past its own table', () => {
+      seedPou(store, makePou('Motor'))
+      const result = store.getState().projectActions.createVariable({
+        scope: 'global',
+        data: makeVariable('motor', 'global'),
+      })
+      expect(result.ok).toBe(true)
+      expect(store.getState().project.data.configurations.resource.globalVariables.map((v) => v.name)).toEqual([
+        'motor0',
+      ])
+    })
+
+    it('keeps incrementing a clone while the candidate is a POU, a type or a list', () => {
+      // A clone of `Motor` auto-increments to `Motor0`, which a POU already owns.
+      seedPou(store, makePou('Motor0'))
+      store.getState().projectActions.createVariable({ scope: 'global', data: makeVariable('Motor', 'global') })
+      const result = store.getState().projectActions.createVariable({
+        scope: 'global',
+        data: makeVariable('Motor', 'global'),
+      })
+      expect(result.ok).toBe(true)
+      expect(store.getState().project.data.configurations.resource.globalVariables.map((v) => v.name)).toEqual([
+        'Motor',
+        'Motor1',
+      ])
+    })
+
+    it('seeds an empty table even when a POU already holds the default name', () => {
+      seedPou(store, makePou('GlobalVar'))
+      const result = store.getState().projectActions.createVariable({
+        scope: 'global',
+        data: makeVariable('GlobalVar', 'global'),
+      })
+      expect(result.ok).toBe(true)
+      expect(store.getState().project.data.configurations.resource.globalVariables.map((v) => v.name)).toEqual([
+        'GlobalVar0',
+      ])
+    })
+
+    it('leaves a local variable that shares a POU name to the POU validator', () => {
+      seedPou(store, makePou('Motor'))
+      seedPou(store, makePou('Main', 'program', []))
+      const result = store.getState().projectActions.createVariable({
+        scope: 'local',
+        associatedPou: 'Main',
+        data: makeVariable('Motor'),
+      })
+      expect(result.ok).toBe(true)
+      expect(store.getState().project.data.pous.find((p) => p.name === 'Main')?.interface?.variables[0].name).toBe(
+        'Motor',
+      )
+    })
+
     it('fails for local scope when POU interface is missing', () => {
       const pou: PLCPou = { name: 'NoIface', pouType: 'program', body: makeBody() }
       seedPou(store, pou)
@@ -860,6 +988,58 @@ describe('createProjectSlice', () => {
       expect(result.ok).toBe(false)
     })
 
+    it('syncs a VAR_EXTERNAL debug toggle to the global and every other reference', () => {
+      // One global, referenced via VAR_EXTERNAL from a program and an FB.
+      seedGlobals(store, [makeVariable('test_global', 'global')])
+      seedPou(store, makePou('Main', 'program', [makeVariable('test_global', 'external')]))
+      seedPou(store, makePou('Mover', 'function-block', [makeVariable('test_global', 'external')]))
+
+      store.getState().projectActions.updateVariable({
+        scope: 'local',
+        associatedPou: 'Main',
+        variableId: 'test_global',
+        data: { debug: true },
+      })
+
+      const st = store.getState().project
+      expect(st.data.configurations.resource.globalVariables[0].debug).toBe(true)
+      for (const pou of st.data.pous) {
+        expect(pou.interface?.variables[0].debug).toBe(true)
+      }
+    })
+
+    it('syncs a global debug toggle down to every VAR_EXTERNAL reference (case-insensitive)', () => {
+      seedGlobals(store, [makeVariable('Test_Global', 'global')])
+      seedPou(store, makePou('Main', 'program', [makeVariable('TEST_GLOBAL', 'external')]))
+
+      store.getState().projectActions.updateVariable({
+        scope: 'global',
+        variableId: 'Test_Global',
+        data: { debug: true },
+      })
+
+      const st = store.getState().project
+      expect(st.data.configurations.resource.globalVariables[0].debug).toBe(true)
+      expect(st.data.pous[0].interface?.variables[0].debug).toBe(true)
+    })
+
+    it('does not propagate a local (non-external) debug toggle to a same-named global', () => {
+      seedGlobals(store, [makeVariable('x', 'global')])
+      seedPou(store, makePou('Main', 'program', [makeVariable('x', 'local')]))
+
+      store.getState().projectActions.updateVariable({
+        scope: 'local',
+        associatedPou: 'Main',
+        variableId: 'x',
+        data: { debug: true },
+      })
+
+      const st = store.getState().project
+      expect(st.data.pous[0].interface?.variables[0].debug).toBe(true)
+      // The unrelated same-named global must stay untouched.
+      expect(st.data.configurations.resource.globalVariables[0].debug).toBeFalsy()
+    })
+
     it('stores the location binding verbatim (alias name or literal) and never auto-adopts', () => {
       // Single-field model: `location` is the binding. A manual literal is
       // stored verbatim; an alias name is stored verbatim (NOT auto-resolved
@@ -920,6 +1100,48 @@ describe('createProjectSlice', () => {
       })
       expect(result.ok).toBe(true)
       expect(store.getState().project.data.pous[0].interface?.variables[0].name).toBe('Counter')
+    })
+  })
+
+  describe('updateVariable — resource globals in the element namespace', () => {
+    it('refuses renaming a global onto a POU name', () => {
+      seedPou(store, makePou('Motor'))
+      store.getState().projectActions.createVariable({ scope: 'global', data: makeVariable('gx', 'global') })
+      const result = store
+        .getState()
+        .projectActions.updateVariable({ scope: 'global', variableId: 'gx', data: { name: 'motor' } })
+      expect(result).toMatchObject({ ok: false, title: 'Variable already exists' })
+      expect(store.getState().project.data.configurations.resource.globalVariables[0].name).toBe('gx')
+    })
+
+    it('lets a global change only its case', () => {
+      store.getState().projectActions.createVariable({ scope: 'global', data: makeVariable('gx', 'global') })
+      const result = store
+        .getState()
+        .projectActions.updateVariable({ scope: 'global', variableId: 'gx', data: { name: 'GX' } })
+      expect(result.ok).toBe(true)
+      expect(store.getState().project.data.configurations.resource.globalVariables[0].name).toBe('GX')
+    })
+
+    it('reports a missing row before judging its new name', () => {
+      seedPou(store, makePou('Motor'))
+      const result = store
+        .getState()
+        .projectActions.updateVariable({ scope: 'global', variableId: 'gone', data: { name: 'motor' } })
+      expect(result.ok).toBe(false)
+      expect(result.title).toBe('Variable not found')
+    })
+
+    it('leaves a local variable rename to the POU validator', () => {
+      seedPou(store, makePou('Motor'))
+      seedPou(store, makePou('Main', 'program', [makeVariable('x')]))
+      const result = store.getState().projectActions.updateVariable({
+        scope: 'local',
+        associatedPou: 'Main',
+        variableId: 'x',
+        data: { name: 'motor' },
+      })
+      expect(result.ok).toBe(true)
     })
   })
 
@@ -1131,11 +1353,175 @@ describe('createProjectSlice', () => {
       expect(store.getState().project.data.dataTypes).toHaveLength(0)
     })
 
+    it('queues the datatypes/<name>.dt path for deletion', () => {
+      const dt: PLCDataType = { name: 'MyStruct', derivation: 'structure', variable: [] }
+      store.getState().projectActions.createDatatype({ data: dt })
+      store.getState().projectActions.deleteDatatype('MyStruct')
+      expect(store.getState().pendingDeletions).toContain('datatypes/MyStruct.dt')
+    })
+
     it('does nothing when data type not found', () => {
       const dt: PLCDataType = { name: 'A', derivation: 'structure', variable: [] }
       store.getState().projectActions.createDatatype({ data: dt })
       store.getState().projectActions.deleteDatatype('NonExistent')
       expect(store.getState().project.data.dataTypes).toHaveLength(1)
+    })
+  })
+
+  describe('updateDatatypeName', () => {
+    it('renames the data type and queues the old .dt path for deletion', () => {
+      const dt: PLCDataType = { name: 'OldName', derivation: 'structure', variable: [] }
+      store.getState().projectActions.createDatatype({ data: dt })
+      store.getState().projectActions.updateDatatypeName('OldName', 'NewName')
+      expect(store.getState().project.data.dataTypes[0].name).toBe('NewName')
+      expect(store.getState().pendingDeletions).toContain('datatypes/OldName.dt')
+    })
+
+    it('does nothing when the data type is not found', () => {
+      store.getState().projectActions.updateDatatypeName('Ghost', 'NewName')
+      expect(store.getState().project.data.dataTypes).toHaveLength(0)
+      expect(store.getState().pendingDeletions).toHaveLength(0)
+    })
+  })
+
+  describe('propagateDatatypeRename', () => {
+    const directRef = (name: string, typeName: string): PLCVariable => ({
+      name,
+      class: 'local',
+      type: { definition: 'user-data-type', value: typeName },
+      location: '',
+      documentation: '',
+    })
+    const arrayRef = (name: string, typeName: string): PLCVariable => ({
+      name,
+      class: 'local',
+      type: {
+        definition: 'array',
+        value: `ARRAY [0..4] OF ${typeName}`,
+        data: {
+          baseType: { definition: 'user-data-type', value: typeName },
+          dimensions: [{ dimension: '0..4' }],
+        },
+      },
+      location: '',
+      documentation: '',
+    })
+
+    beforeEach(() => {
+      store.getState().projectActions.createPou({
+        type: 'program',
+        data: {
+          language: 'st',
+          name: 'Main',
+          variables: [directRef('motor', 'MotorDef'), arrayRef('motors', 'motordef'), makeVariable('plain')],
+          body: makeBody(),
+          documentation: '',
+        },
+      })
+      store.getState().projectActions.setGlobalVariables({
+        variables: [{ ...directRef('gMotor', 'MotorDef'), class: 'global' }, makeVariable('gPlain', 'global')],
+      })
+      store.getState().projectActions.createDatatype({
+        data: {
+          name: 'MotorDef',
+          derivation: 'structure',
+          variable: [{ name: 'speed', type: { definition: 'base-type', value: 'INT' } }],
+        },
+      })
+      store.getState().projectActions.createDatatype({
+        data: {
+          name: 'Chassis',
+          derivation: 'structure',
+          variable: [
+            { name: 'front', type: { definition: 'user-data-type', value: 'MotorDef' } },
+            { name: 'id', type: { definition: 'base-type', value: 'INT' } },
+          ],
+        },
+      })
+      store.getState().projectActions.createDatatype({
+        data: {
+          name: 'MotorBank',
+          derivation: 'array',
+          baseType: { definition: 'user-data-type', value: 'MotorDef' },
+          initialValue: '',
+          dimensions: [{ dimension: '1..8' }],
+        },
+      })
+    })
+
+    it('rewrites direct and array POU variable references (case-insensitive)', () => {
+      store.getState().projectActions.propagateDatatypeRename('MotorDef', 'DriveDef')
+
+      const variables = store.getState().project.data.pous[0].interface?.variables ?? []
+      expect(variables[0].type).toEqual({ definition: 'user-data-type', value: 'DriveDef' })
+      expect(variables[1].type).toEqual({
+        definition: 'array',
+        value: 'ARRAY [0..4] OF DriveDef',
+        data: {
+          baseType: { definition: 'user-data-type', value: 'DriveDef' },
+          dimensions: [{ dimension: '0..4' }],
+        },
+      })
+      expect(variables[2].type).toEqual({ definition: 'base-type', value: 'INT' })
+    })
+
+    it('rewrites global variable references', () => {
+      store.getState().projectActions.propagateDatatypeRename('MotorDef', 'DriveDef')
+
+      const globals = store.getState().project.data.configurations.resource.globalVariables
+      expect(globals[0].type).toEqual({ definition: 'user-data-type', value: 'DriveDef' })
+      expect(globals[1].type).toEqual({ definition: 'base-type', value: 'INT' })
+    })
+
+    it('rewrites other data types and leaves the renamed type entry itself alone', () => {
+      store.getState().projectActions.propagateDatatypeRename('MotorDef', 'DriveDef')
+
+      const dataTypes = store.getState().project.data.dataTypes
+      // The type's own entry is updateDatatypeName's job.
+      expect(dataTypes[0].name).toBe('MotorDef')
+      expect(dataTypes[1]).toEqual({
+        name: 'Chassis',
+        derivation: 'structure',
+        variable: [
+          { name: 'front', type: { definition: 'user-data-type', value: 'DriveDef' } },
+          { name: 'id', type: { definition: 'base-type', value: 'INT' } },
+        ],
+      })
+      expect(dataTypes[2]).toEqual({
+        name: 'MotorBank',
+        derivation: 'array',
+        baseType: { definition: 'user-data-type', value: 'DriveDef' },
+        initialValue: '',
+        dimensions: [{ dimension: '1..8' }],
+      })
+    })
+
+    it('is a no-op when nothing references the type', () => {
+      const before = store.getState().project
+      store.getState().projectActions.propagateDatatypeRename('Ghost', 'Phantom')
+      const after = store.getState().project
+
+      expect(after.data.pous).toEqual(before.data.pous)
+      expect(after.data.configurations.resource.globalVariables).toEqual(
+        before.data.configurations.resource.globalVariables,
+      )
+      expect(after.data.dataTypes).toEqual(before.data.dataTypes)
+    })
+  })
+
+  describe('setUnparsedDataTypeFiles', () => {
+    it('replaces the stashed raw .dt files', () => {
+      const raw = [{ relativePath: 'datatypes/Broken.dt', content: 'TYPE garbage' }]
+      store.getState().projectActions.setUnparsedDataTypeFiles(raw)
+      expect(store.getState().unparsedDataTypeFiles).toEqual(raw)
+      store.getState().projectActions.setUnparsedDataTypeFiles([])
+      expect(store.getState().unparsedDataTypeFiles).toEqual([])
+    })
+
+    it('is reset by clearProjects', () => {
+      store.getState().projectActions.setUnparsedDataTypeFiles([{ relativePath: 'datatypes/X.dt', content: 'x' }])
+      store.getState().projectActions.clearProjects()
+      expect(store.getState().unparsedDataTypeFiles).toEqual([])
     })
   })
 
@@ -1270,6 +1656,104 @@ describe('createProjectSlice', () => {
       const replacement: PLCDataType = { name: 'Z', derivation: 'structure', variable: [] }
       store.getState().projectActions.applyDatatypeSnapshot('NonExistent', replacement)
       expect(store.getState().project.data.dataTypes[0].name).toBe('A')
+    })
+
+    it('regenerates the code buffer of a type shown in code mode', () => {
+      const dt: PLCDataType = { name: 'A', derivation: 'enumerated', values: [{ description: 'RED' }] }
+      store.getState().projectActions.createDatatype({ data: dt })
+      openDatatypeInCodeMode(store, 'A', 'stale text')
+
+      store.getState().projectActions.applyDatatypeSnapshot('A', {
+        name: 'A',
+        derivation: 'enumerated',
+        values: [{ description: 'BLUE' }],
+      })
+
+      expect(codeOf(store, 'A')).toContain('BLUE')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Data-type code view
+  // -------------------------------------------------------------------------
+  describe('reconcileDatatypeText', () => {
+    const enumType: PLCDataType = { name: 'Colors', derivation: 'enumerated', values: [{ description: 'RED' }] }
+
+    it('is a no-op when the type is not shown in code mode', () => {
+      store.getState().projectActions.createDatatype({ data: enumType })
+      expect(store.getState().projectActions.reconcileDatatypeText('Colors').ok).toBe(true)
+      expect(store.getState().project.data.dataTypes[0]).toEqual(enumType)
+    })
+
+    it('is a no-op when the buffer still matches the serialized type', () => {
+      store.getState().projectActions.createDatatype({ data: enumType })
+      openDatatypeInCodeMode(store, 'Colors', serializeDataTypeToText(enumType))
+
+      expect(store.getState().projectActions.reconcileDatatypeText('Colors').ok).toBe(true)
+      expect(store.getState().project.data.dataTypes[0]).toEqual(enumType)
+    })
+
+    it('is a no-op when the type no longer exists', () => {
+      openDatatypeInCodeMode(store, 'Ghost', 'TYPE\nGhost : (RED);\nEND_TYPE\n')
+      expect(store.getState().projectActions.reconcileDatatypeText('Ghost').ok).toBe(true)
+      expect(store.getState().project.data.dataTypes).toHaveLength(0)
+    })
+
+    it('folds a diverged buffer back into the type', () => {
+      store.getState().projectActions.createDatatype({ data: enumType })
+      openDatatypeInCodeMode(store, 'Colors', 'TYPE\nColors : (RED, GREEN);\nEND_TYPE\n')
+
+      expect(store.getState().projectActions.reconcileDatatypeText('Colors').ok).toBe(true)
+      const updated = store.getState().project.data.dataTypes[0]
+      expect(updated.derivation === 'enumerated' && updated.values).toEqual([
+        { description: 'RED' },
+        { description: 'GREEN' },
+      ])
+    })
+
+    it('refuses when the buffer does not parse', () => {
+      store.getState().projectActions.createDatatype({ data: enumType })
+      openDatatypeInCodeMode(store, 'Colors', 'TYPE\nnot a declaration\nEND_TYPE\n')
+
+      const response = store.getState().projectActions.reconcileDatatypeText('Colors')
+      expect(response.ok).toBe(false)
+      expect(response.title).toBe('Data type text is invalid')
+      expect(store.getState().project.data.dataTypes[0]).toEqual(enumType)
+    })
+  })
+
+  describe('regenerateDatatypeText', () => {
+    it('re-serializes the type into its buffer', () => {
+      const dt: PLCDataType = { name: 'Colors', derivation: 'enumerated', values: [{ description: 'RED' }] }
+      store.getState().projectActions.createDatatype({ data: dt })
+      openDatatypeInCodeMode(store, 'Colors', 'stale text')
+
+      store.getState().projectActions.regenerateDatatypeText('Colors')
+      expect(codeOf(store, 'Colors')).toBe(serializeDataTypeToText(dt))
+    })
+
+    it('does nothing when the type is not shown in code mode', () => {
+      const dt: PLCDataType = { name: 'Colors', derivation: 'enumerated', values: [{ description: 'RED' }] }
+      store.getState().projectActions.createDatatype({ data: dt })
+      store.getState().projectActions.regenerateDatatypeText('Colors')
+      expect(store.getState().editors).toHaveLength(0)
+    })
+
+    it('does nothing when the type no longer exists', () => {
+      openDatatypeInCodeMode(store, 'Ghost', 'raw')
+      store.getState().projectActions.regenerateDatatypeText('Ghost')
+      expect(codeOf(store, 'Ghost')).toBe('raw')
+    })
+  })
+
+  describe('removeUnparsedDataTypeFile', () => {
+    it('drops only the matching path', () => {
+      store.getState().projectActions.setUnparsedDataTypeFiles([
+        { relativePath: 'datatypes/A.dt', content: 'a' },
+        { relativePath: 'datatypes/B.dt', content: 'b' },
+      ])
+      store.getState().projectActions.removeUnparsedDataTypeFile('datatypes/A.dt')
+      expect(store.getState().unparsedDataTypeFiles).toEqual([{ relativePath: 'datatypes/B.dt', content: 'b' }])
     })
   })
 
@@ -1496,6 +1980,39 @@ describe('createProjectSlice', () => {
       expect(servers[0].modbusSlaveConfig?.port).toBe(502)
     })
 
+    it('seeds transports, so the new server is visible to the build', () => {
+      // `selectModbusServer` only considers a server that declares `transports`.
+      // Seeding none made a freshly created server invisible to the compile,
+      // so the firmware came out with Modbus entirely off while the screen said
+      // it was serving.
+      store.getState().projectActions.createServer({
+        data: { name: 'ModbusServer', protocol: 'modbus-tcp' },
+      })
+      const server = (store.getState().project.data.servers ?? [])[0]
+      expect(server.modbusSlaveConfig?.transports).toEqual(['tcp'])
+    })
+
+    it('seeds RTU on a microcontroller, which is the transport those boards all have', () => {
+      // Seeding TCP everywhere is what let a board with no network carrier
+      // compile MBTCP into a firmware with no stack the moment the user switched
+      // the server on: the screen offered RTU only, the store still said TCP.
+      seedBaremetalBoard(store)
+      store.getState().projectActions.createServer({
+        data: { name: 'ModbusServer', protocol: 'modbus-tcp' },
+      })
+      const server = (store.getState().project.data.servers ?? [])[0]
+      expect(server.modbusSlaveConfig?.transports).toEqual(['rtu'])
+    })
+
+    it('seeds TCP on a Runtime v4 target, which serves nothing else', () => {
+      seedRuntimeV4Board(store)
+      store.getState().projectActions.createServer({
+        data: { name: 'ModbusServer', protocol: 'modbus-tcp' },
+      })
+      const server = (store.getState().project.data.servers ?? [])[0]
+      expect(server.modbusSlaveConfig?.transports).toEqual(['tcp'])
+    })
+
     it('creates an s7comm server with default config', () => {
       const result = store.getState().projectActions.createServer({
         data: { name: 'S7Server', protocol: 's7comm' },
@@ -1533,6 +2050,22 @@ describe('createProjectSlice', () => {
       expect(result.message).toBe('Server already exists')
     })
 
+    it('refuses a second server of a protocol, naming the one that holds it', () => {
+      store.getState().projectActions.createServer({ data: makeModbusTcpServer('mb_a') })
+      const result = store.getState().projectActions.createServer({ data: makeModbusTcpServer('mb_b') })
+
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('mb_a')
+      expect(store.getState().project.data.servers).toHaveLength(1)
+    })
+
+    it('lets one server of each protocol live side by side', () => {
+      expect(store.getState().projectActions.createServer({ data: makeModbusTcpServer('mb') }).ok).toBe(true)
+      expect(store.getState().projectActions.createServer({ data: { name: 's7', protocol: 's7comm' } }).ok).toBe(true)
+      expect(store.getState().projectActions.createServer({ data: { name: 'ua', protocol: 'opcua' } }).ok).toBe(true)
+      expect(store.getState().project.data.servers).toHaveLength(3)
+    })
+
     it('creates a server with unknown protocol type without adding config', () => {
       const result = store.getState().projectActions.createServer({
         data: { name: 'EtherNet', protocol: 'ethernet-ip' },
@@ -1553,6 +2086,15 @@ describe('createProjectSlice', () => {
       expect(result.ok).toBe(true)
       expect(store.getState().project.data.servers).toHaveLength(1)
       expect(store.getState().project.data.servers![0].name).toBe('B')
+    })
+
+    it('queues the file for deletion, so the save actually removes it from disk', () => {
+      // Dropping it from the array only changes memory. Without the queue entry
+      // the next save leaves `devices/servers/A.json` behind and the server
+      // returns on the following open.
+      seedServer(store, makeModbusTcpServer('A'))
+      store.getState().projectActions.deleteServer('A')
+      expect(store.getState().pendingDeletions).toContain('devices/servers/A.json')
     })
 
     it('returns ok even when server not found', () => {
@@ -2317,6 +2859,20 @@ describe('createProjectSlice', () => {
       expect(points[0].iecLocation).toBe('%QX0.0')
     })
 
+    it('stores set-to-zero on a read group', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', { ...makeIOGroup('g1', '4', 1), errorHandling: 'set-to-zero' })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.errorHandling).toBe('set-to-zero')
+    })
+
+    it('stores a write group with keep-last-value even when set-to-zero is passed', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', { ...makeIOGroup('g1', '5', 1), errorHandling: 'set-to-zero' })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.errorHandling).toBe('keep-last-value')
+    })
+
     it('generates word output addresses for function code 6', () => {
       seedRemoteDevice(store, makeRemoteDevice('Dev1'))
       const group = makeIOGroup('g1', '6', 1)
@@ -2517,6 +3073,116 @@ describe('createProjectSlice', () => {
       expect(points[0].iecLocation).toBe('%IW0')
       expect(points[1].iecLocation).toBe('%IW1')
     })
+
+    it('clamps a non-positive length on create', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', -2))
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.ioPoints).toHaveLength(1)
+      expect(group.length).toBe(1)
+    })
+  })
+
+  describe('importIOGroups', () => {
+    beforeEach(() => {
+      seedRuntimeV4Board(store)
+    })
+
+    const groupsIn = (target: ReturnType<typeof makeStore>): ModbusIOGroup[] => {
+      const config = target.getState().project.data.remoteDevices?.[0]?.modbusTcpConfig
+      if (!config) throw new Error('the seeded device has no Modbus TCP configuration')
+      return config.ioGroups
+    }
+    const groupsOf = () => groupsIn(store)
+    const addressesOf = (groups: ModbusIOGroup[]) => groups.flatMap((g) => (g.ioPoints ?? []).map((p) => p.iecLocation))
+
+    it('appends a batch with contiguous addresses after the existing groups', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2))
+      const result = store
+        .getState()
+        .projectActions.importIOGroups('Dev1', [makeIOGroup('g2', '3', 2), makeIOGroup('g3', '4', 1)])
+      expect(result.ok).toBe(true)
+      expect(groupsOf().map((g) => g.id)).toEqual(['g1', 'g2', 'g3'])
+      expect(addressesOf(groupsOf())).toEqual(['%IW0', '%IW1', '%IW2', '%IW3', '%IW4'])
+    })
+
+    it('replaces the existing groups and reuses their addresses', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('old', '3', 3))
+      const result = store
+        .getState()
+        .projectActions.importIOGroups('Dev1', [makeIOGroup('new', '3', 1)], { replace: true })
+      expect(result.ok).toBe(true)
+      expect(groupsOf().map((g) => g.id)).toEqual(['new'])
+      expect(addressesOf(groupsOf())[0]).toBe('%IW0')
+    })
+
+    it('applies the same invariants as addIOGroup', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store
+        .getState()
+        .projectActions.importIOGroups('Dev1', [{ ...makeIOGroup('w', '6', 5), errorHandling: 'set-to-zero' }])
+      expect(groupsOf()[0]).toMatchObject({ length: 1, errorHandling: 'keep-last-value' })
+      expect(groupsOf()[0].ioPoints).toHaveLength(1)
+    })
+
+    it('rejects the whole batch on a duplicate name (case-insensitive), leaving the device untouched', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', { ...makeIOGroup('g1'), name: 'Pump' })
+      const result = store
+        .getState()
+        .projectActions.importIOGroups('Dev1', [makeIOGroup('g2'), { ...makeIOGroup('g3'), name: 'PUMP' }])
+      expect(result.ok).toBe(false)
+      expect(groupsOf().map((g) => g.id)).toEqual(['g1'])
+    })
+
+    it('allows reusing an existing name when replacing', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', { ...makeIOGroup('g1'), name: 'Pump' })
+      const result = store
+        .getState()
+        .projectActions.importIOGroups('Dev1', [{ ...makeIOGroup('g2'), name: 'Pump' }], { replace: true })
+      expect(result.ok).toBe(true)
+      expect(groupsOf().map((g) => g.id)).toEqual(['g2'])
+    })
+
+    it('fails for an unknown device', () => {
+      expect(store.getState().projectActions.importIOGroups('Nope', [makeIOGroup('g1')]).ok).toBe(false)
+    })
+
+    it('assigns the same addresses as adding the groups one by one, across address classes', () => {
+      const batch = [
+        makeIOGroup('a', '1', 3),
+        makeIOGroup('b', '3', 2),
+        makeIOGroup('c', '15', 10),
+        makeIOGroup('d', '2', 9),
+        makeIOGroup('e', '16', 2),
+      ]
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('existing', '1', 2))
+      store.getState().projectActions.importIOGroups('Dev1', batch)
+      const imported = addressesOf(groupsOf())
+
+      const sequential = makeStore()
+      seedRuntimeV4Board(sequential)
+      seedRemoteDevice(sequential, makeRemoteDevice('Dev1'))
+      sequential.getState().projectActions.addIOGroup('Dev1', makeIOGroup('existing', '1', 2))
+      for (const group of batch) sequential.getState().projectActions.addIOGroup('Dev1', group)
+      const added = addressesOf(groupsIn(sequential))
+
+      expect(imported).toEqual(added)
+      expect(imported.slice(0, 5)).toEqual(['%IX0.0', '%IX0.1', '%IX0.2', '%IX0.3', '%IX0.4'])
+    })
+
+    it('gives every point of a large batch a distinct address', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      const batch = Array.from({ length: 200 }, (_, i) => makeIOGroup(`g${i}`, i % 2 ? '3' : '1', 125))
+      expect(store.getState().projectActions.importIOGroups('Dev1', batch).ok).toBe(true)
+      const addresses = addressesOf(groupsOf())
+      expect(addresses).toHaveLength(200 * 125)
+      expect(new Set(addresses).size).toBe(addresses.length)
+    })
   })
 
   describe('updateIOGroup', () => {
@@ -2598,6 +3264,68 @@ describe('createProjectSlice', () => {
       expect(points[0].alias).toBe('Temp') // survived the reshuffle
       expect(points[2].alias).toBe('') // freshly allocated slot
     })
+
+    it('clamps a negative length to a single point, normalizing the stored field', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 4))
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { length: -5 })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.ioPoints).toHaveLength(1)
+      // `length` is what reaches the runtime as `len` — it must be normalized too.
+      expect(group.length).toBe(1)
+    })
+
+    it('clamps a zero length to a single point', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 4))
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { length: 0 })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.ioPoints).toHaveLength(1)
+      expect(group.length).toBe(1)
+    })
+
+    it('floors a fractional length', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 1))
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { length: 3.7 })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.ioPoints).toHaveLength(3)
+      expect(group.length).toBe(3)
+    })
+
+    it('forces a single point when the function code becomes single-element (FC 5)', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 4)) // FC3 -> %IW
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { functionCode: '5' }) // FC5 -> %QX, single
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.length).toBe(1)
+      expect(group.ioPoints!.map((p) => p.iecLocation)).toEqual(['%QX0.0'])
+    })
+
+    it('keeps set-to-zero on a read group', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2))
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { errorHandling: 'set-to-zero' })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.errorHandling).toBe('set-to-zero')
+    })
+
+    it('resets error handling when a read group becomes a write group', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', { ...makeIOGroup('g1', '3', 2), errorHandling: 'set-to-zero' })
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { functionCode: '16' })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.errorHandling).toBe('keep-last-value')
+    })
+
+    it('normalizes a legacy write group saved with set-to-zero on its next edit', () => {
+      const device = makeRemoteDevice('Dev1')
+      device.modbusTcpConfig!.ioGroups.push({ ...makeIOGroup('g1', '15', 2), errorHandling: 'set-to-zero' })
+      seedRemoteDevice(store, device)
+      store.getState().projectActions.updateIOGroup('Dev1', 'g1', { name: 'renamed' })
+      const group = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0]
+      expect(group.errorHandling).toBe('keep-last-value')
+    })
   })
 
   describe('deleteIOGroup', () => {
@@ -2630,6 +3358,156 @@ describe('createProjectSlice', () => {
       expect(groups).toHaveLength(1)
       // g2 slides down into the freed slots — no gap left behind.
       expect(groups[0].ioPoints!.map((p) => p.iecLocation)).toEqual(['%IW0', '%IW1'])
+    })
+  })
+
+  describe('allocation against an unresolved or incapable target (DOPE-440)', () => {
+    /** A device whose group already carries addresses — the shape a project
+     *  file has on load, before any edit. */
+    function seedDeviceAt(name: string, addresses: string[]) {
+      seedRemoteDevice(store, {
+        ...makeRemoteDevice(name),
+        modbusTcpConfig: {
+          host: '127.0.0.1',
+          port: 502,
+          slaveId: 1,
+          timeout: 1000,
+          ioGroups: [
+            {
+              ...makeIOGroup('g1', '3', addresses.length),
+              ioPoints: addresses.map((iecLocation, i) => ({
+                id: `group-g1_${i}`,
+                name: `group-g1_${i}`,
+                type: 'Analog Input (Holding Register)',
+                iecLocation,
+                alias: '',
+              })),
+            },
+          ],
+        },
+      })
+    }
+
+    /** Every IEC address the first remote device's groups currently hold.
+     *  Throws rather than asserting non-null so a broken fixture names itself
+     *  instead of failing as an unrelated expectation. */
+    function addressesOf(): string[] {
+      const groups = store.getState().project.data.remoteDevices?.[0]?.modbusTcpConfig?.ioGroups
+      if (!groups) throw new Error('fixture: expected a remote device with a modbusTcpConfig')
+      return groups.flatMap((group) => {
+        if (!group.ioPoints) throw new Error(`fixture: group "${group.id}" has no ioPoints`)
+        return group.ioPoints.map((point) => point.iecLocation)
+      })
+    }
+
+    it('recompacts after a delete even when the board id does not resolve', () => {
+      seedRuntimeV4Board(store)
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2)) // %IW0,1
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g2', '3', 2)) // %IW2,3
+      // The VPP package goes missing, or the project is opened on another
+      // machine: the board id no longer resolves to a BoardInfo.
+      selectUnresolvedBoard(store)
+
+      store.getState().projectActions.deleteIOGroup('Dev1', 'g1')
+
+      // Used to keep %IW2,3 — every consumer was filtered out of allocation,
+      // so the recompaction wrote nothing and reported success.
+      expect(addressesOf()).toEqual(['%IW0', '%IW1'])
+    })
+
+    it('does not mint duplicate addresses when the board id does not resolve', () => {
+      selectUnresolvedBoard(store)
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g2', '3', 2))
+
+      // Both groups used to restart at %IW0 — the pool couldn't see the sibling.
+      expect(addressesOf()).toEqual(['%IW0', '%IW1', '%IW2', '%IW3'])
+    })
+
+    it('still honours a resolved target that declares no remote I/O', () => {
+      // The other half of the invariant, and the guard against "simplifying"
+      // the fix into dropping capability scoping altogether: a board that
+      // ANSWERED keeps its declaration, so the inactive kind is not reallocated.
+      seedRuntimeV3Board(store)
+      seedDeviceAt('Dev1', ['%IW4', '%IW5'])
+
+      store.getState().projectActions.recalculateIecAddresses()
+
+      expect(addressesOf()).toEqual(['%IW4', '%IW5'])
+    })
+
+    it('compacts the same gap once the target is merely unresolved', () => {
+      selectUnresolvedBoard(store)
+      seedDeviceAt('Dev1', ['%IW4', '%IW5'])
+
+      store.getState().projectActions.recalculateIecAddresses()
+
+      expect(addressesOf()).toEqual(['%IW0', '%IW1'])
+    })
+
+    it('stays quiet when the target resolves', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        seedRuntimeV4Board(store)
+        store.getState().projectActions.recalculateIecAddresses()
+
+        expect(warn).not.toHaveBeenCalled()
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('stays quiet while the board catalogue is still loading, then reports once it lands', () => {
+      // The two halves are ONE behaviour and have to be asserted together. An
+      // empty catalogue is an ordinary startup state, not a missing package —
+      // but discovery finishing is precisely when the situation becomes
+      // actionable, so whatever suppresses the load-time warning must not also
+      // suppress the one after it. Asserting only the quiet half lets that
+      // through: it is how a module-scoped "warn once" latch, armed during
+      // load, silently swallowed the report forever.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        selectUnresolvedBoard(store) // recalculates against an empty catalogue
+        expect(warn).not.toHaveBeenCalled()
+
+        landBoardCatalogue(store) // discovery finishes; this board isn't in it
+        store.getState().projectActions.recalculateIecAddresses()
+
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(warn.mock.calls[0][0]).toContain('Uninstalled VPP Board')
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('reports every recalculation against an unresolved target', () => {
+      // Not deduplicated by design — see `warnIfTargetUnresolved`. Each
+      // recalculation is a user-initiated mutation, and a latch that outlives
+      // the store silences the next project on the same board.
+      seedRuntimeV4Board(store)
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        selectUnresolvedBoard(store) // setDeviceBoard recalculates
+        store.getState().projectActions.recalculateIecAddresses()
+
+        expect(warn).toHaveBeenCalledTimes(2)
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('keeps the alias-uniqueness gate working when the board id does not resolve', () => {
+      selectUnresolvedBoard(store)
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2))
+      store.getState().projectActions.updateIOPointAlias('Dev1', 'g1', 'group-g1_0', 'Temp')
+
+      const result = store.getState().projectActions.updateIOPointAlias('Dev1', 'g1', 'group-g1_1', 'Temp')
+
+      expect(result.ok).toBe(false)
+      expect(result.title).toBe('Alias already in use')
     })
   })
 
@@ -2701,6 +3579,36 @@ describe('createProjectSlice', () => {
       // unmapped entry is returned unchanged.
       expect(entries[0].iecAddress).toBe('%QX0.0')
       expect(entries[1].iecAddress).toBe('NOPE')
+    })
+
+    it('compacts byte channels and restores their aliases by module, slot and channel', () => {
+      seedVppBoard(store)
+      const entry = (channelName: string, iecAddress: string) => ({
+        slot: 1,
+        channelName,
+        channelType: 'analogInput',
+        dataType: 'USINT',
+        moduleId: 'ur20-2di-p-ts',
+        moduleName: 'UR20-2DI-P-TS',
+        iecAddress,
+        alias: '',
+      })
+      store.getState().deviceActions.setVendorScreenData('io-mapping', {
+        entries: [entry('input_image_1', '%IB4'), entry('running_number_1', '%IB7')],
+      })
+      store
+        .getState()
+        .projectActions.rememberChannelAlias(vppMemoryKey('ur20-2di-p-ts', 1, 'running_number_1'), 'counter')
+      store.getState().projectActions.rememberChannelAlias(vppMemoryKey('ur20-4di-p', 1, 'input_image_1'), 'stale')
+
+      store.getState().projectActions.recalculateIecAddresses()
+
+      expect(store.getState().deviceDefinitions.configuration.vendorScreenData?.['io-mapping']).toMatchObject({
+        entries: [
+          { channelName: 'input_image_1', iecAddress: '%IB0', alias: '' },
+          { channelName: 'running_number_1', iecAddress: '%IB1', alias: 'counter' },
+        ],
+      })
     })
 
     it('skips devices without a Modbus config during writeback', () => {
@@ -2899,6 +3807,38 @@ describe('createProjectSlice', () => {
       // The live store keeps the alias-name form — only the returned snapshot
       // is resolved.
       expect(store.getState().project.data.pous[0].interface!.variables![0].location).toBe('flow')
+    })
+  })
+
+  describe('getAliasIndex', () => {
+    beforeEach(() => {
+      seedRuntimeV4Board(store)
+    })
+
+    it('exposes the live alias → address map', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2)) // %IW0, %IW1
+      const pointId = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0].ioPoints![0].id
+      store.getState().projectActions.updateIOPointAlias('Dev1', 'g1', pointId, 'flow')
+
+      expect(store.getState().projectActions.getAliasIndex().get('flow')).toBe('%IW0')
+    })
+
+    it('returns the same reference until producer state changes', () => {
+      seedRemoteDevice(store, makeRemoteDevice('Dev1'))
+      store.getState().projectActions.addIOGroup('Dev1', makeIOGroup('g1', '3', 2))
+      const first = store.getState().projectActions.getAliasIndex()
+      // A POU edit must NOT invalidate the memo — the LSP calls this on every
+      // reconcile, i.e. on every keystroke in an ST editor.
+      seedPou(store, makePou('Prog', 'program', [locVar('x', '')]))
+      expect(store.getState().projectActions.getAliasIndex()).toBe(first)
+
+      // A producer change must.
+      const pointId = store.getState().project.data.remoteDevices![0].modbusTcpConfig!.ioGroups[0].ioPoints![0].id
+      store.getState().projectActions.updateIOPointAlias('Dev1', 'g1', pointId, 'flow')
+      const second = store.getState().projectActions.getAliasIndex()
+      expect(second).not.toBe(first)
+      expect(second.get('flow')).toBe('%IW0')
     })
   })
 
@@ -3262,6 +4202,56 @@ describe('createProjectSlice', () => {
       expect(result.ok).toBe(false)
       expect(result.title).toBe('Cannot Delete Global Variable')
       expect(result.message).toContain('Consumer')
+      expect((result.data as { referencingPous: string[] }).referencingPous).toEqual(['Consumer'])
+      // Not forced → nothing was deleted.
+      expect(
+        store.getState().project.data.configurations.resource.globalVariables.some((v) => v.name === 'SharedVar'),
+      ).toBe(true)
+    })
+
+    it('deleteVariable global with force cascades: removes the global + external refs from every POU', () => {
+      store.getState().projectActions.createVariable({ scope: 'global', data: makeVariable('SharedVar', 'global') })
+      for (const name of ['Consumer', 'Consumer2']) {
+        seedPou(store, {
+          ...makePou(name, 'program'),
+          interface: {
+            variables: [
+              {
+                name: 'SharedVar',
+                class: 'external',
+                type: { definition: 'base-type', value: 'INT' },
+                location: '',
+                documentation: '',
+              },
+              {
+                name: 'keep_me',
+                class: 'local',
+                type: { definition: 'base-type', value: 'BOOL' },
+                location: '',
+                documentation: '',
+              },
+            ],
+          },
+        })
+      }
+
+      const result = store.getState().projectActions.deleteVariable({
+        scope: 'global',
+        variableName: 'SharedVar',
+        force: true,
+      })
+
+      expect(result.ok).toBe(true)
+      // The global itself is gone.
+      expect(
+        store.getState().project.data.configurations.resource.globalVariables.some((v) => v.name === 'SharedVar'),
+      ).toBe(false)
+      // The external declaration is removed from every referencing POU; unrelated locals stay.
+      for (const name of ['Consumer', 'Consumer2']) {
+        const vars = store.getState().project.data.pous.find((p) => p.name === name)?.interface?.variables ?? []
+        expect(vars.some((v) => v.name === 'SharedVar')).toBe(false)
+        expect(vars.some((v) => v.name === 'keep_me')).toBe(true)
+      }
     })
 
     it('updateOpcUaServerConfig with top-level updates (cycleTimeMs)', () => {

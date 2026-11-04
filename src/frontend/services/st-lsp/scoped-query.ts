@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Scoped completion / type-resolution backed by the STruC++ LSP, for the
  * graphical (LD / FBD) editors.
@@ -59,4 +59,41 @@ export function registerScopedQueryApi(next: ScopedQueryApi | null): void {
 /** The active scoped-query API, or null when the LSP isn't available. */
 export function getScopedQueryApi(): ScopedQueryApi | null {
   return api
+}
+
+/**
+ * LSP `CompletionItemKind`s that denote a value symbol — something bindable
+ * to a variable box or completable after a `.`.
+ *
+ * strucpp emits `Variable` (6) for in-scope variables and FUNCTION_BLOCK
+ * instance members (`TON0.Q`), but `Field` (5) for STRUCT members
+ * (`my_struct.field`). Both must be accepted, or struct-member access never
+ * completes. Everything else strucpp returns at a bare position — keywords,
+ * standard functions — is not a value and is filtered out.
+ */
+const LSP_KIND_VARIABLE = 6
+const LSP_KIND_FIELD = 5
+
+/** True for a completion item that names a value (variable / member / field). */
+export function isValueCompletionKind(kind: number | undefined): boolean {
+  return kind === LSP_KIND_VARIABLE || kind === LSP_KIND_FIELD
+}
+
+/**
+ * Split an expression into the completion anchor — everything up to and
+ * including the last `.` — and the trailing partial segment.
+ *
+ * `completeInScope` is anchored on the former and the caller filters by the
+ * latter: `m.Gear.rat` asks strucpp what lives under `m.Gear.` and then keeps
+ * the candidates starting `rat`. A bare partial has an empty anchor, which
+ * asks for everything in scope.
+ *
+ * Shared rather than reimplemented per consumer: the graphical boxes and the
+ * C++ editor must agree on where an anchor ends, or the same expression
+ * resolves differently depending on which one asked.
+ */
+export function splitExpression(value: string): { anchor: string; segment: string } {
+  const lastDot = value.lastIndexOf('.')
+  if (lastDot < 0) return { anchor: '', segment: value }
+  return { anchor: value.slice(0, lastDot + 1), segment: value.slice(lastDot + 1) }
 }

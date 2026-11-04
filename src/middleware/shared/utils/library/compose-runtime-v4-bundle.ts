@@ -45,7 +45,7 @@
  */
 
 export interface ComposeRuntimeV4BundleInput {
-  /** Concatenated ST program emitted by xml2st. */
+  /** Concatenated ST program emitted by the ST transpiler. */
   programSt: string
   /** MD5 of `programSt` — written to `defines.h` so the v4 runtime
    *  shim (`runtime_v4_entry.cpp`) can report it via FC 0x45. */
@@ -86,10 +86,13 @@ export interface ComposeRuntimeV4BundleInput {
      *  Caller catches `OpcUaConfigError` and surfaces it before
      *  calling the composer — passing `null` skips the file. */
     opcUa: string | null
-    /** From `generateEthercatConfig(remoteDevices)`.  Caller should
-     *  run `validateEthercatConfig` first and abort the compile (not
-     *  call the composer) when validation produces errors. */
-    ethercat: string
+    /** EtherCAT, from `generateRuntimeConfs`, which picks the format by
+     *  runtime version and validates it first.  `ethercat` is the legacy
+     *  single file; the other two are the EtherDOG split.  `null` skips
+     *  the file. */
+    ethercat: string | null
+    ethercatBusconfig: string | null
+    ethercatIomapping: string | null
   }
 }
 
@@ -100,7 +103,7 @@ export interface ComposeRuntimeV4BundleInput {
 export function composeRuntimeV4Bundle(input: ComposeRuntimeV4BundleInput): Record<string, string> {
   const files: Record<string, string> = {}
 
-  // 1. Concatenated ST program (xml2st output)
+  // 1. Concatenated ST program (ST transpiler output)
   files['program.st'] = input.programSt
 
   // 2. Strucpp emitted artefacts at the zip root
@@ -142,7 +145,10 @@ export function composeRuntimeV4Bundle(input: ComposeRuntimeV4BundleInput): Reco
   if (input.confs.modbusMaster) files['conf/modbus_master.json'] = input.confs.modbusMaster
   if (input.confs.s7Comm) files['conf/s7comm.json'] = input.confs.s7Comm
   if (input.confs.opcUa) files['conf/opcua.json'] = input.confs.opcUa
-  files['conf/ethercat.json'] = input.confs.ethercat
+  // Legacy runtimes get `ethercat.json` even when empty, as they always did.
+  if (input.confs.ethercat !== null) files['conf/ethercat.json'] = input.confs.ethercat
+  if (input.confs.ethercatBusconfig) files['conf/ethercat_busconfig.json'] = input.confs.ethercatBusconfig
+  if (input.confs.ethercatIomapping) files['conf/ethercat_iomapping.json'] = input.confs.ethercatIomapping
 
   return files
 }

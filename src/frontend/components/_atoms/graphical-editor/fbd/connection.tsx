@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { cn } from '../../../../utils/cn'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
@@ -17,16 +17,12 @@ import { BasicNodeData, ConnectionProps } from './utils/types'
 import { getFBDPouVariablesRungNodeAndEdges } from './utils/utils'
 
 const ConnectionElement = (block: ConnectionProps) => {
+  const store = useOpenPLCStoreApi()
   const { id, data, selected, type } = block
   const pouName = useBoundPou()
-  const {
-    editorActions: { updateModelFBD },
-    fbdFlows,
-    fbdFlowActions: { updateNode },
-    project: {
-      data: { pous },
-    },
-  } = useOpenPLCStore()
+  const updateModelFBD = useOpenPLCStore((state) => state.editorActions.updateModelFBD)
+  const updateNode = useOpenPLCStore((state) => state.fbdFlowActions.updateNode)
+  const pous = useOpenPLCStore((state) => state.project.data.pous)
 
   const inputConnectionRef = useRef<
     HTMLTextAreaElement & {
@@ -66,6 +62,7 @@ const ConnectionElement = (block: ConnectionProps) => {
    * Update inputError state when the variable is updated
    */
   useEffect(() => {
+    const { fbdFlows } = store.getState()
     const { rung, node: connectionNode } = getFBDPouVariablesRungNodeAndEdges(pouName, pous, fbdFlows, {
       nodeId: id,
     })
@@ -95,6 +92,7 @@ const ConnectionElement = (block: ConnectionProps) => {
   const handleSubmitConnectionValueOnTextareaBlur = (connectionName?: string) => {
     const connectionNameToSubmit = connectionName || connectionValue
 
+    const { fbdFlows } = store.getState()
     const {
       pou,
       rung,
@@ -117,6 +115,9 @@ const ConnectionElement = (block: ConnectionProps) => {
     } else {
       setInputError(false)
     }
+
+    // Runs on every blur: an unchanged name is not an edit.
+    if (connectionNameToSubmit === (connectionNode.data as BasicNodeData).variable.name) return
 
     updateNode({
       editorName: pouName,
@@ -254,4 +255,6 @@ const ConnectionElement = (block: ConnectionProps) => {
   )
 }
 
-export { ConnectionElement }
+const exportConnectionElement = memo(ConnectionElement)
+
+export { exportConnectionElement as ConnectionElement }

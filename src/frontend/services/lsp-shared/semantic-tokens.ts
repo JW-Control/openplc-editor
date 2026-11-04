@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Generic semantic-tokens provider registration.
  *
@@ -39,12 +39,21 @@ export interface SemanticTokensRegistration extends monaco.IDisposable {
  * default keeps everything from `[lineOffset, +∞)` — drop the
  * preamble, keep the rest.  ST's variables-text view overrides this
  * to clip the end at the body line so only VAR-block tokens render.
+ * `outputStartLine` rebases the kept window for views that render
+ * their own framing above it (the data type `.dt` code view).
+ * `keepLine` further drops the lines whose text the view no longer
+ * shares with the document (the variables view mid-edit).
  */
 export type ResolveSemanticTokensViewport = (
   lspUri: string,
   modelUri: string,
   lineOffset: number,
-) => { startLine: number; endLineExclusive: number }
+) => {
+  startLine: number
+  endLineExclusive: number
+  outputStartLine?: number
+  keepLine?: (lspLine: number) => boolean
+}
 
 const defaultViewport: ResolveSemanticTokensViewport = (_lspUri, _modelUri, lineOffset) => ({
   startLine: lineOffset,
@@ -87,10 +96,10 @@ export function registerLspSemanticTokens(opts: RegisterLspSemanticTokensOptions
         textDocument: { uri: lspUri },
       })
       if (!result) return null
-      const { startLine, endLineExclusive } = resolveViewport(lspUri, modelUri, lineOffset)
+      const { startLine, endLineExclusive, outputStartLine, keepLine } = resolveViewport(lspUri, modelUri, lineOffset)
       return {
         ...(result.resultId ? { resultId: result.resultId } : {}),
-        data: shiftSemanticTokensToBody(result.data, startLine, endLineExclusive),
+        data: shiftSemanticTokensToBody(result.data, startLine, endLineExclusive, outputStartLine, keepLine),
       }
     },
     releaseDocumentSemanticTokens() {

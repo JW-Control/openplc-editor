@@ -15,17 +15,19 @@ import {
 import { restrictToParentElement } from '@dnd-kit/modifiers'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import * as Portal from '@radix-ui/react-portal'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { v4 as uuidv4 } from 'uuid'
 
 import { useCanvasZoom } from '../../../../../../hooks/use-canvas-zoom'
+import { useGraphicalFocus } from '../../../../../../hooks/use-graphical-focus'
 import { usePouSnapshot } from '../../../../../../hooks/use-pou-snapshot'
 import { ladderSelectors } from '../../../../../../hooks/use-store-selectors'
-import { useOpenPLCStore } from '../../../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../../store'
 import { RungLadderState } from '../../../../../../store/slices/ladder'
 import { scheduleFlowWriteBack } from '../../../../../../store/slices/shared/flow-writeback'
 import { cn } from '../../../../../../utils/cn'
+import { hasLegacyInOutOutputHandle } from '../../../../../../utils/graphical/in-out-pin-rules'
 import { BlockNode, BlockNodeData } from '../../../../../_atoms/graphical-editor/ladder/block'
 import { CoilNode } from '../../../../../_atoms/graphical-editor/ladder/coil'
 import { ContactNode } from '../../../../../_atoms/graphical-editor/ladder/contact'
@@ -37,8 +39,12 @@ import { useBoundPou } from '../active-context'
 import BlockElement from '../elements/ladder/block'
 import CoilElement from '../elements/ladder/coil'
 import ContactElement from '../elements/ladder/contact'
+import { useGraphicalPlacement } from '../placement/placement-context'
+
+const EMPTY_DIVERGENCES: string[] = []
 
 export default function LadderEditor() {
+  const store = useOpenPLCStoreApi()
   // Bound POU comes from the `GraphicalEditorActiveProvider` set up
   // in the wrapper one level up.  Mirrors `FbdEditor` — see that
   // file for the multi-mount rationale.
@@ -57,18 +63,94 @@ export default function LadderEditor() {
   const isDebuggerVisible = useOpenPLCStore((state) => state.workspace.isDebuggerVisible)
 
   const { captureAndPush } = usePouSnapshot()
+  const placement = useGraphicalPlacement()
 
   const updateModelLadder = ladderSelectors.useUpdateModelLadder()
 
+  const rungs = useMemo(() => flow?.rungs ?? [], [flow?.rungs])
+
   const { zoomLevel, zoomIn, zoomOut, zoomReset, containerRef, hoverHandlers } =
     useCanvasZoom('openplc:ladder-editor-zoom')
-
-  const rungs = flow?.rungs || []
   const flowUpdated = flow?.updated || false
 
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   const [activeItem, setActiveItem] = useState<RungLadderState | null>(null)
-  const nodeDivergences = getLibraryDivergences()
+
+  const nodeDivergences = useMemo(() => {
+    if (!flow) return EMPTY_DIVERGENCES
+
+    const divergences = []
+
+    for (const rung of flow.rungs) {
+      for (const node of rung.nodes) {
+        const variant = (node.data as BlockNodeData<BlockVariant>)?.variant
+        if (!variant) continue
+
+        const libMatch = userLibraries.find((lib) => lib.name === variant.name && lib.type === variant.type)
+        if (!libMatch) continue
+
+        const originalPou = pous.find((pou) => pou.name === libMatch.name)
+        if (!originalPou) continue
+
+        const originalVariables = originalPou.interface?.variables ?? []
+        const originalInOut = originalVariables.filter((variable) =>
+          ['input', 'output', 'inOut'].includes(variable.class || ''),
+        )
+
+        const currentVariables = variant.variables.filter(
+          (variable) =>
+            ['input', 'output', 'inOut'].includes(variable.class || '') &&
+            !['OUT', 'EN', 'ENO'].includes(variable.name),
+        )
+
+        const formatVariable = (variable: {
+          name: string
+          class?: string
+          type: { definition: string; value: string }
+        }) => `${variable.name}|${variable.class}|${variable.type.definition}|${variable.type.value?.toLowerCase()}`
+
+        if (originalPou.pouType === 'function') {
+          const outVariable = variant.variables.find((v) => v.name === 'OUT')
+          const outType = outVariable?.type?.value?.toUpperCase()
+          const returnType = originalPou.interface?.returnType?.toUpperCase()
+          if (!outType || !returnType || outType !== returnType) {
+            divergences.push(`${rung.id}:${node.id}`)
+            continue
+          }
+        }
+
+        const currentMap = new Map(currentVariables.map((variable) => [formatVariable(variable), true]))
+        const hasDivergence =
+          originalInOut?.length !== currentVariables.length ||
+          !originalInOut?.every((variable) => currentMap.has(formatVariable(variable))) ||
+          // The declarations can agree while the persisted GEOMETRY is stale: a rung saved
+          // before a VAR_IN_OUT pin became input-only still carries the pin's output side. The
+          // interface never changed, so the comparison above cannot see it.
+          hasLegacyInOutOutputHandle(node)
+
+        if (hasDivergence) {
+          divergences.push(`${rung.id}:${node.id}`)
+        }
+      }
+    }
+
+    return divergences.length > 0 ? divergences : EMPTY_DIVERGENCES
+  }, [flow?.rungs, userLibraries, pous])
+
+  const selectSearchedNode = useCallback(
+    ({ nodeId, rungId }: { nodeId: string; rungId?: string }) => {
+      const rung =
+        rungs.find((candidate) => candidate.id === rungId) ??
+        rungs.find((candidate) => candidate.nodes.some((node) => node.id === nodeId))
+      const node = rung?.nodes.find((candidate) => candidate.id === nodeId)
+      if (!rung || !node) return false
+
+      ladderFlowActions.setSelectedNodes({ nodes: [node], rungId: rung.id, editorName: pouName })
+      return true
+    },
+    [rungs, ladderFlowActions, pouName],
+  )
+  useGraphicalFocus(pouName, selectSearchedNode)
 
   const scrollableRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -90,8 +172,8 @@ export default function LadderEditor() {
    */
   useEffect(() => {
     if (!flowUpdated) return
-    scheduleFlowWriteBack(useOpenPLCStore.getState, pouName, 'ld')
-  }, [flowUpdated])
+    scheduleFlowWriteBack(store.getState, pouName, 'ld')
+  }, [store, flowUpdated])
 
   const getRungPos = (rungId: UniqueIdentifier) => rungs.findIndex((rung) => rung.id === rungId)
 
@@ -183,63 +265,6 @@ export default function LadderEditor() {
     closeModal()
   }
 
-  function getLibraryDivergences() {
-    if (!flow) return []
-
-    const divergences = []
-
-    for (const rung of flow.rungs) {
-      for (const node of rung.nodes) {
-        const variant = (node.data as BlockNodeData<BlockVariant>)?.variant
-        if (!variant) continue
-
-        const libMatch = userLibraries.find((lib) => lib.name === variant.name && lib.type === variant.type)
-        if (!libMatch) continue
-
-        const originalPou = pous.find((pou) => pou.name === libMatch.name)
-        if (!originalPou) continue
-
-        const originalVariables = originalPou.interface?.variables ?? []
-        const originalInOut = originalVariables.filter((variable) =>
-          ['input', 'output', 'inOut'].includes(variable.class || ''),
-        )
-
-        const currentVariables = variant.variables.filter(
-          (variable) =>
-            ['input', 'output', 'inOut'].includes(variable.class || '') &&
-            !['OUT', 'EN', 'ENO'].includes(variable.name),
-        )
-
-        const formatVariable = (variable: {
-          name: string
-          class?: string
-          type: { definition: string; value: string }
-        }) => `${variable.name}|${variable.class}|${variable.type.definition}|${variable.type.value?.toLowerCase()}`
-
-        if (originalPou.pouType === 'function') {
-          const outVariable = variant.variables.find((v) => v.name === 'OUT')
-          const outType = outVariable?.type?.value?.toUpperCase()
-          const returnType = originalPou.interface?.returnType?.toUpperCase()
-          if (!outType || !returnType || outType !== returnType) {
-            divergences.push(`${rung.id}:${node.id}`)
-            continue
-          }
-        }
-
-        const currentMap = new Map(currentVariables.map((variable) => [formatVariable(variable), true]))
-        const hasDivergence =
-          originalInOut?.length !== currentVariables.length ||
-          !originalInOut?.every((variable) => currentMap.has(formatVariable(variable)))
-
-        if (hasDivergence) {
-          divergences.push(`${rung.id}:${node.id}`)
-        }
-      }
-    }
-
-    return divergences
-  }
-
   return (
     <div
       className='relative h-full w-full'
@@ -248,7 +273,12 @@ export default function LadderEditor() {
       }}
       {...hoverHandlers}
     >
-      <div className='h-full w-full overflow-y-auto' ref={scrollableRef} style={{ scrollbarGutter: 'stable' }}>
+      <div
+        className='h-full w-full overflow-y-auto'
+        ref={scrollableRef}
+        style={{ scrollbarGutter: 'stable' }}
+        onContextMenu={placement?.handleContextMenu}
+      >
         <div className='flex flex-1 flex-col gap-4 px-2'>
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
             <div
@@ -283,30 +313,30 @@ export default function LadderEditor() {
             </div>
           </DndContext>
           <CreateRung onClick={handleAddNewRung} />
+          <Portal.Root>
+            {blockElementModal?.open && (
+              <BlockElement
+                onClose={handleModalClose}
+                selectedNode={blockElementModal.data as BlockNode<BlockVariant>}
+                isOpen={blockElementModal.open}
+              />
+            )}
+            {contactElementModal?.open && (
+              <ContactElement
+                onClose={handleModalClose}
+                node={contactElementModal.data as ContactNode}
+                isOpen={contactElementModal.open}
+              />
+            )}
+            {coilElementModal?.open && (
+              <CoilElement
+                onClose={handleModalClose}
+                node={coilElementModal.data as CoilNode}
+                isOpen={coilElementModal.open}
+              />
+            )}
+          </Portal.Root>
         </div>
-        <Portal.Root>
-          {blockElementModal?.open && (
-            <BlockElement
-              onClose={handleModalClose}
-              selectedNode={blockElementModal.data as BlockNode<BlockVariant>}
-              isOpen={blockElementModal.open}
-            />
-          )}
-          {contactElementModal?.open && (
-            <ContactElement
-              onClose={handleModalClose}
-              node={contactElementModal.data as ContactNode}
-              isOpen={contactElementModal.open}
-            />
-          )}
-          {coilElementModal?.open && (
-            <CoilElement
-              onClose={handleModalClose}
-              node={coilElementModal.data as CoilNode}
-              isOpen={coilElementModal.open}
-            />
-          )}
-        </Portal.Root>
       </div>
       <ZoomControls zoomLevel={zoomLevel} onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={zoomReset} />
     </div>

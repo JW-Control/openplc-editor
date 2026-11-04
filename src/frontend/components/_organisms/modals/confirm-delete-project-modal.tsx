@@ -19,6 +19,8 @@
  * is warranted.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import { useProject } from '../../../../middleware/shared/providers'
 import { WarningIcon } from '../../../assets/icons/interface/Warning'
 import { useOpenPLCStore } from '../../../store'
@@ -61,14 +63,14 @@ const ConfirmDeleteProjectModal = ({ isOpen, ...rest }: ConfirmDeleteProjectModa
 
     if (!result.success) {
       toast({
-        title: 'Could not delete the project',
+        title: tr('Could not delete the project'),
         description: result.error ?? `Failed to delete "${target.projectName}".`,
         variant: 'fail',
       })
     } else {
       toast({
-        title: 'Project deleted',
-        description: `"${target.projectName}" was removed from disk.`,
+        title: tr('Project deleted'),
+        description: tr('"{{projectName}}" was removed from disk.', { projectName: target.projectName }),
         variant: 'default',
       })
     }
@@ -92,12 +94,12 @@ const ConfirmDeleteProjectModal = ({ isOpen, ...rest }: ConfirmDeleteProjectModa
       }}
       {...rest}
     >
-      <ModalContent className='flex max-h-96 w-[340px] select-none flex-col items-center justify-evenly rounded-lg'>
+      <ModalContent className='flex w-[340px] select-none flex-col items-center justify-evenly rounded-lg'>
         <div className='flex select-none flex-col items-center gap-5'>
           <WarningIcon className='mt-2 h-[73px] w-[73px]' />
           <div className='flex flex-col gap-2'>
             <p className='text-m w-full text-center font-bold text-gray-600 dark:text-neutral-100'>
-              Delete this project permanently?
+              {tr('Delete this project permanently?')}
             </p>
             <p className='w-full break-all text-center text-xs text-gray-500 dark:text-neutral-400'>
               {target?.projectName ?? 'project'}
@@ -106,7 +108,7 @@ const ConfirmDeleteProjectModal = ({ isOpen, ...rest }: ConfirmDeleteProjectModa
               {target?.projectPath ?? ''}
             </p>
             <p className='w-full text-center text-xs text-gray-500 dark:text-neutral-400'>
-              The entire project directory will be removed from disk. This cannot be undone.
+              {tr('The entire project directory will be removed from disk. This cannot be undone.')}
             </p>
           </div>
           <div className='flex w-[220px] flex-col gap-1 space-y-2 text-sm'>
@@ -114,13 +116,13 @@ const ConfirmDeleteProjectModal = ({ isOpen, ...rest }: ConfirmDeleteProjectModa
               onClick={() => void handleConfirm()}
               className='w-full rounded-lg bg-brand px-4 py-2 text-center font-medium text-white'
             >
-              Delete project
+              {tr('Delete project')}
             </button>
             <button
               onClick={() => closeModal()}
               className='w-full rounded-md bg-neutral-100 px-4 py-2 font-medium dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </div>

@@ -25,7 +25,6 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
     close: {
       window: false,
       app: false,
-      appDarwin: false,
     },
     // PLC Logs
     isPlcLogsVisible: false,
@@ -49,17 +48,19 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
     debugExpandedNodes: new Map(),
     fbDebugInstances: new Map(),
     fbSelectedInstance: new Map(),
+    debugHarness: null,
     debugLocalMd5: null,
     debugGraphList: [],
     debugDataStale: false,
     debugMd5Mismatch: null,
-    debugConnectionType: null,
     debugTargetEndian: 'le',
     // Project loading state
     isProjectLoading: false,
     projectLoadingMessage: '',
     // Persist-permission flag (backend write access on the open project)
     canEdit: true,
+    autoSaveOnBuild: true,
+    isEphemeralProject: false,
   },
 
   workspaceActions: {
@@ -88,13 +89,6 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
       setState(
         produce(({ workspace }: WorkspaceSlice) => {
           workspace.close.app = value
-        }),
-      )
-    },
-    setCloseAppDarwin: (value) => {
-      setState(
-        produce(({ workspace }: WorkspaceSlice) => {
-          workspace.close.appDarwin = value
         }),
       )
     },
@@ -155,8 +149,14 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
     clearWorkspace: () => {
       setState(
         produce(({ workspace }: WorkspaceSlice) => {
+          // A retrieved project's ephemeral marker belongs to the project, not
+          // to the session. Leaving it set would make the NEXT project opened
+          // refuse to save for a reason that no longer applies.
+          workspace.isEphemeralProject = false
           workspace.editingState = 'initial-state'
           workspace.selectedProjectTreeLeaf = { label: '', type: null }
+          workspace.isCollapsed = false
+          workspace.isModalOpen = []
           workspace.isDebuggerVisible = false
           workspace.debuggerTargetIp = null
           workspace.debugCContent = null
@@ -169,11 +169,11 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
           workspace.debugExpandedNodes = new Map()
           workspace.fbDebugInstances = new Map()
           workspace.fbSelectedInstance = new Map()
+          workspace.debugHarness = null
           workspace.debugLocalMd5 = null
           workspace.debugGraphList = []
           workspace.debugDataStale = false
           workspace.debugMd5Mismatch = null
-          workspace.debugConnectionType = null
           workspace.debugTargetEndian = 'le'
           workspace.isPlcLogsVisible = false
           workspace.plcLogs = ''
@@ -186,6 +186,7 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
           workspace.isProjectLoading = false
           workspace.projectLoadingMessage = ''
           workspace.canEdit = true
+          workspace.autoSaveOnBuild = true
         }),
       )
     },
@@ -338,6 +339,13 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
         }),
       )
     },
+    setDebugHarness: (harness) => {
+      setState(
+        produce(({ workspace }: WorkspaceSlice) => {
+          workspace.debugHarness = harness
+        }),
+      )
+    },
     setFbSelectedInstance: (fbTypeName: string, key: string) => {
       setState(
         produce(({ workspace }: WorkspaceSlice) => {
@@ -373,13 +381,6 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
         }),
       )
     },
-    setDebugConnectionType: (connectionType) => {
-      setState(
-        produce(({ workspace }: WorkspaceSlice) => {
-          workspace.debugConnectionType = connectionType
-        }),
-      )
-    },
     setDebugTargetEndian: (endian) => {
       setState(
         produce(({ workspace }: WorkspaceSlice) => {
@@ -402,11 +403,11 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
           workspace.debugExpandedNodes = new Map()
           workspace.fbDebugInstances = new Map()
           workspace.fbSelectedInstance = new Map()
+          workspace.debugHarness = null
           workspace.debugLocalMd5 = null
           workspace.debugGraphList = []
           workspace.debugDataStale = false
           workspace.debugMd5Mismatch = null
-          workspace.debugConnectionType = null
           workspace.debugTargetEndian = 'le'
         }),
       )
@@ -443,6 +444,20 @@ const createWorkspaceSlice: StateCreator<WorkspaceSlice, [], [], WorkspaceSlice>
       setState(
         produce(({ workspace }: WorkspaceSlice) => {
           workspace.canEdit = value
+        }),
+      )
+    },
+    setAutoSaveOnBuild: (value: boolean) => {
+      setState(
+        produce(({ workspace }: WorkspaceSlice) => {
+          workspace.autoSaveOnBuild = value
+        }),
+      )
+    },
+    setIsEphemeralProject: (value: boolean) => {
+      setState(
+        produce(({ workspace }: WorkspaceSlice) => {
+          workspace.isEphemeralProject = value
         }),
       )
     },

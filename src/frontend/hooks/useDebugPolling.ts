@@ -17,75 +17,21 @@
  * - Diagram/source scan results are cached per {pouName, language, fbContext}
  *   since the editor is read-only during debug
  *
- * Polling intervals:
- * - Modbus RTU / simulator: 50ms   (no network; keep the UI snappy)
- * - Web HTTP fallback:      1000ms  (WebRTC failed; each poll is a slow
- *                                    orchestrator round-trip, so back off)
- * - Everything else:        200ms   (general purpose — TCP / WebSocket /
- *                                    web WebRTC data channel)
+ * Batch size and poll interval both come from the session's medium — see
+ * `DEBUG_MEDIUM_PROFILE`.
  */
 
 import { useCallback, useEffect, useRef } from 'react'
 
-import type { DebugConnectionType, DebugTreeNode } from '../../middleware/shared/ports/types'
+import type { DebugTreeNode } from '../../middleware/shared/ports/types'
 import { useCapabilities, useDebugger } from '../../middleware/shared/providers'
-import { openPLCStoreBase, useOpenPLCStore } from '../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../store'
+import { DEBUG_MEDIUM_PROFILE, debugProfileFor, DEFAULT_DEBUG_MEDIUM } from '../utils/debug-medium-profile'
 import { buildActiveIndexSet } from '../utils/debug-polling-filter'
-import { applySwapToVariableBytes } from '../utils/endian'
-import { getTypeSizeByName, parseValueByTypeName } from '../utils/variable-sizes'
+import { walkDebugResponse } from '../utils/debug-response-walker'
 
-/** Polling interval for transports with serial framing (RTU / simulator). */
-const RTU_POLL_INTERVAL_MS = 50
-/** Polling interval for higher-bandwidth transports (TCP / WebSocket). */
-const DEFAULT_POLL_INTERVAL_MS = 200
-/** Polling interval for the web HTTP fallback (WebRTC unavailable): each
- *  poll is a full orchestrator `run_command` round-trip, so we slow right
- *  down to avoid hammering the edge API / runtime. */
-const HTTP_FALLBACK_POLL_INTERVAL_MS = 1000
-
-// Batch size is transport-dependent. The wire request packs 3 bytes per
-// variable (arr:u8 + elem:u16); the response packs raw type-sized values
-// after a small header. The right ceiling is set by the transport's
-// frame budget and the runtime's MAX_DEBUG_FRAME — never the target
-// board, since the same board can run over RTU or TCP depending on the
-// user's communication preferences.
-//
-// Modbus RTU             : capped at 19 so the REQUEST stays ≤63 bytes and
-//                          fits in a single 64-byte USB-CDC packet. A 20-var
-//                          request is 6 + 3·20 = 66 bytes, which a USB-CDC
-//                          target (e.g. SAMD21 / P1AM-100) receives split
-//                          across two USB packets; older firmware whose serial
-//                          framer can't reassemble a multi-packet request then
-//                          drops it. Newer firmware (length-aware handle_serial)
-//                          handles any size, but 19 keeps us compatible with
-//                          field devices on both. 19·3 + 6 = 63 ≤ 64.
-// Modbus TCP             : Arduino sketch's MAX_MB_FRAME caps it; 60 is
-//                          well within the headroom.
-// WebSocket (Runtime v4) : Linux runtime's MAX_DEBUG_FRAME=4096; ~500
-//                          vars fits comfortably with room for value
-//                          bytes. Anything bigger is unusual and the
-//                          ERROR_OUT_OF_MEMORY fallback halves us back
-//                          down to a safe size.
-// Simulator              : virtual serial port mirrors the RTU framing,
-//                          so it shares the RTU ceiling.
-const RTU_BATCH_SIZE = 19
-const TCP_BATCH_SIZE = 60
-const WEBSOCKET_BATCH_SIZE = 500
+/** Floor for the adaptive batch shrink below — a batch of one still makes progress. */
 const MIN_BATCH_SIZE = 2
-
-function batchSizeForTransport(transport: DebugConnectionType | null): number {
-  switch (transport) {
-    case 'websocket':
-      return WEBSOCKET_BATCH_SIZE
-    case 'rtu':
-    case 'simulator':
-      return RTU_BATCH_SIZE
-    case 'tcp':
-    case null:
-    default:
-      return TCP_BATCH_SIZE
-  }
-}
 
 interface LeafMeta {
   compositeKey: string
@@ -135,17 +81,11 @@ export interface UseDebugPollingOptions {
 }
 
 export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void {
+  const store = useOpenPLCStoreApi()
   const debuggerPort = useDebugger()
   const capabilities = useCapabilities()
   const isDebuggerVisible = useOpenPLCStore((state) => state.workspace.isDebuggerVisible)
   const { workspaceActions, consoleActions } = useOpenPLCStore()
-  // Web-only: which transport the debug session is actually running over.
-  // 'http' means WebRTC is unavailable and every poll is a slow
-  // orchestrator round-trip — so we back the cadence off (see below).
-  // On the desktop editor this is the unused 'http' default; the
-  // `!isNativeApplication` guard keeps the editor's real TCP/WebSocket
-  // transports on the standard 200ms regardless.
-  const sessionDebugTransport = useOpenPLCStore((state) => state.session.debugTransport)
 
   // Targeted selectors for active-index cache invalidation.
   // These only change on user interaction (not every poll cycle).
@@ -162,10 +102,9 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
   const batchOffsetRef = useRef(0)
   const isPollingRef = useRef(false)
 
-  // Dynamic batch size — overwritten with the transport-specific
-  // ceiling on session start; halves on ERROR_OUT_OF_MEMORY and
-  // resets on the next session start.
-  const batchSizeRef = useRef(TCP_BATCH_SIZE)
+  // Dynamic batch size — overwritten with the medium's ceiling on session start;
+  // halves on ERROR_OUT_OF_MEMORY and resets on the next session start.
+  const batchSizeRef = useRef(DEBUG_MEDIUM_PROFILE[DEFAULT_DEBUG_MEDIUM].batchSize)
 
   // Full leaf index→metadata map — computed once when debugger starts.
   // One index → many leaves (a shared global appears under each POU's key).
@@ -220,7 +159,7 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
 
     // Use cached active indexes — only rebuild when invalidation triggers change
     if (!activeIndexesRef.current) {
-      const state = openPLCStoreBase.getState()
+      const state = store.getState()
       const { activeIndexes, cacheResult } = buildActiveIndexSet(state, allLeaves, visibleVarsCacheRef.current)
       if (cacheResult !== visibleVarsCacheRef.current) {
         visibleVarsCacheRef.current = cacheResult
@@ -250,7 +189,6 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
       currentBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(currentBatchSize / 2))
       batchSizeRef.current = currentBatchSize
       consoleActions.addLog({
-        id: crypto.randomUUID(),
         level: 'warning',
         message: `Reduced debug batch size to ${currentBatchSize} due to runtime memory error.`,
       })
@@ -264,7 +202,7 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
 
     // Update stale data tracking
     lastResponseTimestampRef.current = Date.now()
-    if (openPLCStoreBase.getState().workspace.debugDataStale) {
+    if (store.getState().workspace.debugDataStale) {
       workspaceActions.setDebugDataStale(false)
     }
 
@@ -277,10 +215,9 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
         debugBoolValues: currentBool,
         debugNonBoolValues: currentNonBool,
         debugTargetEndian,
-      } = openPLCStoreBase.getState().workspace
+      } = store.getState().workspace
       const changedBool = new Map<string, string>()
       const changedNonBool = new Map<string, string>()
-      let bufferOffset = 0
 
       // Wire format note: result.lastIndex is the runtime's last_req_idx —
       // a 0-based POSITION INTO THE REQUEST LIST, not a variable index.
@@ -290,80 +227,50 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
       // collapse the throughput to one variable per poll, which makes
       // related variables visibly desync as the round-robin sweeps.
       //
-      // `loopReachedEnd` records whether the loop walked the full batch
+      // `reachedEnd` records whether the walk covered the full batch
       // before exiting.  The early-exit paths below (bounds check, lastIndex
       // cap) leave `pos` pointing at the FIRST unprocessed slot, so we
       // capture that to advance the round-robin offset by exactly the
       // positions the editor actually consumed.  See the offset-advancement
       // block below this loop for why naive use of `lastIndex+1` strands
       // the tail of the active set.
-      let positionsConsumed = 0
-      let loopReachedEnd = true
-      for (let pos = 0; pos < batch.length; pos++) {
-        if (result.lastIndex !== undefined && pos > result.lastIndex) {
-          // Runtime processed fewer positions than the request; subsequent
-          // slots are valid but unread by the runtime, so they are also
-          // unread by us.  `positionsConsumed = pos` reflects exactly how
-          // far the runtime got.
-          loopReachedEnd = false
-          break
-        }
-
-        const index = batch[pos]
-        const metas = allLeaves.get(index)
-        if (!metas || metas.length === 0) {
-          // No leaf metadata — the runtime still consumed the position
-          // (it doesn't know our index→type map).  Count it consumed and
-          // press on; the value bytes for this slot are forfeit.
-          positionsConsumed = pos + 1
-          continue
-        }
-
-        // Every leaf at one index is the same underlying variable/address, so
-        // they share type/size; parse once off the first, then fan the value
-        // out to every composite key (a shared global lives under each POU's).
-        const meta = metas[0]
-        const typeSize = getTypeSizeByName(meta.type)
-        if (bufferOffset + typeSize > responseBuffer.length) {
-          // Response buffer ran out before we reached every position the
-          // runtime claims to have processed.  Stop here; do NOT advance
-          // past `pos`.  The next poll cycle retries from this same slot
-          // (round-robin offset += positionsConsumed below) so variables
-          // sitting at the tail of the active set still get their reads
-          // — which is the entire reason this is structured around
-          // `positionsConsumed` rather than `lastIndex+1`.
-          loopReachedEnd = false
-          break
-        }
-
-        const isBool = meta.type === 'BOOL'
-
-        // Wire bytes arrive in the target's native byte order; the
-        // internal codec below (parseValueByTypeName → DataView.getFloat32
-        // with littleEndian=true) is LE-only.  Normalise here when
-        // talking to a BE target.  No-op on LE (the common case).
-        applySwapToVariableBytes(responseBuffer, bufferOffset, typeSize, meta.type, debugTargetEndian)
-
-        try {
-          const { value, bytesRead } = parseValueByTypeName(responseBuffer, bufferOffset, meta.type)
-          // Translate enum integers to member names so every consumer
-          // (watch panel, ladder, FBD, hover) reads the same display value.
+      // The positional walk itself lives in `utils/debug-response-walker`, shared
+      // with the headless CLI's debug session: `lastIndex` handling, the
+      // consumed-but-undecodable slot, the short-buffer stop and the endian swap
+      // are all silent-corruption bugs when they differ between callers. What
+      // stays here is what is genuinely this caller's: enum member names and the
+      // fan-out to every composite key sharing an address.
+      const walk = walkDebugResponse({
+        requested: batch,
+        payload: responseBuffer,
+        lastIndex: result.lastIndex,
+        endian: debugTargetEndian,
+        // Resolved ONCE per position, and carried to `emit`/`onError` by the
+        // walk. The leaves at one index are the same underlying variable and
+        // address, so they share type and size.
+        typeOf: (index) => {
+          const metas = allLeaves.get(index)
+          return metas && metas.length > 0 ? { type: metas[0].type, meta: metas } : undefined
+        },
+        emit: ({ type, value, meta: metas }) => {
+          // Translate enum integers to member names so every consumer (watch
+          // panel, ladder, FBD, hover) reads the same display value.
           // Out-of-range falls back to the raw integer.
-          const stored = meta.enumValues !== undefined ? (meta.enumValues[Number(value)] ?? value) : value
-          const current = isBool ? currentBool : currentNonBool
-          const changed = isBool ? changedBool : changedNonBool
-          // Fan out to every composite key sharing this address (shared globals).
+          const enumValues = metas[0].enumValues
+          const stored = enumValues !== undefined ? (enumValues[Number(value)] ?? value) : value
+          const changed = type === 'BOOL' ? changedBool : changedNonBool
+          const current = type === 'BOOL' ? currentBool : currentNonBool
           for (const m of metas) {
             if (current.get(m.compositeKey) !== stored) changed.set(m.compositeKey, stored)
           }
-          bufferOffset += bytesRead
-        } catch {
-          const changed = isBool ? changedBool : changedNonBool
+        },
+        onError: ({ type, meta: metas }) => {
+          const changed = type === 'BOOL' ? changedBool : changedNonBool
           for (const m of metas) changed.set(m.compositeKey, 'ERR')
-          bufferOffset += typeSize
-        }
-        positionsConsumed = pos + 1
-      }
+        },
+      })
+      const positionsConsumed = walk.positionsConsumed
+      const reachedEnd = walk.reachedEnd
 
       // Advance round-robin offset by what we actually consumed.
       //
@@ -384,7 +291,7 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
       // to runtime's lastIndex+1 so positions the runtime skipped
       // (var_size == 0, e.g. STRING stubs) still advance us.  Otherwise
       // honor positionsConsumed so unread positions get retried.
-      if (loopReachedEnd) {
+      if (reachedEnd) {
         itemsProcessed = result.lastIndex !== undefined ? Math.min(result.lastIndex + 1, batch.length) : batch.length
       } else {
         itemsProcessed = positionsConsumed
@@ -400,42 +307,35 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
     if (itemsProcessed > 0) {
       batchOffsetRef.current = (batchOffset + itemsProcessed) % activeIndexes.length
     }
-  }, [debuggerPort, getAllLeaves, workspaceActions, consoleActions])
+  }, [store, debuggerPort, getAllLeaves, workspaceActions, consoleActions])
 
   // Ref-based poll so the interval never resets due to callback identity changes
   const pollRef = useRef(pollVariables)
   pollRef.current = pollVariables
 
-  // The transport in use for the current debug session. This drives both
-  // the batch size and the poll interval — neither should be conditioned
-  // on board target since the same board can speak RTU, TCP, etc. The
-  // workspace activity bar sets this when the debug session connects.
-  const debugConnectionType = useOpenPLCStore((state) => state.workspace.debugConnectionType)
+  // The medium this session is actually riding, published by the connection
+  // manager — the one place that knows. Read LIVE rather than latched at session
+  // start, because on web it can change mid-session: a WebRTC data channel that
+  // drops falls back to the Edge relay, and the cadence has to follow it down.
+  const debugMedium = useOpenPLCStore((state) => state.deviceConnection.debugTransport)
 
   // Set up polling interval when debugger becomes visible.
   useEffect(() => {
     if (isDebuggerVisible) {
+      const profile = debugProfileFor(debugMedium)
+
       // Reset state on session start
-      batchSizeRef.current = batchSizeForTransport(debugConnectionType)
+      batchSizeRef.current = profile.batchSize
       batchOffsetRef.current = 0
       lastResponseTimestampRef.current = 0
       activeIndexesRef.current = null
       visibleVarsCacheRef.current = null
 
-      // RTU framing also covers the simulator's virtual serial port —
-      // both need the tighter cadence to keep up with toggling state.
-      const usesRtuFraming = debugConnectionType === 'rtu' || debugConnectionType === 'simulator'
-      // Web HTTP fallback: WebRTC unavailable, so reads go over the
-      // orchestrator proxy (high latency) — slow the cadence right down.
-      // Gated on `!isNativeApplication` so the desktop editor's real
-      // TCP/WebSocket transports never hit this branch (their
-      // `session.debugTransport` is an unused 'http' default).
-      const usesHttpFallback = !capabilities.isNativeApplication && sessionDebugTransport === 'http'
-      const pollIntervalMs = usesRtuFraming
-        ? RTU_POLL_INTERVAL_MS
-        : usesHttpFallback
-          ? HTTP_FALLBACK_POLL_INTERVAL_MS
-          : DEFAULT_POLL_INTERVAL_MS
+      // One lookup, both axes. The medium already distinguishes a peer-to-peer
+      // data channel from the Edge relay, so nothing here needs to ask which
+      // platform it is running on.
+      const pollIntervalMs =
+        debugMedium === 'http-relay' ? capabilities.debugRelayPollIntervalMs : profile.pollIntervalMs
 
       // Fire first poll immediately, then schedule at fixed rate
       // Skip tick if previous poll is still in progress (isPolling guard)
@@ -483,17 +383,10 @@ export function useDebugPolling({ debugTreesRef }: UseDebugPollingOptions): void
       visibleVarsCacheRef.current = null
       batchOffsetRef.current = 0
     }
-    // `sessionDebugTransport` + `capabilities.isNativeApplication` are
-    // in the deps so the cadence re-evaluates if WebRTC drops to the HTTP
-    // fallback (or recovers) mid-session — the effect tears down the old
-    // interval and restarts at the new rate.
-  }, [
-    isDebuggerVisible,
-    debugConnectionType,
-    sessionDebugTransport,
-    capabilities.isNativeApplication,
-    workspaceActions,
-  ])
+    // `debugMedium` is in the deps so the cadence re-evaluates when a WebRTC data
+    // channel drops to the Edge relay (or recovers) mid-session — the effect tears
+    // down the old interval and restarts at the new rate.
+  }, [isDebuggerVisible, debugMedium, capabilities.debugRelayPollIntervalMs, workspaceActions])
 
   // Clean up on unmount
   useEffect(() => {

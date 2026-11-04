@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Variable resolution for the graphical (LD / FBD) editors, backed by the
  * STruC++ LSP.
@@ -20,20 +20,16 @@
  */
 
 import type { PLCVariable } from '../../middleware/shared/ports/types'
-import { getVariableRestrictionType, validateVariableType } from '../utils/PLC/validate-variable-type'
-import { getScopedQueryApi } from './st-lsp'
-
-/**
- * LSP `CompletionItemKind`s that denote a value symbol bindable to a box.
- * strucpp emits `Variable` (6) for in-scope variables and FUNCTION_BLOCK
- * instance members (`TON0.Q`), but `Field` (5) for STRUCT members
- * (`my_struct.field`). Both must be accepted, or struct-member access never
- * autocompletes or validates.
- */
-const LSP_KIND_VARIABLE = 6
-const LSP_KIND_FIELD = 5
-const isValueCompletionKind = (kind: number | undefined): boolean =>
-  kind === LSP_KIND_VARIABLE || kind === LSP_KIND_FIELD
+import type { OpenPLCStore } from '../store'
+import type { BoundBlockPin } from '../utils/PLC/validate-variable-type'
+import {
+  getVariableRestrictionType,
+  resolveNewVariableType,
+  validateVariableType,
+} from '../utils/PLC/validate-variable-type'
+import { collectDeclaredRoots, rootIdentifierOf } from './project-scope-roots'
+// The leaf, not the `st-lsp` barrel: the barrel pulls ESM-only LSP packages that Jest cannot transform.
+import { getScopedQueryApi, isValueCompletionKind, splitExpression } from './st-lsp/scoped-query'
 
 /** Max instance/struct variables to drill into when a type-filtered search has no direct hits. */
 const SCOPE_EXPAND_LIMIT = 8
@@ -64,26 +60,6 @@ export interface ScopeCompletion {
  */
 export type ScopeTypeResult = { status: 'unavailable' } | { status: 'unknown' } | { status: 'resolved'; type: string }
 
-/** Split `value` into the completion anchor (up to and including the last `.`) and the trailing segment. */
-function splitExpression(value: string): { anchor: string; segment: string } {
-  const lastDot = value.lastIndexOf('.')
-  if (lastDot < 0) return { anchor: '', segment: value }
-  return { anchor: value.slice(0, lastDot + 1), segment: value.slice(lastDot + 1) }
-}
-
-/** Strip a trailing array subscript (`foo[3]` → `foo`). Returns the name and whether a subscript was present. */
-function stripSubscript(segment: string): { name: string; indexed: boolean } {
-  const bracket = segment.indexOf('[')
-  if (bracket < 0) return { name: segment, indexed: false }
-  return { name: segment.slice(0, bracket), indexed: true }
-}
-
-/** Pull the element type out of an `ARRAY [..] OF <type>` detail string. */
-function arrayElementType(type: string): string | undefined {
-  const match = type.match(/\bOF\s+([A-Za-z_][A-Za-z0-9_]*)/i)
-  return match ? match[1] : undefined
-}
-
 /**
  * Autocomplete candidates for `value` typed into a box in `pouName`'s
  * scope. `value` is the full current box text (e.g. `TON0.Q`, `mo`).
@@ -91,6 +67,7 @@ function arrayElementType(type: string): string | undefined {
  * compatible with it are returned. Returns [] when the LSP is unavailable.
  */
 export async function getScopeCompletions(
+  store: OpenPLCStore,
   pouName: string,
   value: string,
   expectedType?: string,
@@ -99,9 +76,19 @@ export async function getScopeCompletions(
   if (!api) return []
 
   const { anchor, segment } = splitExpression(value)
+  // Library symbols share the scope; only what the project declared may bind.
+  const roots = collectDeclaredRoots(store.getState().project.data, pouName)
+  if (anchor && !roots.has(rootIdentifierOf(anchor))) return []
+
   const items = await api.completeInScope(pouName, anchor)
   const needle = segment.toLowerCase()
-  const matching = items.filter((item) => isValueCompletionKind(item.kind) && item.label.toLowerCase().includes(needle))
+  const matching = items.filter(
+    (item) =>
+      isValueCompletionKind(item.kind) &&
+      item.label.toLowerCase().includes(needle) &&
+      // Under an anchor the root was checked above; bare labels are the root.
+      (anchor !== '' || roots.has(rootIdentifierOf(item.label))),
+  )
 
   const direct = matching
     .filter((item) => {
@@ -121,7 +108,8 @@ export async function getScopeCompletions(
   // BOOL). Drill one level into the matching instance/struct variables and
   // surface their compatible members. Gated on "no direct hits" + capped, so
   // the extra LSP round-trips stay rare and bounded.
-  if (!expectedType || direct.length > 0) return direct
+  // Only an unanchored empty box names no instance to drill into; `GVL.` names one.
+  if (!expectedType || direct.length > 0 || (!anchor && !segment.trim())) return direct
 
   const expandable = matching.filter((item) => item.type && isDerivedType(item.type)).slice(0, SCOPE_EXPAND_LIMIT)
   const expanded = await Promise.all(
@@ -138,8 +126,14 @@ export async function getScopeCompletions(
 
 /**
  * Resolve the IEC type of `expression` in `pouName`'s scope. Handles bare
- * identifiers, member chains (`TON0.Q`, `s.a.b`) and 1-D array element
- * access (`arr[3]`). See {@link ScopeTypeResult} for the tri-state result.
+ * identifiers, member chains (`TON0.Q`, `s.a.b`) and array element access
+ * (`arr[3]`, `grid[1,2]`). See {@link ScopeTypeResult} for the tri-state result.
+ *
+ * Array elements need no special casing: strucpp lists each in-bounds element
+ * as its own symbol typed as the element type, so `arr[3]` matches by label
+ * like any other. That also makes the bounds authoritative — `arr[99]` simply
+ * isn't a symbol, so it resolves `unknown` and the box is flagged, which a
+ * client-side subscript-stripping heuristic could never detect.
  */
 export async function resolveScopeExpressionType(pouName: string, expression: string): Promise<ScopeTypeResult> {
   const api = getScopedQueryApi()
@@ -154,16 +148,11 @@ export async function resolveScopeExpressionType(pouName: string, expression: st
   // context yet — treat as unavailable rather than flag a false invalid.
   if (items.length === 0) return { status: 'unavailable' }
 
-  const { name, indexed } = stripSubscript(segment)
   const match = items.find(
-    (item) => isValueCompletionKind(item.kind) && item.label.toLowerCase() === name.toLowerCase(),
+    (item) => isValueCompletionKind(item.kind) && item.label.toLowerCase() === segment.toLowerCase(),
   )
   if (!match || !match.type) return { status: 'unknown' }
 
-  if (indexed) {
-    const element = arrayElementType(match.type)
-    return element ? { status: 'resolved', type: element } : { status: 'unknown' }
-  }
   return { status: 'resolved', type: match.type }
 }
 
@@ -183,19 +172,25 @@ export async function isExpressionValidForType(
   return validateVariableType(result.type, expectedType).isValid
 }
 
-/** Concrete `{definition, value}` to type a brand-new variable created from a box's expected type. */
-export function newVariableTypeForExpected(expectedType: string | undefined): {
+/**
+ * Concrete `{definition, value}` to type a brand-new variable created from a
+ * box's expected type. `boundSiblings` are the pins of the same block instance
+ * that already have a variable on them — a generic pin (`ANY`, `ANY_NUM`, …)
+ * adopts the concrete type the block resolved to instead of guessing (#479).
+ * Decision logic lives in {@link resolveNewVariableType} so it stays testable.
+ */
+export function newVariableTypeForExpected(
+  expectedType: string | undefined,
+  boundSiblings: BoundBlockPin[] = [],
+): {
   definition: PLCVariable['type']['definition']
   value: string
 } {
-  if (!expectedType) return { definition: 'base-type', value: 'dint' }
-  const restriction = getVariableRestrictionType(expectedType)
-  const value = restriction.values
-    ? Array.isArray(restriction.values)
-      ? restriction.values[0]
-      : restriction.values
-    : 'dint'
-  return { definition: (restriction.definition as PLCVariable['type']['definition']) ?? 'base-type', value }
+  const resolved = resolveNewVariableType(expectedType, boundSiblings)
+  return {
+    definition: (resolved.definition as PLCVariable['type']['definition']) ?? 'base-type',
+    value: resolved.value,
+  }
 }
 
 /** Build the variable reference a graphical node stores when an LSP completion is chosen. */
