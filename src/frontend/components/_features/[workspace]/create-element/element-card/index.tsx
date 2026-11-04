@@ -1,21 +1,16 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 import * as Popover from '@radix-ui/react-popover'
-
-import type { PLCDataType } from '../../../../../../middleware/shared/ports/types'
-import { ArrowIcon } from '../../../../../assets/icons/interface/Arrow'
-import { DatatypeDerivationSources } from '../../../../../data/sources/data-type'
-import { CreatePouSources, PouLanguageSources } from '../../../../../data/sources/POU'
-import { useOpenPLCStore } from '../../../../../store'
-import { InputWithRef } from '../../../../_atoms/input'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../_atoms/select'
-
-type PLCArrayDatatype = Extract<PLCDataType, { derivation: 'array' }>
-type PLCEnumeratedDatatype = Extract<PLCDataType, { derivation: 'enumerated' }>
-type PLCStructureDatatype = Extract<PLCDataType, { derivation: 'structure' }>
+import { tr } from '@root/frontend/locales/tr'
 import { startCase } from 'lodash'
 import { Dispatch, ReactNode, SetStateAction, useState } from 'react'
 import { Controller, SubmitHandler, useForm } from 'react-hook-form'
 
+import { resolveModbusServerProfile } from '../../../../../../middleware/shared/utils/modbus-server-profile'
+import { resolveTargetCapabilities } from '../../../../../../middleware/shared/utils/target-capabilities'
+import { ArrowIcon } from '../../../../../assets/icons/interface/Arrow'
+import { DatatypeDerivationSources } from '../../../../../data/sources/data-type'
+import { CreatePouSources, PouLanguageSources } from '../../../../../data/sources/POU'
+import { useOpenPLCStore } from '../../../../../store'
 import { cn } from '../../../../../utils/cn'
 import {
   isArduinoTarget as checkIsArduinoTarget,
@@ -23,11 +18,13 @@ import {
   isSimulatorTarget,
 } from '../../../../../utils/device'
 import { ConvertToLangShortenedFormat } from '../../../../../utils/formatters/POU'
+import { InputWithRef } from '../../../../_atoms/input'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../_atoms/select'
 import { useToast } from '../../../[app]/toast/use-toast'
 import { validatePouOrDataTypeName } from '../hooks/use-name-validation'
 
 type ElementCardProps = {
-  target: 'function' | 'function-block' | 'program' | 'data-type' | 'server' | 'remote-device'
+  target: 'function' | 'function-block' | 'program' | 'data-type' | 'global-variable-list' | 'server' | 'remote-device'
   closeContainer: Dispatch<SetStateAction<boolean>>
 }
 
@@ -42,6 +39,10 @@ type CreateDataTypeFormProps = {
   derivation: 'array' | 'enumerated' | 'structure'
 }
 
+type CreateGlobalVariableListFormProps = {
+  name: string
+}
+
 type CreateServerFormProps = {
   name: string
   protocol: 'modbus-tcp' | 's7comm' | 'ethernet-ip' | 'opcua'
@@ -53,16 +54,16 @@ type CreateRemoteDeviceFormProps = {
 }
 
 const ServerProtocolSources = [
-  { value: 'modbus-tcp', label: 'Modbus/TCP', disabled: false },
-  { value: 's7comm', label: 'Siemens S7comm', disabled: false },
+  { value: 'modbus-tcp', label: tr('Modbus/TCP'), disabled: false },
+  { value: 's7comm', label: tr('Siemens S7comm'), disabled: false },
   { value: 'opcua', label: 'OPC-UA', disabled: false },
-  { value: 'ethernet-ip', label: 'EtherNet/IP', disabled: true },
+  { value: 'ethernet-ip', label: tr('EtherNet/IP'), disabled: true },
 ] as const
 
 const RemoteDeviceProtocolSources = [
-  { value: 'modbus-tcp', label: 'Modbus', disabled: false },
-  { value: 'ethernet-ip', label: 'EtherNet/IP', disabled: true },
-  { value: 'ethercat', label: 'EtherCAT', disabled: false },
+  { value: 'modbus-tcp', label: tr('Modbus'), disabled: false },
+  { value: 'ethernet-ip', label: tr('EtherNet/IP'), disabled: true },
+  { value: 'ethercat', label: tr('EtherCAT'), disabled: false },
   { value: 'profinet', label: 'PROFINET', disabled: true },
 ] as const
 
@@ -99,12 +100,25 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
     control: datatypeControl,
     register: datatypeRegister,
     handleSubmit: handleSubmitDatatype,
-    /**
-     * TODO: add validation
-     */
-    // setError: datatypeSetError,
+    setError: datatypeSetError,
     formState: { errors: datatypeErrors },
   } = useForm<CreateDataTypeFormProps>()
+
+  // Pre-filled `GVL` because that is what CODESYS's Add Object offers, and a project
+  // converted from one arrives with a list of exactly that name.
+  //
+  // The string is also a sentinel elsewhere: `utils/opcua/resolve-indices.ts` treats
+  // `pouName === 'GVL'` as "the resource's global scope". The two do not meet — the
+  // OPC-UA variable tree is built from `configurations.resource.globalVariables`, which
+  // a list's members are not part of, and a list reaches the compiler as a struct
+  // instance rather than as a scope. Considered and left alone; renaming the sentinel
+  // would break saved OPC-UA node indices for no gain.
+  const {
+    register: globalVariableListRegister,
+    handleSubmit: handleSubmitGlobalVariableList,
+    setError: globalVariableListSetError,
+    formState: { errors: globalVariableListErrors },
+  } = useForm<CreateGlobalVariableListFormProps>({ defaultValues: { name: 'GVL' } })
 
   const {
     control: serverControl,
@@ -125,6 +139,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
   const {
     pouActions: { create },
     datatypeActions: { create: createDatatype },
+    globalVariableListActions: { create: createGlobalVariableList },
     serverActions: { create: createServer },
     remoteDeviceActions: { create: createRemoteDevice },
     deviceAvailableOptions: { availableBoards },
@@ -140,16 +155,65 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
   const isJwplcTarget = deviceBoard.toLowerCase().includes('jwplc') || boardInfoText.includes('jwplc')
   const supportsRemoteDevices = isRuntimeV4 || isSimulator || isJwplcTarget
 
+  // Since 4.3.0 a baremetal board's Modbus is an ordinary `PLCServer`, so the
+  // "+" flow asks for a name and a protocol on every target alike. What the
+  // profile still decides is whether this target serves Modbus at all.
+  const modbusProfile = resolveModbusServerProfile(currentBoardInfo)
+  const targetServesModbus = modbusProfile.transports.length > 0
+
+  // Offering a protocol the target cannot serve is the same defect as hiding
+  // one it can: an Arduino declares `opcuaServer: false, s7Server: false`, and
+  // a server created there would sit in the tree producing nothing. The list
+  // stays whole so the user can see the option and why it is out.
+  const targetCaps = resolveTargetCapabilities(currentBoardInfo)
+  const serverProtocolOptions = ServerProtocolSources.map((protocol) => {
+    if (protocol.disabled) return protocol
+    const unsupported =
+      (protocol.value === 'modbus-tcp' && !targetServesModbus) ||
+      (protocol.value === 's7comm' && !targetCaps.s7Server) ||
+      (protocol.value === 'opcua' && !targetCaps.opcuaServer)
+    return unsupported ? { ...protocol, disabled: true } : protocol
+  })
+
   const handleCreatePou: SubmitHandler<CreatePouFormProps> = (data) => {
     const pouWasCreated = create(data)
     if (!pouWasCreated.ok) {
       pouSetError('name', {
         type: 'already-exists',
+        message: pouWasCreated.message,
       })
-      toast({ title: 'Invalid Pou', description: "You can't create a Pou with this name.", variant: 'fail' })
+      toast({
+        title: tr('Invalid Pou'),
+        description: pouWasCreated.message ?? "You can't create a Pou with this name.",
+        variant: 'fail',
+      })
       return
     }
-    toast({ title: 'Pou created successfully', description: 'The POU has been created', variant: 'default' })
+    toast({ title: tr('Pou created successfully'), description: tr('The POU has been created'), variant: 'default' })
+    closeContainer((prev) => !prev)
+    setIsOpen(false)
+  }
+
+  const handleCreateGlobalVariableList: SubmitHandler<CreateGlobalVariableListFormProps> = (data) => {
+    const created = createGlobalVariableList(data.name)
+    if (!created.ok) {
+      // Carry the reason through. A list occupies two symbols in one namespace —
+      // its own name and `<name>_TYPE` — so the refusal is often about a POU or a
+      // data type, and the generic "already exists" would send the user looking
+      // for a list that isn't there.
+      globalVariableListSetError('name', { type: 'already-exists', message: created.message })
+      toast({
+        title: tr('Invalid global variable list'),
+        description: created.message ?? "You can't create a global variable list with this name.",
+        variant: 'fail',
+      })
+      return
+    }
+    toast({
+      title: tr('Global variable list created'),
+      description: tr('{{name}} has been created', { name: data.name }),
+      variant: 'default',
+    })
     closeContainer((prev) => !prev)
     setIsOpen(false)
   }
@@ -160,35 +224,20 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
   }
 
   const handleCreateDatatype: SubmitHandler<CreateDataTypeFormProps> = (data) => {
-    if (data.derivation === 'array') {
-      const draft = {
-        name: data.name,
-        derivation: data.derivation,
-        baseType: {
-          definition: 'base-type',
-          value: 'BOOL',
-        },
-        initialValue: '',
-        dimensions: [],
-      } as PLCArrayDatatype
-      createDatatype(draft)
-    }
-    if (data.derivation === 'enumerated') {
-      const draft = {
-        name: data.name,
-        derivation: data.derivation,
-        initialValue: '',
-        values: [],
-      } as PLCEnumeratedDatatype
-      createDatatype(draft)
-    }
-    if (data.derivation === 'structure') {
-      const draft = {
-        name: data.name,
-        derivation: data.derivation,
-        variable: [],
-      } as PLCStructureDatatype
-      createDatatype(draft)
+    // Name and derivation only: `datatypeActions.create` builds the datatype itself
+    // through `createDatatypeObject`, so any seed passed here would be discarded.
+    const created = createDatatype({ name: data.name, derivation: data.derivation })
+    if (!created.ok) {
+      // The refusal is often about a POU or a global variable list, not another data
+      // type, so the reason has to reach the user — the form used to close on failure
+      // with nothing created and nothing said.
+      datatypeSetError('name', { type: 'already-exists', message: created.message })
+      toast({
+        title: tr('Invalid data type'),
+        description: created.message ?? "You can't create a data type with this name.",
+        variant: 'fail',
+      })
+      return
     }
     closeContainer((prev) => !prev)
     setIsOpen(false)
@@ -197,10 +246,19 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
   const handleCreateServer: SubmitHandler<CreateServerFormProps> = (data) => {
     const result = createServer({ name: data.name, protocol: data.protocol })
     if (!result.ok) {
-      serverSetError('name', { type: 'already-exists' })
+      serverSetError('name', { type: 'already-exists', message: result.message })
+      toast({
+        title: tr('Server not created'),
+        description: result.message ?? "You can't create a server with this name.",
+        variant: 'fail',
+      })
       return
     }
-    toast({ title: 'Server created successfully', description: 'The server has been created', variant: 'default' })
+    toast({
+      title: tr('Server created successfully'),
+      description: tr('The server has been created'),
+      variant: 'default',
+    })
     closeContainer((prev) => !prev)
     setIsOpen(false)
   }
@@ -208,12 +266,17 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
   const handleCreateRemoteDevice: SubmitHandler<CreateRemoteDeviceFormProps> = (data) => {
     const result = createRemoteDevice({ name: data.name, protocol: data.protocol })
     if (!result.ok) {
-      remoteDeviceSetError('name', { type: 'already-exists' })
+      remoteDeviceSetError('name', { type: 'already-exists', message: result.message })
+      toast({
+        title: tr('Remote device not created'),
+        description: result.message ?? "You can't create a remote device with this name.",
+        variant: 'fail',
+      })
       return
     }
     toast({
-      title: 'Remote device created successfully',
-      description: 'The remote device has been created',
+      title: tr('Remote device created successfully'),
+      description: tr('The remote device has been created'),
       variant: 'default',
     })
     closeContainer((prev) => !prev)
@@ -236,7 +299,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
           className='relative flex h-7 w-full cursor-pointer  items-center justify-between gap-[6px] rounded-md px-[6px] py-[2px] hover:bg-neutral-100 group-aria-[expanded=true]:bg-neutral-100 group-data-[state=open]:bg-neutral-100 dark:hover:bg-neutral-900 dark:group-aria-[expanded=true]:bg-neutral-900 dark:group-data-[state=open]:bg-neutral-900'
         >
           {CreatePouSources[target]}
-          <p className='my-[2px] flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
+          <p className='my-[2px] flex-1 whitespace-nowrap text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
             {startCase(target)}
           </p>
           <ArrowIcon size='md' direction='right' />
@@ -283,12 +346,14 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                         })}
                         id='data-type-name'
                         type='text'
-                        placeholder='Data type name'
+                        placeholder={tr('Data type name')}
                         className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                       />
                       {datatypeErrors.name?.type === 'already-exists' && (
                         <span className='flex-1 text-start font-caption text-cp-xs font-normal text-red-500 opacity-65'>
-                          * data type name already exists
+                          {/* The store's reason when it gave one — it names the POU or list
+                              actually in the way, which the generic wording cannot. */}
+                          * {datatypeErrors.name.message ?? 'data type name already exists'}
                         </span>
                       )}
                       {!datatypeErrors.name && (
@@ -316,7 +381,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                               <SelectTrigger
                                 withIndicator
                                 aria-label='data-type-derivation'
-                                placeholder='Select a derivation'
+                                placeholder={tr('Select a derivation')}
                                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                               />
                               <SelectContent
@@ -353,7 +418,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                           onClick={handleCancelCreateElement}
                         >
-                          Cancel
+                          {tr('Cancel')}
                         </button>
                       </Popover.Close>
                       <button
@@ -362,7 +427,78 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                         )}
                       >
-                        Create
+                        {tr('Create')}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </>
+            ) : target === 'global-variable-list' ? (
+              <>
+                <div
+                  id='global-variable-list-card-label-container'
+                  className='flex h-8 w-full flex-col items-center justify-between'
+                >
+                  <div className='flex w-full select-none items-center gap-2'>
+                    {CreatePouSources[target]}
+                    <p className='my-[2px] flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
+                      {tr('Global Variable List')}
+                    </p>
+                  </div>
+                  <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
+                </div>
+                <div id='global-variable-list-card-form'>
+                  <form
+                    onSubmit={handleSubmitGlobalVariableList(handleCreateGlobalVariableList)}
+                    className='flex h-fit w-full select-none flex-col gap-3'
+                  >
+                    <div id='global-variable-list-name-form-container' className='flex w-full flex-col'>
+                      <label
+                        id='global-variable-list-name-label'
+                        htmlFor='global-variable-list-name'
+                        className='flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'
+                      >
+                        Name:
+                        {globalVariableListErrors.name?.type === 'required' && <span className='text-red-500'>*</span>}
+                      </label>
+                      <InputWithRef
+                        {...globalVariableListRegister('name', { required: true })}
+                        id='global-variable-list-name'
+                        type='text'
+                        placeholder='GVL'
+                        className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
+                      />
+                      {globalVariableListErrors.name?.type === 'already-exists' ? (
+                        <span className='flex-1 text-start font-caption text-cp-xs font-normal text-red-500 opacity-65'>
+                          {/* The store's reason when it gave one — it names the POU or data type
+                              actually in the way, which the generic wording cannot. */}
+                          *{' '}
+                          {globalVariableListErrors.name.message ??
+                            'a global variable list with this name already exists'}
+                        </span>
+                      ) : (
+                        <span className='flex-1 text-start font-caption text-cp-xs font-normal text-neutral-1000 opacity-65 dark:text-neutral-300'>
+                          ** Variables in it are read as {'<name>'}.variable
+                        </span>
+                      )}
+                    </div>
+                    <div id='form-button-container' className='flex w-full justify-between'>
+                      <Popover.Close asChild>
+                        <button
+                          type='button'
+                          className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
+                          onClick={handleCancelCreateElement}
+                        >
+                          {tr('Cancel')}
+                        </button>
+                      </Popover.Close>
+                      <button
+                        type='submit'
+                        className={cn(
+                          'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
+                        )}
+                      >
+                        {tr('Create')}
                       </button>
                     </div>
                   </form>
@@ -379,13 +515,13 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                   </div>
                   <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
                 </div>
-                {!(isRuntimeV4 || isSimulator) ? (
+                {!(isRuntimeV4 || isSimulator || targetServesModbus) ? (
                   <div className='flex flex-col gap-2 py-2'>
                     <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-                      Server configuration is only available for OpenPLC Runtime v4 targets.
+                      {tr('Server configuration is only available for OpenPLC Runtime v4 targets.')}
                     </p>
                     <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-                      Please select OpenPLC Runtime v4 in the Device Configuration to enable this feature.
+                      {tr('Please select OpenPLC Runtime v4 in the Device Configuration to enable this feature.')}
                     </p>
                   </div>
                 ) : (
@@ -410,12 +546,12 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           })}
                           id='server-name'
                           type='text'
-                          placeholder='Server name'
+                          placeholder={tr('Server name')}
                           className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                         />
                         {serverErrors.name?.type === 'already-exists' && (
                           <span className='flex-1 text-start font-caption text-cp-xs font-normal text-red-500 opacity-65'>
-                            * Server name already exists or protocol already in use
+                            * {serverErrors.name.message ?? 'Server name already exists or protocol already in use'}
                           </span>
                         )}
                         <span className='flex-1 text-start font-caption text-cp-xs font-normal text-neutral-1000 opacity-65 dark:text-neutral-300'>
@@ -441,7 +577,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                                 <SelectTrigger
                                   withIndicator
                                   aria-label='server-protocol'
-                                  placeholder='Select a protocol'
+                                  placeholder={tr('Select a protocol')}
                                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                                 />
                                 <SelectContent
@@ -452,7 +588,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                                   align='center'
                                   side='bottom'
                                 >
-                                  {ServerProtocolSources.map((protocol) => {
+                                  {serverProtocolOptions.map((protocol) => {
                                     return (
                                       <SelectItem
                                         key={protocol.value}
@@ -484,7 +620,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                             onClick={handleCancelCreateElement}
                           >
-                            Cancel
+                            {tr('Cancel')}
                           </button>
                         </Popover.Close>
                         <button
@@ -493,7 +629,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                           )}
                         >
-                          Create
+                          {tr('Create')}
                         </button>
                       </div>
                     </form>
@@ -509,7 +645,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                   <div className='flex w-full select-none items-center gap-2'>
                     {CreatePouSources[target]}
                     <p className='my-[2px] flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
-                      Remote Device
+                      {tr('Remote Device')}
                     </p>
                   </div>
                   <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
@@ -517,10 +653,12 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                 {!supportsRemoteDevices ? (
                   <div className='flex flex-col gap-2 py-2'>
                     <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-                      Remote device configuration is available for OpenPLC Runtime v4, Simulator and JWPLC targets.
+                      {tr(
+                        'Remote device configuration is available for OpenPLC Runtime v4, Simulator and JWPLC targets.',
+                      )}
                     </p>
                     <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-                      Please select a compatible target in the Device Configuration to enable this feature.
+                      {tr('Please select a compatible target in the Device Configuration to enable this feature.')}
                     </p>
                   </div>
                 ) : (
@@ -545,12 +683,12 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           })}
                           id='remote-device-name'
                           type='text'
-                          placeholder='Device name'
+                          placeholder={tr('Device name')}
                           className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                         />
                         {remoteDeviceErrors.name?.type === 'already-exists' && (
                           <span className='flex-1 text-start font-caption text-cp-xs font-normal text-red-500 opacity-65'>
-                            * Device name already exists
+                            * {remoteDeviceErrors.name.message ?? 'Device name already exists'}
                           </span>
                         )}
                         <span className='flex-1 text-start font-caption text-cp-xs font-normal text-neutral-1000 opacity-65 dark:text-neutral-300'>
@@ -576,7 +714,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                                 <SelectTrigger
                                   withIndicator
                                   aria-label='remote-device-protocol'
-                                  placeholder='Select a protocol'
+                                  placeholder={tr('Select a protocol')}
                                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                                 />
                                 <SelectContent
@@ -619,7 +757,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                             onClick={handleCancelCreateElement}
                           >
-                            Cancel
+                            {tr('Cancel')}
                           </button>
                         </Popover.Close>
                         <button
@@ -628,7 +766,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                           )}
                         >
-                          Create
+                          {tr('Create')}
                         </button>
                       </div>
                     </form>
@@ -668,12 +806,12 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                         })}
                         id='pou-name'
                         type='text'
-                        placeholder='POU name'
+                        placeholder={tr('POU name')}
                         className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                       />
                       {pouErrors.name?.type === 'already-exists' && (
                         <span className='flex-1 text-start font-caption text-cp-xs font-normal text-red-500 opacity-65'>
-                          * POU name already exists
+                          * {pouErrors.name.message ?? 'POU name already exists'}
                         </span>
                       )}
                       {pouErrors.name?.type === 'validate' && (
@@ -711,7 +849,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                               <SelectTrigger
                                 withIndicator
                                 aria-label='pou-language'
-                                placeholder='Select a language'
+                                placeholder={tr('Select a language')}
                                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                               />
                               <SelectContent
@@ -760,7 +898,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                           onClick={handleCancelCreateElement}
                         >
-                          Cancel
+                          {tr('Cancel')}
                         </button>
                       </Popover.Close>
                       <button
@@ -769,7 +907,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                         )}
                       >
-                        Create
+                        {tr('Create')}
                       </button>
                     </div>
                   </form>

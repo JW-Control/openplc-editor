@@ -12,6 +12,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { MinusIcon } from '@root/frontend/assets/icons/interface/Minus'
 import { PlusIcon } from '@root/frontend/assets/icons/interface/Plus'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import type { InstalledPackage, PackageManifest } from '@root/middleware/shared/ports/types'
 import { usePackages } from '@root/middleware/shared/providers/platform-context'
@@ -106,7 +107,7 @@ const PackageManagerEditor = () => {
   if (!packages) {
     return (
       <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-        Package management is not available on this platform.
+        {tr('Package management is not available on this platform.')}
       </div>
     )
   }
@@ -115,8 +116,12 @@ const PackageManagerEditor = () => {
     <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
       {/* Top tab strip — Installed | Browse Catalog */}
       <div className='flex shrink-0 items-center gap-1 border-b border-neutral-200 px-4 dark:border-neutral-800'>
-        <ViewTab label='Installed' isActive={viewMode === 'installed'} onClick={() => setViewMode('installed')} />
-        <ViewTab label='Browse Catalog' isActive={viewMode === 'catalog'} onClick={() => setViewMode('catalog')} />
+        <ViewTab label={tr('Installed')} isActive={viewMode === 'installed'} onClick={() => setViewMode('installed')} />
+        <ViewTab
+          label={tr('Browse Catalog')}
+          isActive={viewMode === 'catalog'}
+          onClick={() => setViewMode('catalog')}
+        />
       </div>
 
       {viewMode === 'installed' ? (
@@ -124,7 +129,9 @@ const PackageManagerEditor = () => {
           {/* Left panel: Installed packages list */}
           <div className='flex w-1/2 min-w-[325px] flex-col gap-4 overflow-y-auto p-4'>
             <div className='flex items-center justify-between'>
-              <h2 className='select-none text-lg font-medium text-neutral-950 dark:text-white'>Installed Packages</h2>
+              <h2 className='select-none text-lg font-medium text-neutral-950 dark:text-white'>
+                {tr('Installed Packages')}
+              </h2>
               <div className='flex gap-1'>
                 <Popover.Root open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                   <Popover.Trigger asChild>
@@ -147,14 +154,14 @@ const PackageManagerEditor = () => {
                         onClick={() => void handleImportFromFile()}
                         className='flex w-full items-center rounded-md px-3 py-2 text-left font-caption text-cp-sm font-medium text-neutral-850 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-850'
                       >
-                        Add from file...
+                        {tr('Add from file...')}
                       </button>
                       <button
                         type='button'
                         onClick={handleSwitchToCatalog}
                         className='flex w-full items-center rounded-md px-3 py-2 text-left font-caption text-cp-sm font-medium text-neutral-850 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-850'
                       >
-                        Add from catalog...
+                        {tr('Add from catalog...')}
                       </button>
                     </Popover.Content>
                   </Popover.Portal>
@@ -175,7 +182,7 @@ const PackageManagerEditor = () => {
             <div className='flex flex-col overflow-y-auto rounded-md border border-neutral-200 dark:border-neutral-700'>
               {installedPackages.length === 0 ? (
                 <div className='flex items-center justify-center p-8 text-sm text-neutral-500 dark:text-neutral-400'>
-                  No packages installed. Click + to add a package.
+                  {tr('No packages installed. Click + to add a package.')}
                 </div>
               ) : (
                 installedPackages.map((pkg) => {
@@ -221,18 +228,18 @@ const PackageManagerEditor = () => {
                   {selectedManifest.package.name}
                 </h2>
                 <div className='flex flex-col gap-3'>
-                  <DetailRow label='Version' value={selectedManifest.package.version} />
-                  <DetailRow label='Vendor' value={selectedManifest.package.vendor.name} />
+                  <DetailRow label={tr('Version')} value={selectedManifest.package.version} />
+                  <DetailRow label={tr('Vendor')} value={selectedManifest.package.vendor.name} />
                   {selectedManifest.package.vendor.url && (
-                    <DetailRow label='Website' value={selectedManifest.package.vendor.url} />
+                    <DetailRow label={tr('Website')} value={selectedManifest.package.vendor.url} />
                   )}
-                  <DetailRow label='Description' value={selectedManifest.package.description} />
+                  <DetailRow label={tr('Description')} value={selectedManifest.package.description} />
                   {selectedManifest.package.license && (
-                    <DetailRow label='License' value={selectedManifest.package.license} />
+                    <DetailRow label={tr('License')} value={selectedManifest.package.license} />
                   )}
-                  <DetailRow label='Package ID' value={selectedManifest.package.id} />
+                  <DetailRow label={tr('Package ID')} value={selectedManifest.package.id} />
                   <div className='flex flex-col gap-1'>
-                    <span className='text-xs font-medium text-neutral-500 dark:text-neutral-400'>Devices</span>
+                    <span className='text-xs font-medium text-neutral-500 dark:text-neutral-400'>{tr('Devices')}</span>
                     <div className='flex flex-col gap-1'>
                       {selectedManifest.devices.map((device) => (
                         <div
@@ -255,7 +262,7 @@ const PackageManagerEditor = () => {
               </>
             ) : (
               <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-                Select a package to view details
+                {tr('Select a package to view details')}
               </div>
             )}
           </div>

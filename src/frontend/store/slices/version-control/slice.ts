@@ -13,6 +13,8 @@ const initialState: VersionControlSlice['versionControl'] = {
   changedPaths: [],
   pendingChangesCount: 0,
   headContent: null,
+  historyView: null,
+  mergeView: null,
 }
 
 function dedupeByPath(entries: InitialPendingEntry[]): InitialPendingEntry[] {
@@ -51,10 +53,52 @@ const createVersionControlSlice: StateCreator<VersionControlSlice, [], [], Versi
         }),
       ),
 
+    openHistoryView: (view: { commitHash: string; file?: string }) =>
+      setState(
+        produce<VersionControlSlice>((draft) => {
+          draft.versionControl.historyView = { ...view }
+        }),
+      ),
+
+    closeHistoryView: () =>
+      setState(
+        produce<VersionControlSlice>((draft) => {
+          draft.versionControl.historyView = null
+        }),
+      ),
+
+    openMergeView: (view: { sourceBranch: string; targetBranch?: string }) =>
+      setState(
+        produce<VersionControlSlice>((draft) => {
+          draft.versionControl.mergeView = { ...view }
+        }),
+      ),
+
+    closeMergeView: () =>
+      setState(
+        produce<VersionControlSlice>((draft) => {
+          draft.versionControl.mergeView = null
+        }),
+      ),
+
+    setRawLoadedContent: (content: Record<string, string>) =>
+      setState(
+        produce<VersionControlSlice>((draft) => {
+          draft.versionControl.rawLoadedContent = { ...content }
+        }),
+      ),
+
     setHeadContent: (content: Record<string, string> | null) =>
       setState(
         produce<VersionControlSlice>((draft) => {
           draft.versionControl.headContent = content ? { ...content } : null
+        }),
+      ),
+
+    mergeHeadContent: (entries: Record<string, string>) =>
+      setState(
+        produce<VersionControlSlice>((draft) => {
+          draft.versionControl.headContent = { ...(draft.versionControl.headContent ?? {}), ...entries }
         }),
       ),
 
@@ -95,6 +139,16 @@ const createVersionControlSlice: StateCreator<VersionControlSlice, [], [], Versi
           const baseline = draft.versionControl.baselineContent
           const initialMap = new Map(draft.versionControl.initialPending.map((e) => [e.path, e.status]))
           const changedSet = new Set(draft.versionControl.changedPaths)
+
+          // Drop the cached HEAD snapshot for every path this save touched.
+          // A save doesn't move HEAD, but the cached entry may predate it
+          // wrongly (e.g. a fetch that raced a commit), and the diff view
+          // can't tell a stale entry from a fresh one — pruning forces it to
+          // refetch authoritative content the next time the path is viewed.
+          if (draft.versionControl.headContent) {
+            for (const { path } of saved) delete draft.versionControl.headContent[path]
+            for (const path of deleted) delete draft.versionControl.headContent[path]
+          }
 
           for (const { path, content } of saved) {
             // Track S3's current state for this path so future "clean"

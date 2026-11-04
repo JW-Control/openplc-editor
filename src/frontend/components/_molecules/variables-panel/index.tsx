@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -5,17 +6,10 @@ import type { DebugTreeNode } from '../../../../middleware/shared/ports/types'
 import ViewIcon from '../../../assets/icons/interface/View'
 import ZapIcon from '../../../assets/icons/interface/Zap'
 import { cn } from '../../../utils/cn'
-import {
-  floatToBuffer,
-  getVariableTypeInfo,
-  integerToBuffer,
-  parseFloatValue,
-  parseIntegerValue,
-  parseStringValue,
-  stringToBuffer,
-} from '../../../utils/variable-types'
+import { encodeForceValue, isForcedValueHigh } from '../../../utils/variable-sizes'
 import { TreeNode } from '../../_atoms/debug-tree-node'
 import { Label } from '../../_atoms/label'
+import { toast } from '../../_features/[app]/toast/use-toast'
 import { Modal, ModalContent, ModalTitle } from '../modal'
 
 type Variable = {
@@ -117,6 +111,7 @@ const VariablesPanel = ({
     compositeKey: string
     lookupKey: string
     variableType: string
+    enumValues?: string[]
     position: { x: number; y: number }
   } | null>(null)
   const [forceValueModalOpen, setForceValueModalOpen] = useState<boolean>(false)
@@ -125,6 +120,7 @@ const VariablesPanel = ({
     compositeKey: string
     lookupKey: string
     variableType: string
+    enumValues?: string[]
   } | null>(null)
 
   const getValue = (compositeKey: string): string | undefined => {
@@ -199,6 +195,7 @@ const VariablesPanel = ({
         compositeKey: node.compositeKey,
         lookupKey,
         variableType: node.type,
+        enumValues: node.enumValues,
         position,
       })
     },
@@ -260,6 +257,7 @@ const VariablesPanel = ({
           compositeKey: contextMenuState.compositeKey,
           lookupKey: contextMenuState.lookupKey,
           variableType: contextMenuState.variableType,
+          enumValues: contextMenuState.enumValues,
         })
       }
       handleCloseContextMenu()
@@ -281,49 +279,24 @@ const VariablesPanel = ({
     }
 
     const variableType = pendingForceContext.variableType
-    const typeInfo = getVariableTypeInfo(variableType)
-    if (!typeInfo) {
-      closeModal()
-      return
-    }
-
-    const normalizedType = variableType.toLowerCase()
-    const isFloatType = normalizedType === 'real' || normalizedType === 'lreal'
-    const isStringType = normalizedType === 'string'
 
     let valueBuffer: Uint8Array
-    let forcedValueForState: boolean
-
-    if (isStringType) {
-      const parsedStringValue: string | null = parseStringValue(forceValue)
-      if (parsedStringValue === null) {
-        closeModal()
-        return
-      }
-      valueBuffer = stringToBuffer(parsedStringValue)
-      forcedValueForState = true
-    } else if (isFloatType) {
-      const parsedFloatValue = parseFloatValue(forceValue, typeInfo.byteSize)
-      if (parsedFloatValue === null) {
-        closeModal()
-        return
-      }
-      valueBuffer = floatToBuffer(parsedFloatValue, typeInfo.byteSize)
-      forcedValueForState = parsedFloatValue >= 0
-    } else {
-      const parsedIntValue = parseIntegerValue(forceValue, typeInfo)
-      if (parsedIntValue === null) {
-        closeModal()
-        return
-      }
-      valueBuffer = integerToBuffer(parsedIntValue, typeInfo.byteSize, typeInfo.signed)
-      forcedValueForState = parsedIntValue >= BigInt(0)
+    try {
+      valueBuffer = encodeForceValue(forceValue, variableType, pendingForceContext.enumValues)
+    } catch (error) {
+      toast({
+        title: tr('Cannot force value'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'fail',
+      })
+      closeModal()
+      return
     }
 
     void onForceVariable(
       pendingForceContext.compositeKey,
       variableType,
-      forcedValueForState,
+      isForcedValueHigh(forceValue),
       valueBuffer,
       pendingForceContext.lookupKey,
     )
@@ -452,7 +425,7 @@ const VariablesPanel = ({
       <div className='flex h-full w-full min-w-52 flex-col gap-2 overflow-hidden rounded-lg border-[0.75px] border-neutral-200 bg-white p-2 text-cp-sm font-medium text-neutral-1000 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-50'>
         <div className='flex h-7 w-[90px] select-none items-center gap-1 rounded-lg bg-neutral-100 p-1 text-cp-sm dark:bg-brand-dark'>
           <ZapIcon className='h-4 w-4' />
-          <p>Variables</p>
+          <p>{tr('Variables')}</p>
         </div>
         {variableTree && variableTree.size > 0 ? renderTreeView() : renderFlatView()}
       </div>
@@ -465,20 +438,20 @@ const VariablesPanel = ({
                 className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                 onClick={(e) => void handleForceTrue(e)}
               >
-                <p>Force True</p>
+                <p>{tr('Force True')}</p>
               </div>
               <div
                 className='flex w-full cursor-pointer items-center gap-2 px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                 onClick={(e) => void handleForceFalse(e)}
               >
-                <p>Force False</p>
+                <p>{tr('Force False')}</p>
               </div>
               {isForced && (
                 <div
                   className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                   onClick={(e) => void handleReleaseForce(e)}
                 >
-                  <p>Release Force</p>
+                  <p>{tr('Release Force')}</p>
                 </div>
               )}
             </>
@@ -488,14 +461,14 @@ const VariablesPanel = ({
                 className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                 onClick={(e) => void handleForceValue(e)}
               >
-                <p>Force Value</p>
+                <p>{tr('Force Value')}</p>
               </div>
               {isForced && (
                 <div
                   className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                   onClick={(e) => void handleReleaseForce(e)}
                 >
-                  <p>Release Force</p>
+                  <p>{tr('Release Force')}</p>
                 </div>
               )}
             </>
@@ -505,7 +478,7 @@ const VariablesPanel = ({
 
       <Modal open={forceValueModalOpen} onOpenChange={handleForceValueModalChange}>
         <ModalContent className='flex h-fit min-h-0 w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>
-          <ModalTitle className='mb-4 text-lg font-semibold'>Force Value</ModalTitle>
+          <ModalTitle className='mb-4 text-lg font-semibold'>{tr('Force Value')}</ModalTitle>
 
           <p className='mb-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
             Enter the value to force for {pendingForceContext?.compositeKey.split(':')[1] || 'this variable'}
@@ -514,7 +487,7 @@ const VariablesPanel = ({
           <div className='flex w-full flex-col gap-4'>
             <div>
               <Label htmlFor='force-value-input' className='mb-2 block text-sm'>
-                Value
+                {tr('Value')}
               </Label>
               <input
                 id='force-value-input'
@@ -522,7 +495,7 @@ const VariablesPanel = ({
                 value={forceValue}
                 onChange={(e) => setForceValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void handleForceValueConfirm()}
-                placeholder='Enter value'
+                placeholder={tr('Enter value')}
                 className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
                 autoFocus
               />
@@ -539,7 +512,7 @@ const VariablesPanel = ({
                 onClick={handleForceValueCancel}
                 className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
             </div>
           </div>

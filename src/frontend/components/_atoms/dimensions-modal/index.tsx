@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { MinusIcon } from '../../../assets/icons/interface/Minus'
 import { PlusIcon } from '../../../assets/icons/interface/Plus'
 import { StickArrowIcon } from '../../../assets/icons/interface/StickArrow'
@@ -59,7 +61,7 @@ export const DimensionsModal = ({
           onClick={() => onOpenChange(true)}
           className='flex h-8 w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 data-[state=open]:bg-neutral-100 dark:hover:bg-neutral-900 data-[state=open]:dark:bg-neutral-900'
         >
-          <span className='font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>Array</span>
+          <span className='font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>{tr('Array')}</span>
         </ModalTrigger>
       )}
       <ModalContent
@@ -69,14 +71,14 @@ export const DimensionsModal = ({
         onClose={onCancel}
       >
         <ModalHeader>
-          <ModalTitle>Array type definition</ModalTitle>
+          <ModalTitle>{tr('Array type definition')}</ModalTitle>
         </ModalHeader>
 
         <div className='flex h-full w-full flex-col gap-2' aria-label='Array type definition modal content container'>
           <div className='flex h-fit w-full flex-col gap-2' aria-label='Header container'>
             <div className='flex h-fit w-full items-center justify-between' aria-label='Array base type container'>
               <label className='cursor-default select-none pr-6 font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-                Base type
+                {tr('Base type')}
               </label>
 
               <TypeDropdownSelector
@@ -92,7 +94,7 @@ export const DimensionsModal = ({
               aria-label='Array type table actions container'
             >
               <p className='cursor-default select-none font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-                Dimensions
+                {tr('Dimensions')}
               </p>
               <div
                 className='flex h-full w-fit items-center justify-evenly *:rounded-md *:p-1'
@@ -146,13 +148,13 @@ export const DimensionsModal = ({
 
         <ModalFooter className='flex items-center justify-between gap-4'>
           <Button className='h-8 w-full justify-center text-xs' onClick={onSave}>
-            Save
+            {tr('Save')}
           </Button>
           <Button
             onClick={onCancel}
             className='h-8 w-full justify-center bg-neutral-100 text-xs text-neutral-1000 hover:bg-neutral-300 focus:bg-neutral-200'
           >
-            Cancel
+            {tr('Cancel')}
           </Button>
         </ModalFooter>
       </ModalContent>

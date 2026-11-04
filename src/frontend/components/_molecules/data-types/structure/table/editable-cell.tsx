@@ -1,9 +1,11 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { CellContext, RowData } from '@tanstack/react-table'
 import { useEffect, useState } from 'react'
 
 import type { PLCStructureVariable } from '../../../../../../middleware/shared/ports/types'
 import type { ProjectResponse } from '../../../../../store/slices/project/types'
 import { cn } from '../../../../../utils/cn'
+import { isLegalIdentifier } from '../../../../../utils/keywords'
 import { InputWithRef } from '../../../../_atoms/input'
 import { useToast } from '../../../../_features/[app]/toast/use-toast'
 
@@ -22,6 +24,9 @@ const EditableNameCell = ({ getValue, row: { index }, column: { id }, table }: I
   const [cellValue, setCellValue] = useState(initialValue)
 
   const onBlur = () => {
+    // Runs on every blur: leaving the cell untouched is not an edit.
+    if (cellValue === initialValue) return
+
     const existingVariableNames = table
       .getRowModel()
       .rows.map((row) => row.original.name)
@@ -30,6 +35,14 @@ const EditableNameCell = ({ getValue, row: { index }, column: { id }, table }: I
     const validateVariableName = (name: string, existingVariables: string[], currentName: string) => {
       if (!name.trim()) {
         return { valid: false, message: 'The name cannot be empty' }
+      }
+
+      // Field names are written into datatypes/<Name>.dt as ST text —
+      // an illegal identifier here would serialize to a file that
+      // can't be read back (same rule the .dt parser enforces).
+      const [legal, reason] = isLegalIdentifier(name)
+      if (!legal) {
+        return { valid: false, message: `'${name}' ${reason}` }
       }
 
       if (name !== currentName && existingVariables.includes(name)) {
@@ -42,7 +55,7 @@ const EditableNameCell = ({ getValue, row: { index }, column: { id }, table }: I
     const validation = validateVariableName(cellValue ?? '', existingVariableNames, initialValue)
 
     if (!validation.valid) {
-      toast({ title: 'Error', description: validation.message, variant: 'fail' })
+      toast({ title: tr('Error'), description: validation.message, variant: 'fail' })
       setCellValue(initialValue)
       return
     }
@@ -81,6 +94,8 @@ const EditableInitialValueCell = ({
   const [cellValue, setCellValue] = useState(displayValue)
 
   const onBlur = () => {
+    // Leaving the cell untouched must not turn a missing initial value into an empty one.
+    if (cellValue === displayValue) return
     const newInitialValue: PLCStructureVariable['initialValue'] = { simpleValue: { value: cellValue } }
     table.options.meta?.updateData(index, id, newInitialValue)
   }

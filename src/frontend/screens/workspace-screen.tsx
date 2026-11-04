@@ -1,10 +1,10 @@
 import * as Tabs from '@radix-ui/react-tabs'
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ImperativePanelHandle } from 'react-resizable-panels'
 import { useShallow } from 'zustand/react/shallow'
 
-import { projectCapabilities } from '../../middleware/shared/ports/types'
-import { hasHmiDisplay } from '../../backend/shared/compile/jwplc-hmi'
+import { isRemoteProjectPath, projectCapabilities } from '../../middleware/shared/ports/types'
 import {
   useCapabilities,
   useChatPanel,
@@ -17,23 +17,32 @@ import { ExitIcon } from '../assets/icons/interface/Exit'
 import { ClearConsoleButton } from '../components/_atoms/buttons/console/clear-console'
 import { ConsoleDockToggleButton } from '../components/_atoms/buttons/console/dock-toggle'
 import { BranchStatusBar } from '../components/_features/[workspace]/branches'
+import { BranchMergeView } from '../components/_features/[workspace]/branches/branch-merge-view'
+import { CommitHistoryView } from '../components/_features/[workspace]/commit-history'
 import { DataTypeEditor } from '../components/_features/[workspace]/data-type'
 import { DeviceEditor } from '../components/_features/[workspace]/editor/device'
-import { EtherCATDeviceEditor, EtherCATEditor } from '../components/_features/[workspace]/editor/device/ethercat'
+import {
+  EtherCATDeviceEditor,
+  EtherCATEditor,
+  EtherCATModuleEditor,
+} from '../components/_features/[workspace]/editor/device/ethercat'
 import { RemoteDeviceEditor } from '../components/_features/[workspace]/editor/device/remote-device'
+import { DiagnosticsEditor } from '../components/_features/[workspace]/editor/diagnostics'
 import { DiffViewerEditor } from '../components/_features/[workspace]/editor/diff-viewer'
 import { GraphicalEditor } from '../components/_features/[workspace]/editor/graphical'
 import { HmiDesignerEditor } from '../components/_features/[workspace]/editor/hmi-designer'
-import { HmiSidePanel } from '../components/_features/[workspace]/hmi-panel'
 import { LibraryManagerEditor } from '../components/_features/[workspace]/editor/library-manager'
 import { LibraryManifestEditor } from '../components/_features/[workspace]/editor/library-manifest'
 import { MonacoEditor } from '../components/_features/[workspace]/editor/monaco'
 import { PackageManagerEditor } from '../components/_features/[workspace]/editor/package-manager'
+import { PersistentStorageEditor } from '../components/_features/[workspace]/editor/persistent-storage'
 import { ResourcesEditor } from '../components/_features/[workspace]/editor/resource-editor'
 import { ModbusServerEditor } from '../components/_features/[workspace]/editor/server/modbus-server'
 import { OpcUaServerEditor } from '../components/_features/[workspace]/editor/server/opcua-server'
 import { S7CommServerEditor } from '../components/_features/[workspace]/editor/server/s7comm-server'
-import { VendorScreenEditor } from '../components/_features/[workspace]/editor/vendor-screen'
+import { UserManagementEditor } from '../components/_features/[workspace]/editor/user-management'
+import { VendorScreenTabs } from '../components/_features/[workspace]/editor/vendor-screen/vendor-screen-tabs'
+import { GlobalVariableListEditor } from '../components/_features/[workspace]/global-variable-list'
 import { Search } from '../components/_features/[workspace]/search'
 import { SourceControlPanel } from '../components/_features/[workspace]/source-control'
 import { VariablesPanel } from '../components/_molecules/variables-panel'
@@ -56,13 +65,19 @@ import {
   useDebugNonBoolValuesMap,
   useIsDebuggerVisible,
 } from '../hooks/use-debug-value'
+import { useDeviceConnectionMonitor } from '../hooks/use-device-connection-monitor'
+import { useDevicePlcState } from '../hooks/use-device-plc-state'
+import { useRestoreProjectTargetDevice } from '../hooks/use-restore-project-target-device'
 import { useRuntimePolling } from '../hooks/use-runtime-polling'
 import { forceDebugVariable, releaseDebugVariable } from '../services/debug-force-variable'
-import { useOpenPLCStore } from '../store'
+import { buildAllProjectFileContentsPure } from '../services/save-actions'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../store'
 import { cn } from '../utils/cn'
+import { buildGlobalCompositeKey, GLOBAL_CONFIG_NAME } from '../utils/debug-variable-finder'
 import { toast } from '../utils/toast'
 
 const WorkspaceScreen = () => {
+  const store = useOpenPLCStoreApi()
   const capabilities = useCapabilities()
   const ChatPanel = useChatPanel()
   const debuggerPort = useDebugger()
@@ -79,19 +94,18 @@ const WorkspaceScreen = () => {
   // RARE: UI state (changes on user interaction, not during debug polling)
   const tabs = useOpenPLCStore(useCallback((s) => s.tabs, []))
   const editor = useOpenPLCStore(useCallback((s) => s.editor, []))
-  // Every open editor model (POU + data type + singletons).  POU
-  // editors (textual / graphical) and data-type editors are
-  // multi-mounted: one React subtree per entry, visibility toggled
-  // by CSS.  This keeps Monaco / ReactFlow instances alive across
-  // tab switches — no dispose churn, no view-state loss.
+  // Multi-mounted with CSS-toggled visibility to keep Monaco / ReactFlow instances alive across tab switches.
   const editors = useOpenPLCStore(useCallback((s) => s.editors, []))
   const searchResults = useOpenPLCStore(useCallback((s) => s.searchResults, []))
-  const pous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+  const projectPous = useOpenPLCStore(useCallback((s) => s.project.data.pous, []))
+  // The library-debug harness POU is added to the list, not substituted, so a mid-session debug-flag change still applies.
+  const debugHarness = useOpenPLCStore(useCallback((s) => s.workspace.debugHarness, []))
+  const pous = useMemo(
+    () => (debugHarness ? [...projectPous, debugHarness.programPou] : projectPous),
+    [projectPous, debugHarness],
+  )
   const projectPath = useOpenPLCStore(useCallback((s) => s.project.meta.path, []))
   const projectType = useOpenPLCStore(useCallback((s) => s.project.meta.type, []))
-  // Project-type capability matrix.  Combines with `capabilities`
-  // (host platform features) below to decide what affordances render
-  // in this workspace shell.
   const projectCaps = projectCapabilities({ type: projectType })
 
   // RARE: workspace UI + debug session state (grouped with shallow)
@@ -130,14 +144,20 @@ const WorkspaceScreen = () => {
     })),
   )
 
-  // Version control state
-  const { activePanel, pendingChangesCount } = useOpenPLCStore(
-    useShallow((s) => ({
-      activePanel: s.versionControl.activePanel,
-      pendingChangesCount: s.versionControl.pendingChangesCount,
-    })),
+  const { activePanel, pendingChangesCount, historyView, mergeView, rawLoadedContent, loadedSerialized } =
+    useOpenPLCStore(
+      useShallow((s) => ({
+        activePanel: s.versionControl.activePanel,
+        pendingChangesCount: s.versionControl.pendingChangesCount,
+        historyView: s.versionControl.historyView,
+        mergeView: s.versionControl.mergeView,
+        rawLoadedContent: s.versionControl.rawLoadedContent,
+        loadedSerialized: s.versionControl.loadedSerialized,
+      })),
+    )
+  const { setActivePanel, closeHistoryView, closeMergeView, initBaseline } = useOpenPLCStore(
+    useCallback((s) => s.versionControlActions, []),
   )
-  const { setActivePanel } = useOpenPLCStore(useCallback((s) => s.versionControlActions, []))
   const sharedWorkspaceActions = useOpenPLCStore(useCallback((s) => s.sharedWorkspaceActions, []))
 
   const isDebuggerVisible = useIsDebuggerVisible()
@@ -145,78 +165,103 @@ const WorkspaceScreen = () => {
   const debugNonBoolValues = useDebugNonBoolValuesMap()
   const debugForcedVariables = useDebugForcedVariablesMap()
 
-  // Version control is an intersection: the host must support it
-  // (web edition has its own VC adapter; desktop has git) AND the
-  // project type must allow it.  Library projects ship without VC
-  // for now — git-on-library is plausible but out of scope and
-  // would re-introduce the same UI churn we just removed.
-  const hasVersionControl = capabilities.hasVersionControl && projectCaps.hasVersionControl
-  const sourceControlPanelRef = useRef<ImperativePanelHandle | null>(null)
-  const [leftPanelSize, setLeftPanelSize] = useState(16)
+  // VC needs host support, project-type support, and a project path on the server (desktop: only Edge projects qualify; web always does).
+  const hasVersionControl =
+    capabilities.hasVersionControl && projectCaps.hasVersionControl && isRemoteProjectPath(projectPath)
 
-  const deviceBoard = useOpenPLCStore((s) => s.deviceDefinitions.configuration.deviceBoard)
-  const availableBoards = useOpenPLCStore((s) => s.deviceAvailableOptions.availableBoards)
-  const currentBoardInfo = availableBoards.get(deviceBoard)
-  const hasHmi = hasHmiDisplay(currentBoardInfo)
-  const [isHmiPanelOpen, setIsHmiPanelOpen] = useState(false)
+  // Establishes the VC sync baseline on load, keyed on `loadedSerialized`'s identity (not
+  // `projectPath`) so a branch switch/restore/stash on the same project still re-baselines.
+  // Skipped if the web router already populated it before mount.
+  useEffect(() => {
+    if (!projectPath) {
+      return
+    }
+
+    if (Object.keys(loadedSerialized).length > 0) {
+      return
+    }
+
+    const baselineContent = buildAllProjectFileContentsPure(store)
+
+    initBaseline({
+      initialPending: [],
+      baselineContent,
+      rawLoadedContent,
+      loadedSerialized: baselineContent,
+    })
+  }, [projectPath, rawLoadedContent, loadedSerialized, initBaseline, store])
 
   // Start global runtime polling for status and logs
   useRuntimePolling()
+  useRestoreProjectTargetDevice()
+  // Mirrors a baremetal target's run/stop state from the held device link's existing liveness tick (no timer of its own).
+  useDevicePlcState()
+  useDeviceConnectionMonitor()
 
-  // Build debug variables from POUs with debug=true
-  const allDebugVariables = useMemo(
-    () =>
-      pous.flatMap((pou) => {
-        const variables = pou.interface?.variables ?? []
-        return variables
-          .filter((v) => v.debug === true)
-          .map((v) => {
-            let typeValue = ''
-            if (v.type.definition === 'base-type') {
-              typeValue = v.type.value
-            } else if (v.type.definition === 'user-data-type') {
-              typeValue = v.type.value
-            } else if (v.type.definition === 'array') {
-              typeValue = v.type.value
-            } else if (v.type.definition === 'derived') {
-              typeValue = v.type.value
-            }
+  const allDebugVariables = useMemo(() => {
+    const rows = pous.flatMap((pou) => {
+      const variables = pou.interface?.variables ?? []
+      return variables
+        .filter((v) => v.debug === true)
+        .map((v) => {
+          let typeValue = ''
+          if (v.type.definition === 'base-type') {
+            typeValue = v.type.value
+          } else if (v.type.definition === 'user-data-type') {
+            typeValue = v.type.value
+          } else if (v.type.definition === 'array') {
+            typeValue = v.type.value
+          } else if (v.type.definition === 'derived') {
+            typeValue = v.type.value
+          }
 
-            // For function block POUs, transform the key to use instance context
-            let compositeKey: string
-            let displayName: string
-            if (pou.pouType === 'function-block') {
-              const fbTypeKey = pou.name.toUpperCase()
-              const selectedKey = fbSelectedInstance.get(fbTypeKey)
-              const instances = fbDebugInstances.get(fbTypeKey) ?? []
-              const selectedInstance = instances.find((inst) => inst.key === selectedKey)
+          let compositeKey: string
+          let displayName: string
+          let rowPouName = pou.name
+          if (v.class === 'external') {
+            // A VAR_EXTERNAL resolves to the shared global's canonical key, so every reference collapses into one watch (deduped below).
+            compositeKey = buildGlobalCompositeKey(v.name)
+            displayName = `${GLOBAL_CONFIG_NAME}.${v.name}`
+            rowPouName = GLOBAL_CONFIG_NAME
+          } else if (pou.pouType === 'function-block') {
+            const fbTypeKey = pou.name.toUpperCase()
+            const selectedKey = fbSelectedInstance.get(fbTypeKey)
+            const instances = fbDebugInstances.get(fbTypeKey) ?? []
+            const selectedInstance = instances.find((inst) => inst.key === selectedKey)
 
-              if (selectedInstance) {
-                compositeKey = `${selectedInstance.programName}:${selectedInstance.fbVariableName}.${v.name}`
-                displayName = `${selectedInstance.programName}.${selectedInstance.fbVariableName}.${v.name}`
-              } else {
-                compositeKey = `${pou.name}:${v.name}`
-                displayName = v.name
-              }
+            if (selectedInstance) {
+              compositeKey = `${selectedInstance.programName}:${selectedInstance.fbVariableName}.${v.name}`
+              displayName = `${selectedInstance.programName}.${selectedInstance.fbVariableName}.${v.name}`
             } else {
               compositeKey = `${pou.name}:${v.name}`
               displayName = v.name
             }
+          } else {
+            compositeKey = `${pou.name}:${v.name}`
+            displayName = v.name
+          }
 
-            const variableValue = debugBoolValues.get(compositeKey) ?? debugNonBoolValues.get(compositeKey)
-            const displayValue = variableValue !== undefined ? variableValue : '-'
+          const variableValue = debugBoolValues.get(compositeKey) ?? debugNonBoolValues.get(compositeKey)
+          const displayValue = variableValue !== undefined ? variableValue : '-'
 
-            return {
-              pouName: pou.name,
-              name: displayName,
-              type: typeValue,
-              value: displayValue,
-              compositeKey,
-            }
-          })
-      }),
-    [pous, debugBoolValues, debugNonBoolValues, fbSelectedInstance, fbDebugInstances],
-  )
+          return {
+            pouName: rowPouName,
+            name: displayName,
+            type: typeValue,
+            value: displayValue,
+            compositeKey,
+          }
+        })
+    })
+
+    // Collapse duplicates by composite key — a global referenced via VAR_EXTERNAL
+    // from several POUs (and mirrored by the debug-flag sync) yields one row.
+    const byKey = new Map<string, (typeof rows)[number]>()
+    for (const row of rows) {
+      if (!byKey.has(row.compositeKey)) byKey.set(row.compositeKey, row)
+    }
+    return Array.from(byKey.values())
+  }, [pous, debugBoolValues, debugNonBoolValues, fbSelectedInstance, fbDebugInstances])
 
   // Deduplicate names with POU prefix when conflicts exist
   const debugVariables = useMemo(() => {
@@ -244,7 +289,6 @@ const WorkspaceScreen = () => {
     return new Map(Array.from(debugVariableTree.entries()).filter(([key]) => allKeys.has(key)))
   }, [allDebugVariables, debugForcedVariables, debugVariableTree])
 
-  // Force variable handler via DebuggerPort
   const handleForceVariable = useCallback(
     async (
       compositeKey: string,
@@ -260,16 +304,14 @@ const WorkspaceScreen = () => {
       if (!debuggerPort.isConnected()) return
 
       if (value === undefined && valueBuffer === undefined) {
-        await releaseDebugVariable(debuggerPort, compositeKey, variableIndex)
+        await releaseDebugVariable(store, debuggerPort, compositeKey, variableIndex)
       } else {
         const buffer = valueBuffer ?? new Uint8Array([value ? 1 : 0])
-        // Pass variableType so the wire-endianness swap inside the
-        // service knows whether to skip swapping (BOOL one-byte
-        // paths, STRING / WSTRING) — see services/debug-force-variable.
-        await forceDebugVariable(debuggerPort, compositeKey, variableIndex, buffer, value ?? true, variableType)
+        // variableType lets the wire-endianness swap skip BOOL/STRING payloads (see services/debug-force-variable).
+        await forceDebugVariable(store, debuggerPort, compositeKey, variableIndex, buffer, value ?? true, variableType)
       }
     },
-    [debugVariableIndexes, debuggerPort],
+    [debugVariableIndexes, debuggerPort, store],
   )
 
   const [graphList, _setGraphList] = useState<string[]>([])
@@ -285,35 +327,54 @@ const WorkspaceScreen = () => {
   )
   const [isVariablesPanelCollapsed, setIsVariablesPanelCollapsed] = useState(false)
 
+  // Re-reads the project after a branch switch or restore rewrites the working tree server-side.
+  // `whenStale` lets the caller distinguish "operation succeeded, reload didn't" from a real failure.
+  const reloadOpenProject = useCallback(
+    async (whenStale: string): Promise<boolean> => {
+      if (!projectPath) return false
+
+      // Handled here, not left to the caller: two of three callers discard the reload promise with `void`.
+      let result: Awaited<ReturnType<typeof project.openProjectByPath>>
+
+      try {
+        result = await project.openProjectByPath(projectPath)
+      } catch {
+        toast({ title: tr('Failed to reload project'), description: whenStale, variant: 'fail' })
+        return false
+      }
+
+      if (result.success && result.data) {
+        sharedWorkspaceActions.handleOpenProjectResponse(result.data)
+        return true
+      }
+
+      toast({ title: tr('Failed to reload project'), description: whenStale, variant: 'fail' })
+      return false
+    },
+    [projectPath, project, sharedWorkspaceActions],
+  )
+
   const handleBranchSwitch = useCallback(
     async (branchName: string) => {
       if (!projectPath) return
       try {
-        const result = await project.openProjectByPath(projectPath)
-        if (result.success && result.data) {
-          sharedWorkspaceActions.handleOpenProjectResponse(result.data)
+        if (await reloadOpenProject('The branch was switched but the project could not be reloaded.')) {
           toast({
-            title: 'Branch switched',
-            description: `Now on branch: ${branchName}`,
+            title: tr('Branch switched'),
+            description: tr('Now on branch: {{branchName}}', { branchName }),
             variant: 'default',
-          })
-        } else {
-          toast({
-            title: 'Failed to reload project',
-            description: 'The branch was switched but the project could not be reloaded.',
-            variant: 'fail',
           })
         }
       } catch (error) {
         console.error('[WorkspaceScreen] Failed to switch branch:', error)
         toast({
-          title: 'Failed to switch branch',
+          title: tr('Failed to switch branch'),
           description: error instanceof Error ? error.message : 'Unknown error',
           variant: 'fail',
         })
       }
     },
-    [projectPath, project, sharedWorkspaceActions],
+    [projectPath, reloadOpenProject],
   )
 
   type PanelMethods = {
@@ -322,7 +383,7 @@ const WorkspaceScreen = () => {
   } & ImperativePanelHandle
 
   const panelRef = useRef<ImperativePanelHandle | null>(null)
-  const explorerPanelRef = useRef<PanelMethods | null>(null)
+  const leftPanelRef = useRef<PanelMethods | null>(null)
   const workspacePanelRef = useRef<PanelMethods | null>(null)
   const consolePanelRef = useRef<PanelMethods | null>(null)
   const [activeTab, setActiveTab] = useState('console')
@@ -361,28 +422,21 @@ const WorkspaceScreen = () => {
 
   useEffect(() => {
     const action = isCollapsed ? 'collapse' : 'expand'
-    ;[explorerPanelRef, workspacePanelRef, consolePanelRef, sourceControlPanelRef].forEach((ref) => {
+    ;[leftPanelRef, workspacePanelRef, consolePanelRef].forEach((ref) => {
       if (ref.current && typeof ref.current[action] === 'function') {
         ref.current[action]()
       }
     })
   }, [isCollapsed])
 
-  // A build (or other producer) requested the console: reveal the console
-  // panel and switch to the Console tab. The console component handles the
-  // kick-to-bottom off the same nonce. Skip the initial value (0) so we never
-  // force the console open on first render.
+  // A build (or other producer) requested the console. Skips the initial value (0) so it never forces the console open on first render.
   useEffect(() => {
     if (consoleFollowRequestId === 0) return
     consolePanelRef.current?.expand()
     setActiveTab('console')
   }, [consoleFollowRequestId])
 
-  // Load available boards via device port.
-  // `setAvailableOptions` owns the alias sync — once the boards land,
-  // target-capability resolution becomes accurate and the device slice
-  // re-syncs aliases for the active target. We respect the board saved
-  // in the project (no override on load).
+  // `setAvailableOptions` owns the alias sync for the active target once boards land; the project's saved board is never overridden on load.
   useEffect(() => {
     const loadAvailableBoards = async () => {
       try {
@@ -396,13 +450,12 @@ const WorkspaceScreen = () => {
     void loadAvailableBoards()
   }, [device, setAvailableOptions])
 
-  // Subscribe to VPP package events via the packages port
   const packagesPort = usePlatform().packages
   useEffect(() => {
     if (!packagesPort) return
 
     const unsubOpen = packagesPort.onOpenManager(() => {
-      const { tabsActions, editorActions } = useOpenPLCStore.getState()
+      const { tabsActions, editorActions } = store.getState()
       const tab = {
         name: 'Package Manager',
         path: '/package-manager',
@@ -429,15 +482,23 @@ const WorkspaceScreen = () => {
       unsubOpen()
       unsubBoards()
     }
-  }, [packagesPort, device, setAvailableOptions])
+  }, [packagesPort, device, setAvailableOptions, store])
 
-  // Desktop security safeguard: whenever a project opens, re-verify the
-  // signatures of every installed VPP package and drop any that no longer
-  // validate (a locally-crafted/unsigned .vpp can bypass the signed import
-  // flow). Each removal is surfaced as a WARNING in the console panel; the
-  // main process emits `packages:boards-updated` on removal, so the board
-  // list refreshes via the subscription above. On web `packagesPort` is
-  // undefined (packages are backend-provided), so this is a no-op.
+  // Which vPLC the IDE is pointed at decides which vendor package it can use:
+  // a vPLC runs the package it was created with. Telling the package layer is
+  // what loads that archive and refreshes the board list; with no vPLC
+  // selected there is no vendor board to offer. Inert on the desktop, which
+  // connects to a board directly and never to a vPLC.
+  const selectedDevice = useOpenPLCStore((state) => state.runtimeConnection.selectedDevice)
+  useEffect(() => {
+    if (!packagesPort) return
+    void packagesPort.setTargetDevice(
+      selectedDevice ? { deviceId: selectedDevice.deviceId, vpp: selectedDevice.vpp ?? null } : null,
+    )
+  }, [packagesPort, selectedDevice])
+
+  // Re-verifies installed VPP package signatures on project open and drops any that fail (blocks a
+  // locally-crafted/unsigned .vpp bypassing the signed import flow). No-op on web (`packagesPort` is undefined).
   useEffect(() => {
     if (!packagesPort || !projectPath) return
     let cancelled = false
@@ -445,7 +506,6 @@ const WorkspaceScreen = () => {
       if (cancelled) return
       for (const packageId of removed) {
         addLog({
-          id: crypto.randomUUID(),
           level: 'warning',
           message: `Removed untrusted VPP package "${packageId}": its signature is missing or invalid.`,
         })
@@ -471,14 +531,14 @@ const WorkspaceScreen = () => {
             value='console'
             className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
           >
-            Console
+            {tr('Console')}
           </Tabs.Trigger>
           {isDebuggerVisible && (
             <Tabs.Trigger
               value='debug'
               className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
             >
-              Debugger
+              {tr('Debugger')}
             </Tabs.Trigger>
           )}
           {hasSearchResults && (
@@ -486,7 +546,7 @@ const WorkspaceScreen = () => {
               value='search'
               className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
             >
-              Search
+              {tr('Search')}
             </Tabs.Trigger>
           )}
           {isPlcLogsVisible && (
@@ -494,7 +554,7 @@ const WorkspaceScreen = () => {
               value='plc-logs'
               className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
             >
-              PLC Logs
+              {tr('PLC Logs')}
             </Tabs.Trigger>
           )}
         </Tabs.List>
@@ -511,7 +571,7 @@ const WorkspaceScreen = () => {
               <ClearConsoleButton
                 onClear={clearPlcLogs}
                 isEmpty={typeof plcLogs === 'string' ? plcLogs.length === 0 : plcLogs.length === 0}
-                label='Clear logs'
+                label={tr('Clear logs')}
               />
             </>
           )}
@@ -595,13 +655,7 @@ const WorkspaceScreen = () => {
               hasVersionControl
                 ? {
                     isActive: activePanel === 'explorer',
-                    onClick: () => {
-                      if (activePanel !== 'explorer') {
-                        const size = sourceControlPanelRef.current?.getSize()
-                        if (size) setLeftPanelSize(size)
-                      }
-                      setActivePanel('explorer')
-                    },
+                    onClick: () => setActivePanel('explorer'),
                   }
                 : undefined
             }
@@ -610,13 +664,7 @@ const WorkspaceScreen = () => {
                 ? {
                     isActive: activePanel === 'source-control',
                     pendingCount: pendingChangesCount,
-                    onClick: () => {
-                      if (activePanel !== 'source-control') {
-                        const size = explorerPanelRef.current?.getSize()
-                        if (size) setLeftPanelSize(size)
-                      }
-                      setActivePanel('source-control')
-                    },
+                    onClick: () => setActivePanel('source-control'),
                   }
                 : undefined
             }
@@ -631,19 +679,27 @@ const WorkspaceScreen = () => {
             // the newly-added/removed console-right panel pushes the total
             // past 100% — the exact "Invalid layout total size" warning that
             // preceded the ApexCharts container-dimension crash.
-            key={`${isConsoleDockedRight ? 'dock-right' : 'dock-bottom'}-${isHmiPanelOpen ? 'hmi-open' : 'hmi-closed'}`}
+            key={isConsoleDockedRight ? 'dock-right' : 'dock-bottom'}
             direction='horizontal'
             className='relative flex h-full w-full'
           >
-            {hasVersionControl && activePanel === 'source-control' ? (
-              <SourceControlPanel
-                collapse={sourceControlPanelRef}
-                defaultSize={leftPanelSize}
-                projectId={projectPath}
-              />
-            ) : (
-              <Explorer collapse={explorerPanelRef} defaultSize={leftPanelSize} />
-            )}
+            {/* Must stay mounted: swapping the ResizablePanel itself makes react-resizable-panels re-normalize and grow the sidebar. */}
+            <ResizablePanel
+              ref={leftPanelRef}
+              id='leftPanel'
+              order={1}
+              collapsible={true}
+              minSize={13}
+              defaultSize={16}
+              maxSize={80}
+              className="flex h-full w-full max-w-lg flex-col overflow-auto rounded-lg border-2 border-inherit border-neutral-200 bg-white data-[panel-size='0.0']:hidden dark:border-neutral-850 dark:bg-neutral-950"
+            >
+              {hasVersionControl && activePanel === 'source-control' ? (
+                <SourceControlPanel projectId={projectPath} />
+              ) : (
+                <Explorer />
+              )}
+            </ResizablePanel>
             <ResizableHandle
               id='workspaceHandle'
               hitAreaMargins={{ coarse: 12, fine: 3 }}
@@ -652,10 +708,10 @@ const WorkspaceScreen = () => {
             <ResizablePanel
               id='workspacePanel'
               order={2}
-              // Leave room for the console-right panel (30%) and hmi panel (22%)
-              // so Explorer + workspace + right panels sum to ~100%.
-              defaultSize={isConsoleDockedRight ? (isHmiPanelOpen ? 38 : 54) : (isHmiPanelOpen ? 48 : 68)}
-              minSize={35}
+              // Leave room for the console-right panel (30%) so Explorer +
+              // workspace + console-right sum to ~100% instead of 114%.
+              defaultSize={isConsoleDockedRight ? 54 : 68}
+              minSize={50}
               className='flex h-full min-h-0 overflow-hidden'
             >
               <div
@@ -682,7 +738,9 @@ const WorkspaceScreen = () => {
                           className='flex w-auto items-center rounded-b-lg border-brand bg-neutral-50 px-2 py-1 dark:bg-neutral-900'
                           onClick={togglePanel}
                         >
-                          <p className='text-xs font-medium text-brand-medium dark:text-brand-light'>Expand Table</p>
+                          <p className='text-xs font-medium text-brand-medium dark:text-brand-light'>
+                            {tr('Expand Table')}
+                          </p>
                           <ExitIcon
                             size='sm'
                             className='-rotate-90 select-none fill-brand-medium  stroke-brand dark:fill-brand-light dark:stroke-brand-light'
@@ -693,11 +751,7 @@ const WorkspaceScreen = () => {
 
                     {tabs.length > 0 ? (
                       <>
-                        {/* Singleton editor types — at most one tab per project,
-                            so single-mount on the active editor is fine.  Each
-                            remounts on tab switch, which is harmless because
-                            they don't carry per-instance Monaco / ReactFlow
-                            state that would be lost. */}
+                        {/* Singleton editor types (at most one tab per project) remount on switch safely — no per-instance state to lose. */}
                         {editor['type'] === 'plc-resource' && <ResourcesEditor />}
                         {editor['type'] === 'plc-device' && <DeviceEditor />}
                         {editor['type'] === 'plc-remote-device' && editor.meta.protocol === 'ethercat' && (
@@ -711,11 +765,15 @@ const WorkspaceScreen = () => {
                         )}
                         {editor['type'] === 'plc-server' && editor.meta.protocol === 's7comm' && <S7CommServerEditor />}
                         {editor['type'] === 'plc-server' && editor.meta.protocol === 'opcua' && <OpcUaServerEditor />}
-                        {editor['type'] === 'plc-vendor-screen' && <VendorScreenEditor />}
+                        {editor['type'] === 'plc-diagnostics' && <DiagnosticsEditor />}
                         {editor['type'] === 'plc-package-manager' && <PackageManagerEditor />}
                         {editor['type'] === 'plc-library-manager' && <LibraryManagerEditor />}
+                        {editor['type'] === 'plc-user-management' && <UserManagementEditor />}
+                        {editor['type'] === 'plc-persistent-storage' && <PersistentStorageEditor />}
                         {editor['type'] === 'plc-library-manifest' && <LibraryManifestEditor />}
                         {editor['type'] === 'diff-viewer' && <DiffViewerEditor />}
+
+                        <VendorScreenTabs />
 
                         {/* JWPLC HMI Designer — kept mounted while its tab is
                             open: the Designer page (webview) holds the design
@@ -732,13 +790,7 @@ const WorkspaceScreen = () => {
                           </div>
                         )}
 
-                        {/* EtherCAT device editors — multi-instance (one tab
-                            per `deviceId`).  Kept mounted across tab switches
-                            so the device's view state (active tab pane,
-                            scroll position, etc.) survives.  `busName` and
-                            `deviceId` are passed as props so each instance
-                            reads its own device regardless of which tab is
-                            active. */}
+                        {/* Multi-instance (one tab per deviceId), kept mounted so each device's view state survives tab switches. */}
                         {editors
                           .filter((m) => m.type === 'plc-ethercat-device')
                           .map((model) => {
@@ -751,10 +803,26 @@ const WorkspaceScreen = () => {
                             )
                           })}
 
-                        {/* Data type editors — multi-instance (one tab per
-                            data type).  Kept mounted across tab switches.
-                            DataTypeEditor reads its own data type by name
-                            from the project slice, so multi-mount is safe. */}
+                        {editors
+                          .filter((m) => m.type === 'plc-ethercat-module')
+                          .map((model) => {
+                            const isActive =
+                              editor.type === 'plc-ethercat-module' && editor.meta.moduleId === model.meta.moduleId
+                            return (
+                              <div
+                                key={`${model.meta.deviceId}:${model.meta.moduleId}`}
+                                className={cn('h-full w-full', !isActive && 'hidden')}
+                              >
+                                <EtherCATModuleEditor
+                                  busName={model.meta.busName}
+                                  deviceId={model.meta.deviceId}
+                                  moduleId={model.meta.moduleId}
+                                />
+                              </div>
+                            )
+                          })}
+
+                        {/* Multi-instance (one tab per data type); DataTypeEditor reads its own type by name, so multi-mount is safe. */}
                         {editors.some((m) => m.type === 'plc-datatype') && (
                           <div
                             aria-label='Datatypes editor container'
@@ -776,14 +844,31 @@ const WorkspaceScreen = () => {
                           </div>
                         )}
 
-                        {/* POU editors (textual + graphical) — multi-instance.
-                            One ResizablePanelGroup shared by every POU so the
-                            variables-panel splitter position is consistent;
-                            inside, every POU's `VariablesEditor` and body
-                            editor stay mounted, with CSS toggling visibility.
-                            Eliminates the dispose-during-tab-switch error chain
-                            (WordHighlighter, InstantiationService, etc.) and
-                            preserves Monaco cursor / ReactFlow viewport for free. */}
+                        {/* Multi-instance, same pattern: each reads its own list by name, so every open list stays mounted safely. */}
+                        {editors.some((m) => m.type === 'plc-global-variable-list') && (
+                          <div
+                            aria-label='Global variable lists editor container'
+                            className={cn(
+                              'flex h-full w-full flex-1 gap-2',
+                              editor.type !== 'plc-global-variable-list' && 'hidden',
+                            )}
+                          >
+                            {editors
+                              .filter((m) => m.type === 'plc-global-variable-list')
+                              .map((model) => {
+                                const isActive =
+                                  editor.type === 'plc-global-variable-list' && editor.meta.name === model.meta.name
+                                return (
+                                  <div key={model.meta.name} className={cn('h-full w-full', !isActive && 'hidden')}>
+                                    <GlobalVariableListEditor listName={model.meta.name} />
+                                  </div>
+                                )
+                              })}
+                          </div>
+                        )}
+
+                        {/* Multi-instance, one shared ResizablePanelGroup so the splitter position is consistent; CSS toggles
+                            visibility, avoiding the dispose-during-tab-switch error chain and preserving editor viewport state. */}
                         {editors.some((m) => m.type === 'plc-textual' || m.type === 'plc-graphical') && (
                           <div
                             className={cn(
@@ -863,7 +948,7 @@ const WorkspaceScreen = () => {
                       </>
                     ) : (
                       <p className='mx-auto my-auto flex cursor-default select-none flex-col items-center gap-2 font-display text-xl font-medium'>
-                        No tabs open
+                        {tr('No tabs open')}
                       </p>
                     )}
                     {!isConsoleDockedRight && (
@@ -932,41 +1017,45 @@ const WorkspaceScreen = () => {
                 </ResizablePanel>
               </>
             )}
-            {hasHmi && isHmiPanelOpen && (
-              <>
-                <ResizableHandle
-                  id='hmiDockHandle'
-                  hitAreaMargins={{ coarse: 12, fine: 3 }}
-                  className='z-[99] my-[2px] w-[4px] py-2 transition-colors duration-200 data-[resize-handle-active="pointer"]:bg-brand-light data-[resize-handle-state="hover"]:bg-brand-light data-[resize-handle-active="pointer"]:dark:bg-neutral-700 data-[resize-handle-state="hover"]:dark:bg-neutral-700'
-                />
-                <ResizablePanel
-                  id='hmiPanel'
-                  order={5}
-                  collapsible
-                  defaultSize={24}
-                  minSize={18}
-                  maxSize={45}
-                  className='relative flex h-full min-h-0 w-full flex-col rounded-lg border-2 border-neutral-200 bg-white p-3.5 data-[panel-size="0.0"]:hidden dark:border-neutral-800 dark:bg-neutral-950'
-                >
-                  <HmiSidePanel onClose={() => setIsHmiPanelOpen(false)} />
-                </ResizablePanel>
-              </>
-            )}
           </ResizablePanelGroup>
-          {hasHmi && !isHmiPanelOpen && (
-            <button
-              type='button'
-              onClick={() => setIsHmiPanelOpen(true)}
-              title='Abrir panel lateral HMI Designer (TFT ST7789)'
-              className='absolute right-0 top-1/2 z-[100] flex -translate-y-1/2 items-center gap-1.5 rounded-l-md border-y border-l border-blue-500 bg-blue-600 px-1.5 py-3 text-xs font-semibold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95 [writing-mode:vertical-rl]'
-            >
-              <span>🖥️ HMI Designer ◀</span>
-            </button>
-          )}
         </WorkspaceMainContent>
       </div>
       {hasVersionControl && projectPath && (
         <BranchStatusBar projectId={projectPath} onBranchSwitch={handleBranchSwitch} />
+      )}
+
+      {/* Set only on desktop (no router); web navigates to /history in a new tab instead, leaving this null there.
+          `inset-0` over the workspace rather than a modal: it's a screen, and the graphical diff needs the room. */}
+      {hasVersionControl && projectPath && historyView && (
+        <div className='absolute inset-0 z-50'>
+          <CommitHistoryView
+            projectId={projectPath}
+            commitHash={historyView.commitHash}
+            initialFile={historyView.file}
+            onBack={closeHistoryView}
+            onRestored={() => {
+              closeHistoryView()
+              void reloadOpenProject('The project was restored but could not be reloaded.')
+            }}
+          />
+        </div>
+      )}
+
+      {/* Same arrangement as the commit view above (desktop-only; web navigates to /merge). Closing on a completed
+          merge reloads the project, since the merge moved the branch on the server. */}
+      {hasVersionControl && projectPath && mergeView && (
+        <div className='absolute inset-0 z-50'>
+          <BranchMergeView
+            projectId={projectPath}
+            sourceBranch={mergeView.sourceBranch}
+            targetParam={mergeView.targetBranch}
+            onBack={closeMergeView}
+            onMerged={() => {
+              closeMergeView()
+              void reloadOpenProject('The merge completed but the project could not be reloaded.')
+            }}
+          />
+        </div>
       )}
     </div>
   )

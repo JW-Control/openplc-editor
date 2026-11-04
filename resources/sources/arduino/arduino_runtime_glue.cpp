@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Autonomy®
 // arduino_runtime_glue.cpp — Arduino-side runtime shim. Equivalent role to
 // runtime_v4_entry.cpp for the OpenPLC v4 .so build, but compiled into the
 // Arduino library at src/ instead of into a daemon-loaded .so.
@@ -18,6 +20,18 @@
 #include "openplc.h"
 #include "generated.hpp"
 #include "debug_dispatch.hpp"
+#include "iec_retain.hpp"
+#include "openplc_retain.h"
+#include "opcua_types.h"
+
+// Placement new, used by runtime_reinit_program() to re-run the program's
+// initializers over storage that already exists. Available on every target the
+// editor builds for, AVR included (the bundled avr-libstdcpp ships <new>, and
+// the strucpp headers above already pull it in transitively via <algorithm>).
+// Note this is the PLACEMENT form only -- it allocates nothing.
+#include <new>
+// std::is_trivially_destructible, for the diagnostic static_assert below.
+#include <type_traits>
 
 // ---------------------------------------------------------------------------
 // Runtime fault hook
@@ -47,6 +61,72 @@ unsigned long long base_tick_ns = 20000000ULL;
 uint32_t           scan_counter = 0;
 
 // ---------------------------------------------------------------------------
+// Run/stop state. See the contract comment in arduino_runtime_glue.h.
+//
+// `software_stop` is the latch set by runtime_request_plc_state(); `plc_state`
+// is derived from it plus the switch every cycle, so it is never written from
+// anywhere but runtime_plc_cycle() / runtime_init_plc_state().
+// ---------------------------------------------------------------------------
+static uint8_t plc_state      = PLC_STATE_RUNNING;
+static uint8_t switch_position = PLC_SWITCH_RUN;
+static uint8_t last_switch     = PLC_SWITCH_RUN;
+static bool    software_stop   = false;
+
+// Weak default: boards with no physical mode switch always read RUN, so the
+// gate collapses to "software request only" and the boot state is RUNNING --
+// identical to the behaviour before this interface existed. A VPP HAL
+// provides a strong extern "C" override.
+extern "C" __attribute__((weak)) uint8_t hardwareStateSwitch(void)
+{
+    return PLC_SWITCH_RUN;
+}
+
+// Weak default: a board with no resident firmware bootloader cannot honour the
+// Modbus reboot-to-bootloader command (FC 0x4C), so this is a no-op. A HAL whose
+// device has one provides a strong extern "C" override (see openplc.h).
+extern "C" __attribute__((weak)) void hardwareRebootToBootloader(void)
+{
+}
+
+// Weak defaults: a board with no programming lock is never locked, so FC 0x4C
+// is never refused and the prompt is never needed. A HAL whose device has a
+// lock (the LOGO! panel) provides strong extern "C" overrides -- see openplc.h.
+extern "C" __attribute__((weak)) uint8_t hardwareProgrammingLocked(void)
+{
+    return 0;
+}
+
+extern "C" __attribute__((weak)) void hardwarePromptUnlock(void)
+{
+}
+
+extern "C" uint8_t runtime_get_plc_state(void)
+{
+    return plc_state;
+}
+
+extern "C" uint8_t runtime_get_switch_position(void)
+{
+    return switch_position;
+}
+
+extern "C" uint8_t runtime_request_plc_state(uint8_t desired_state)
+{
+    if (desired_state == PLC_STATE_RUNNING) {
+        // Hardware is authoritative: refuse rather than queue, so the caller
+        // can tell the user to flip the switch instead of silently waiting.
+        if (hardwareStateSwitch() == PLC_SWITCH_STOP) return PLC_CTRL_REFUSED_SWITCH_STOP;
+        software_stop = false;
+        return PLC_CTRL_OK;
+    }
+    if (desired_state == PLC_STATE_STOPPED) {
+        software_stop = true;
+        return PLC_CTRL_OK;
+    }
+    return PLC_CTRL_INVALID;
+}
+
+// ---------------------------------------------------------------------------
 // GCD utility — used by discoverTasks for the base-tick computation
 // ---------------------------------------------------------------------------
 static uint64_t gcd(uint64_t a, uint64_t b)
@@ -61,6 +141,23 @@ static uint64_t gcd(uint64_t a, uint64_t b)
 
 // ---------------------------------------------------------------------------
 // I/O binding: walk locatedVars[] and bind to openplc.h buffer pointers
+//
+// Every slot write below is range-checked. locatedVars[] is authored from
+// whatever `AT %...` the user typed, and nothing in the descriptor itself
+// says how big this firmware's process image is -- so an address past the
+// end (`%QX7.0` on a 56-output image: byte_index 7 against bool_output[7][8])
+// used to write straight past the array and corrupt whatever followed it.
+// Only the DWord cases were guarded; the rest are now (openplc-editor#296).
+//
+// The editor rejects an out-of-range location before the build gets here,
+// so reaching a skip is not the expected path -- this is the backstop for a
+// hand-written .st, a project moved to a smaller board, or a stale build.
+// Dropping the binding leaves the slot NULL, which every HAL and the Modbus
+// glue already treat as "not wired" and step over.
+//
+// The bit-addressed buffers are declared [MAX/8][8], so the bound to check
+// is the FIRST dimension: an image whose digital count isn't a multiple of 8
+// rounds down, and the slots in the partial byte are unaddressable.
 // ---------------------------------------------------------------------------
 void runtime_bind_located_vars()
 {
@@ -73,10 +170,14 @@ void runtime_bind_located_vars()
         case LocatedArea::Input:
             switch (lv.size) {
             case LocatedSize::Bit:
-                bool_input[lv.byte_index][lv.bit_index] = (::IEC_BOOL*)lv.pointer;
+                if (lv.byte_index < (MAX_DIGITAL_INPUT / 8) && lv.bit_index < 8) {
+                    bool_input[lv.byte_index][lv.bit_index] = (::IEC_BOOL*)lv.pointer;
+                }
                 break;
             case LocatedSize::Word:
-                int_input[lv.byte_index] = (::IEC_UINT*)lv.pointer;
+                if (lv.byte_index < MAX_ANALOG_INPUT) {
+                    int_input[lv.byte_index] = (::IEC_UINT*)lv.pointer;
+                }
                 break;
 #if !defined(__AVR_ATmega328P__) && !defined(__AVR_ATmega168__) && !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega16U4__)
             case LocatedSize::DWord:
@@ -101,10 +202,14 @@ void runtime_bind_located_vars()
         case LocatedArea::Output:
             switch (lv.size) {
             case LocatedSize::Bit:
-                bool_output[lv.byte_index][lv.bit_index] = (::IEC_BOOL*)lv.pointer;
+                if (lv.byte_index < (MAX_DIGITAL_OUTPUT / 8) && lv.bit_index < 8) {
+                    bool_output[lv.byte_index][lv.bit_index] = (::IEC_BOOL*)lv.pointer;
+                }
                 break;
             case LocatedSize::Word:
-                int_output[lv.byte_index] = (::IEC_UINT*)lv.pointer;
+                if (lv.byte_index < MAX_ANALOG_OUTPUT) {
+                    int_output[lv.byte_index] = (::IEC_UINT*)lv.pointer;
+                }
                 break;
 #if !defined(__AVR_ATmega328P__) && !defined(__AVR_ATmega168__) && !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega16U4__)
             case LocatedSize::DWord:
@@ -127,13 +232,19 @@ void runtime_bind_located_vars()
 #if !defined(__AVR_ATmega328P__) && !defined(__AVR_ATmega168__) && !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega16U4__)
             switch (lv.size) {
             case LocatedSize::Word:
-                int_memory[lv.byte_index] = (::IEC_UINT*)lv.pointer;
+                if (lv.byte_index < MAX_MEMORY_WORD) {
+                    int_memory[lv.byte_index] = (::IEC_UINT*)lv.pointer;
+                }
                 break;
             case LocatedSize::DWord:
-                dint_memory[lv.byte_index] = (::IEC_UDINT*)lv.pointer;
+                if (lv.byte_index < MAX_MEMORY_DWORD) {
+                    dint_memory[lv.byte_index] = (::IEC_UDINT*)lv.pointer;
+                }
                 break;
             case LocatedSize::LWord:
-                lint_memory[lv.byte_index] = (::IEC_ULINT*)lv.pointer;
+                if (lv.byte_index < MAX_MEMORY_LWORD) {
+                    lint_memory[lv.byte_index] = (::IEC_ULINT*)lv.pointer;
+                }
                 break;
             default: break;
             }
@@ -255,25 +366,506 @@ uint8_t runtime_located_bool_is_forced(const void* raw)
 }
 
 // ---------------------------------------------------------------------------
-// One scan cycle: copy inputs → run scheduled programs → copy outputs →
-// advance IEC TIME() so TON/TOF/TP can progress.
+// Process image access (see arduino_runtime_glue.h for the contract).
+//
+// Every bound is taken here and nowhere else, so a protocol cannot get it
+// wrong by forgetting one. These read the tables the sketch defines; they own
+// no storage of their own, which is the whole point -- a protocol addressing
+// the image needs no mirror buffer.
+// ---------------------------------------------------------------------------
+
+/** Bits a bit area's array can actually hold. openplc.h declares them
+ *  [MAX/8][8], so a MAX that is not a whole number of bytes rounds DOWN and
+ *  the slots of the partial byte are unaddressable. Bounding on the macro
+ *  instead would hand out an index the array has no room for. */
+#define OPENPLC_BIT_CAPACITY(max_bits) ((uint16_t)(((max_bits) / 8) * 8))
+
+extern "C" uint16_t openplc_image_count(openplc_image_area_t area)
+{
+    switch (area) {
+    case OPENPLC_AREA_BOOL_INPUT:  return OPENPLC_BIT_CAPACITY(MAX_DIGITAL_INPUT);
+    case OPENPLC_AREA_BOOL_OUTPUT: return OPENPLC_BIT_CAPACITY(MAX_DIGITAL_OUTPUT);
+    case OPENPLC_AREA_INT_INPUT:   return (uint16_t)MAX_ANALOG_INPUT;
+    case OPENPLC_AREA_INT_OUTPUT:  return (uint16_t)MAX_ANALOG_OUTPUT;
+#if OPENPLC_HAS_EXTENDED_AREAS
+    case OPENPLC_AREA_REAL_INPUT:  return (uint16_t)MAX_REAL_INPUT;
+    case OPENPLC_AREA_REAL_OUTPUT: return (uint16_t)MAX_REAL_OUTPUT;
+    case OPENPLC_AREA_INT_MEMORY:  return (uint16_t)MAX_MEMORY_WORD;
+    case OPENPLC_AREA_DINT_MEMORY: return (uint16_t)MAX_MEMORY_DWORD;
+    case OPENPLC_AREA_LINT_MEMORY: return (uint16_t)MAX_MEMORY_LWORD;
+#endif
+    default: return 0;
+    }
+}
+
+extern "C" void* openplc_image_slot(openplc_image_area_t area, uint16_t index, uint8_t* width)
+{
+    uint8_t w = 0;
+    void*   p = nullptr;
+
+    switch (area) {
+    case OPENPLC_AREA_INT_INPUT:
+        w = 2;
+        if (index < openplc_image_count(area)) p = (void*)int_input[index];
+        break;
+    case OPENPLC_AREA_INT_OUTPUT:
+        w = 2;
+        if (index < openplc_image_count(area)) p = (void*)int_output[index];
+        break;
+#if OPENPLC_HAS_EXTENDED_AREAS
+    case OPENPLC_AREA_REAL_INPUT:
+        w = 4;
+        if (index < openplc_image_count(area)) p = (void*)real_input[index];
+        break;
+    case OPENPLC_AREA_REAL_OUTPUT:
+        w = 4;
+        if (index < openplc_image_count(area)) p = (void*)real_output[index];
+        break;
+    case OPENPLC_AREA_INT_MEMORY:
+        w = 2;
+        if (index < openplc_image_count(area)) p = (void*)int_memory[index];
+        break;
+    case OPENPLC_AREA_DINT_MEMORY:
+        w = 4;
+        if (index < openplc_image_count(area)) p = (void*)dint_memory[index];
+        break;
+    case OPENPLC_AREA_LINT_MEMORY:
+        w = 8;
+        if (index < openplc_image_count(area)) p = (void*)lint_memory[index];
+        break;
+#endif
+    // The bit areas answer through openplc_image_bit; width 0 says so.
+    default:
+        break;
+    }
+
+    if (width) *width = w;
+    return p;
+}
+
+extern "C" uint8_t* openplc_image_bit(openplc_image_area_t area, uint16_t bit_index)
+{
+    if (bit_index >= openplc_image_count(area)) return nullptr;
+
+    switch (area) {
+    case OPENPLC_AREA_BOOL_INPUT:
+        return (uint8_t*)bool_input[bit_index / 8][bit_index % 8];
+    case OPENPLC_AREA_BOOL_OUTPUT:
+        return (uint8_t*)bool_output[bit_index / 8][bit_index % 8];
+    default:
+        return nullptr;   // count already returned 0 for every other area
+    }
+}
+
+// ---------------------------------------------------------------------------
+// De-energise the output image.
+//
+// Called every cycle while stopped, immediately before updateOutputBuffers()
+// pushes the image to hardware. Two consequences worth keeping in mind:
+//
+//   - A Modbus client writing coils between cycles cannot energise a physical
+//     output while stopped: its write lands in the image and is zeroed here
+//     before the HAL ever sees it.
+//   - Memory areas (int_memory / dint_memory / lint_memory) are deliberately
+//     NOT cleared. They are not physical outputs.
+//
+// The image slots alias the located variables' IECVar storage, so this also
+// zeroes the program's own %QX / %QW / %QD variables. That is intended: a
+// stopped PLC holds no output state.
+// ---------------------------------------------------------------------------
+static void runtime_zero_output_image()
+{
+    for (int i = 0; i < MAX_DIGITAL_OUTPUT; ++i) {
+        if (bool_output[i / 8][i % 8]) *bool_output[i / 8][i % 8] = 0;
+    }
+    for (int i = 0; i < MAX_ANALOG_OUTPUT; ++i) {
+        if (int_output[i]) *int_output[i] = 0;
+    }
+#if !defined(__AVR_ATmega328P__) && !defined(__AVR_ATmega168__) && !defined(__AVR_ATmega32U4__) && !defined(__AVR_ATmega16U4__)
+    for (int i = 0; i < MAX_REAL_OUTPUT; ++i) {
+        if (real_output[i]) *real_output[i] = 0.0f;
+    }
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Cold-stop the program: re-run every IEC initial value so the next start
+// begins at cycle 1 rather than resuming mid-flight.
+//
+// NO DYNAMIC ALLOCATION. g_config is a file-scope object with static storage
+// duration (.bss/.data), and placement new constructs into that existing
+// storage — it calls neither malloc nor operator new(size_t). Everything the
+// generated Configuration holds is by value and fixed size, and nothing in
+// the strucpp runtime allocates (IECVar is three value members; IEC_STRING is
+// a fixed char array).
+//
+// Every pointer into g_config survives, because placement new reuses the same
+// storage with the same layout: locatedVars[i].pointer, the image-table slots,
+// the ProgramBase* entries cached in all_programs[] and in the configuration's
+// own task_programs_storage[], and the flash-resident Entry tables in
+// generated_debug.cpp that hold raw void* into g_config members.
+//
+// runtime_discover_tasks() is deliberately NOT re-run: it new[]-allocates
+// all_programs / task_divisors, so calling it twice would leak. The tables it
+// built stay correct.
+//
+// Two documented consequences: debugger forces are cleared (force state lives
+// inside each IECVar), and a program using the explicit IEC NEW operator must
+// DELETE before stopping or it leaks across restarts — nothing frees those
+// allocations automatically, at re-init or otherwise.
+// ---------------------------------------------------------------------------
+static void runtime_reinit_program()
+{
+    // Destroy then re-construct in place. The destructor call matters:
+    // Configuration_CONFIG0 derives from strucpp::ConfigurationInstance, which
+    // declares `virtual ~ConfigurationInstance() = default` (iec_std_lib.hpp),
+    // so the type is NOT trivially destructible even though it owns nothing.
+    // Pairing the destructor with the placement new is correct either way --
+    // for a defaulted virtual destructor it compiles to nothing, and if a
+    // future strucpp change adds a genuinely owning member it runs that
+    // member's cleanup instead of leaking it. Neither call allocates.
+    g_config.~Configuration_CONFIG0();
+    new (&g_config) strucpp::Configuration_CONFIG0();
+
+    runtime_zero_output_image();
+    runtime_bind_located_vars();   // idempotent, allocation-free
+    // The placement-new above re-ran every declared initialiser, wiping the
+    // retained values with it. Restore them, or entering STOP would silently
+    // become a cold start — the transition users hit most often.
+    runtime_retain_load();
+    scan_counter = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Retain variables.
+//
+// The runtime MARSHALS and the platform STORES. `strucpp::retain` turns the
+// retained leaves into a blob and back; `openplc_retain_*` puts those bytes
+// somewhere that survives power loss. Neither knows anything about the other's
+// half, which is what lets one board keep values in FRAM and the next in an
+// EEPROM it may only write every ten seconds.
+//
+// The buffer is a file-scope array, sized once at start. Not a stack local: it
+// is written from the scan path, and a few hundred bytes of stack per cycle is
+// not affordable on a 2 KB-SRAM part. Not malloc'd either — the firmware
+// allocates nothing after setup.
+// ---------------------------------------------------------------------------
+
+// Cap on the retain blob this firmware will handle. Sized for the boards the
+// editor targets, and deliberately a fixed allocation: this buffer is filled
+// from inside the scan cycle, so it cannot come from the heap.
+#define RETAIN_BUFFER_MAX 512
+
+// A program that outgrows the buffer FAILS THE BUILD.
+//
+// The editor emits OPLC_RETAIN_BLOB_SIZE into defines.h whenever a program
+// retains anything, and the check has to happen here because there is nowhere
+// else for it to happen: a microcontroller has no console to report on, so the
+// alternative is firmware that links, runs, quietly decides the blob will not
+// fit and behaves as NON_RETAIN — on a machine somebody has already installed,
+// with the fault only visible after a power cycle.
+//
+// Retained state adds up faster than it looks. A retained TON is 36 bytes
+// (four interface leaves plus the four internal ones that make it a timer),
+// so this cap is reached at around fourteen of them.
+#ifdef OPLC_RETAIN_BLOB_SIZE
+static_assert(OPLC_RETAIN_BLOB_SIZE <= RETAIN_BUFFER_MAX,
+              "This program's retained variables need more storage than this "
+              "board's retain buffer holds (RETAIN_BUFFER_MAX). Retain fewer "
+              "variables, or mark some of them NON_RETAIN. Remember that a "
+              "retained function block instance retains all of its internal "
+              "state, not only its inputs and outputs.");
+#endif
+
+// The bit areas must be a whole number of bytes, or the build FAILS.
+//
+// openplc.h declares them as `bool_input[MAX_DIGITAL_INPUT/8][8]`, so the
+// number is in bits and the division has to come out even. A value that is not
+// a multiple of eight truncates: the array comes up one byte short and the
+// slots of the partial byte become unaddressable, so the top few points of an
+// image simply do nothing. Nothing downstream can report that -- there is no
+// console on a microcontroller -- so the check happens at build time or not at
+// all, exactly as with OPLC_RETAIN_BLOB_SIZE above.
+//
+// The editor already rounds these up when it emits them, which is
+// why this should never fire. That is the point: it is here so that the day it
+// stops rounding, the failure is a compiler error naming the cause rather than
+// I/O that quietly stops at the wrong index.
+static_assert(MAX_DIGITAL_INPUT % 8 == 0,
+              "MAX_DIGITAL_INPUT must be a multiple of 8: openplc.h declares "
+              "bool_input as [MAX_DIGITAL_INPUT/8][8], so a remainder is "
+              "silently dropped and the last few inputs become unaddressable.");
+static_assert(MAX_DIGITAL_OUTPUT % 8 == 0,
+              "MAX_DIGITAL_OUTPUT must be a multiple of 8: openplc.h declares "
+              "bool_output as [MAX_DIGITAL_OUTPUT/8][8], so a remainder is "
+              "silently dropped and the last few outputs become unaddressable.");
+
+// The image has to be at least as large as the pin table that indexes it.
+//
+// Both halves of defines.h now come from one emitter but two SOURCES:
+// NUM_DISCRETE_INPUT and its siblings are counts of mapped pins, while
+// MAX_DIGITAL_INPUT and its siblings come from the address registry and are
+// capability-scoped. The HALs index with the first and size with the second --
+// `for (int i = 0; i < NUM_DISCRETE_INPUT; i++) ... bool_input[i/8][i%8]`
+// against `bool_input[MAX_DIGITAL_INPUT/8][8]`.
+//
+// While the MAX_* were fixed constants comfortably above any board's pin count
+// the two could not disagree. They can now: MAX_DIGITAL_INPUT may legitimately
+// be 0, and any path where the registry sizes an area below the pin count --
+// a pin whose address does not parse still counts toward NUM_, a capability
+// block that switches pinMapping off while a mapping still reaches the
+// emitter -- is an out-of-bounds write on a microcontroller, with nothing
+// anywhere to report it.
+static_assert(MAX_DIGITAL_INPUT >= NUM_DISCRETE_INPUT,
+              "MAX_DIGITAL_INPUT is smaller than NUM_DISCRETE_INPUT: the HAL "
+              "loops over every mapped input pin and indexes bool_input, which "
+              "is declared from MAX_DIGITAL_INPUT. The image is sized from the "
+              "address registry and the pin count is not, so they have "
+              "disagreed -- writing past the end of bool_input.");
+static_assert(MAX_DIGITAL_OUTPUT >= NUM_DISCRETE_OUTPUT,
+              "MAX_DIGITAL_OUTPUT is smaller than NUM_DISCRETE_OUTPUT: the HAL "
+              "loops over every mapped output pin and indexes bool_output, "
+              "which is declared from MAX_DIGITAL_OUTPUT.");
+static_assert(MAX_ANALOG_INPUT >= NUM_ANALOG_INPUT,
+              "MAX_ANALOG_INPUT is smaller than NUM_ANALOG_INPUT: the HAL "
+              "loops over every mapped analog input and indexes int_input, "
+              "which is declared from MAX_ANALOG_INPUT.");
+static_assert(MAX_ANALOG_OUTPUT >= NUM_ANALOG_OUTPUT,
+              "MAX_ANALOG_OUTPUT is smaller than NUM_ANALOG_OUTPUT: the HAL "
+              "loops over every mapped analog output and indexes int_output, "
+              "which is declared from MAX_ANALOG_OUTPUT.");
+
+static uint8_t  retain_buffer[RETAIN_BUFFER_MAX];
+static uint16_t retain_blob_len   = 0;   // 0 = nothing retained, or unusable
+static bool     retain_available  = false;
+
+// This program's identity, handed to the driver on every read so it can tell
+// whether what it is holding belongs to the program now running. Supplied by
+// the sketch from PROGRAM_MD5 rather than read from defines.h here, which
+// keeps the value flowing on one path and the sketch as its only source.
+//
+// This comment used to say defines.h "must reach a translation unit through
+// exactly one path (modbus_config.h), which this file is deliberately not on".
+// That stopped being true once the image became project-sized: openplc.h now
+// includes defines.h from
+// inside its own guard, so every TU that sees openplc.h sees defines.h,
+// including this one. Re-inclusion is safe — defines.h holds nothing but
+// object-like macros, and redefining a macro to an identical token sequence is
+// permitted (C11 6.10.3p2) — and nothing here, in modbus_debug.cpp or in
+// Arduino_OpenPLC.h changes behaviour as a result. The
+// single-path rule is simply gone; do not restore it from memory.
+static const char *retain_program_md5 = nullptr;
+
+static uint16_t retain_read_leaf(uint8_t arr, uint16_t elem, uint8_t* dest) {
+    return strucpp::debug::handle_read(arr, elem, dest);
+}
+
+// A PLAIN write, never a force. Restoring a retained value must not pin it: the
+// program has to be able to move it on the very next scan, and an operator's
+// force has to stay authoritative over whatever was stored.
+static uint8_t retain_write_leaf(uint8_t arr, uint16_t elem, const uint8_t* bytes, uint16_t len) {
+    return strucpp::debug::handle_write(arr, elem, bytes, len);
+}
+
+static uint16_t retain_size_leaf(uint8_t arr, uint16_t elem) {
+    return strucpp::debug::handle_size(arr, elem);
+}
+
+// ---------------------------------------------------------------------------
+// Decide once, at start, what THIS RUNTIME can do about retention: does the
+// program retain anything, and does the blob fit the buffer this firmware
+// allocated for it. Both are facts about the runtime and the program, not about
+// the board's storage — whether the platform can actually keep the bytes is the
+// driver's answer, and it gives it by returning UNSUPPORTED from read().
+// ---------------------------------------------------------------------------
+void runtime_retain_init(const char *program_md5)
+{
+    retain_available    = false;
+    retain_blob_len     = 0;
+    retain_program_md5  = program_md5;
+
+    const size_t needed = strucpp::retain::blob_size(retain_size_leaf);
+    if (needed == 0) return;           // the program retains nothing
+    // Unreachable when the editor supplied OPLC_RETAIN_BLOB_SIZE — the
+    // static_assert above already refused the build. Kept for firmware built
+    // by other means, where silently degrading still beats overrunning.
+    if (needed > RETAIN_BUFFER_MAX) return;
+
+    retain_blob_len  = (uint16_t)needed;
+    retain_available = true;
+}
+
+// ---------------------------------------------------------------------------
+// Restore. Call after the IEC variables exist and before the first scan — on
+// the transition into RUN, and after any re-initialisation, because that
+// re-runs every declared initialiser and would otherwise make a STOP behave as
+// a cold start. Idempotent by design, so calling it at all three is fine.
+//
+// The driver is handed this program's identity and decides for itself whether
+// what it holds still belongs here; a store it has just discarded answers
+// NO_DATA, exactly like a store that never held anything. Anything the runtime
+// cannot trust on top of that (bad magic, wrong format, failed crc, a layout
+// from a different program) leaves every variable at its initial value. That is
+// the correct outcome: a machine starting from its declared defaults is
+// recoverable, one starting from plausible-looking garbage is not.
+//
+// UNSUPPORTED switches retention off for the rest of the run. A board with no
+// backend should not pay to pack a blob 50 times a second that nothing stores,
+// and the driver's own answer is the only honest way to learn that — the
+// runtime no longer asks a capacity question up front.
+// ---------------------------------------------------------------------------
+void runtime_retain_load()
+{
+    if (!retain_available) return;
+
+    uint16_t got = 0;
+    const openplc_retain_status_t rc = openplc_retain_read(
+        retain_program_md5, OPLC_RETAIN_PROGRAM_ID_LEN, retain_buffer, retain_blob_len, &got);
+
+    if (rc == OPLC_RETAIN_UNSUPPORTED) {
+        retain_available = false;
+        return;
+    }
+    if (rc != OPLC_RETAIN_OK || got == 0) return;
+
+    strucpp::retain::unpack(retain_buffer, got, retain_write_leaf, retain_size_leaf);
+}
+
+// ---------------------------------------------------------------------------
+// Save. Called once per scan cycle, unconditionally, WHILE RUNNING.
+//
+// No dirty check and no rate limit here on purpose: whether these bytes are
+// worth committing, and how often, is the platform's decision, and it is the
+// only layer that knows what its storage costs. See openplc_retain.h.
+//
+// Running only, so the two runtimes agree: on the Linux daemon a STOP unloads
+// the program outright and there is no scan to save from, and a firmware that
+// kept writing an unchanging blob while the machine sat stopped would spend a
+// board's flash budget on nothing.
+// ---------------------------------------------------------------------------
+void runtime_retain_save()
+{
+    if (!retain_available) return;
+
+    const size_t n = strucpp::retain::pack(
+        retain_buffer, sizeof(retain_buffer), retain_read_leaf, retain_size_leaf);
+    if (n == 0) return;
+
+    openplc_retain_write(retain_buffer, (uint16_t)n);
+}
+
+// ---------------------------------------------------------------------------
+// Commit anything the driver is still holding. Called on the transition into
+// STOP, after the last scan and before the program is re-initialised.
+//
+// A hint, not the durability mechanism — write() is what protects against a
+// power cut, and a power cut does not call this. What it buys is that a CLEAN
+// stop loses nothing on a driver that buffers.
+// ---------------------------------------------------------------------------
+void runtime_retain_flush()
+{
+    if (!retain_available) return;
+    openplc_retain_flush();
+}
+
+// ---------------------------------------------------------------------------
+// Establish the initial state. Called once from setup(), after hardwareInit()
+// so the HAL's switch pin is already configured.
+// ---------------------------------------------------------------------------
+void runtime_init_plc_state()
+{
+    switch_position = hardwareStateSwitch();
+    last_switch     = switch_position;
+    software_stop   = false;
+    plc_state = (switch_position == PLC_SWITCH_STOP) ? PLC_STATE_STOPPED : PLC_STATE_RUNNING;
+}
+
+// ---------------------------------------------------------------------------
+// One scan cycle: resolve run/stop → copy inputs → run scheduled programs →
+// copy outputs → advance IEC TIME() so TON/TOF/TP can progress.
+//
+// While stopped the loop keeps cycling: inputs are still refreshed (so the
+// debugger and Modbus clients see live field data during commissioning),
+// outputs stay de-energised, updateOutputBuffers() is still called (so a HAL
+// driving a status LED from it stays correct), and IEC time is frozen.
 // ---------------------------------------------------------------------------
 void runtime_plc_cycle()
 {
+    // 1. Resolve the state from the mode switch and the software latch.
+    const uint8_t sw = hardwareStateSwitch();
+    // A physical flip to RUN always puts the PLC in RUN — clearing a software
+    // stop, so the switch is never overridden by a stale editor command.
+    if (sw == PLC_SWITCH_RUN && last_switch == PLC_SWITCH_STOP) software_stop = false;
+    last_switch     = sw;
+    switch_position = sw;
+
+    const uint8_t new_state =
+        (sw == PLC_SWITCH_STOP || software_stop) ? PLC_STATE_STOPPED : PLC_STATE_RUNNING;
+
+    // Entering STOP is a cold stop: zero the outputs and re-initialise the
+    // program exactly once, on the transition.
+    //
+    // The flush goes FIRST, and the order is load-bearing:
+    // runtime_reinit_program() re-runs every declared initialiser, so a flush
+    // after it would ask the driver to commit the initial values over the ones
+    // the program actually stopped with.
+    if (new_state == PLC_STATE_STOPPED && plc_state != PLC_STATE_STOPPED) {
+        runtime_retain_flush();
+        runtime_reinit_program();
+    }
+
+    // Entering RUN restores the retained values, matching where the Linux
+    // daemon reloads them (it does it as part of loading the program). Nothing
+    // normally changes them while stopped, so this is usually a no-op — except
+    // in the one case that matters: a driver that discarded the store because
+    // the program changed. Idempotent, so calling it on every RUN edge is safe.
+    if (new_state == PLC_STATE_RUNNING && plc_state != PLC_STATE_RUNNING) {
+        runtime_retain_load();
+    }
+
+    plc_state = new_state;
+
+    // 2. Inputs, in both states.
     updateInputBuffers();
     // HAL just wrote raw input storage directly — re-impose any forced input.
     runtime_apply_located_forces();
 
-    for (size_t i = 0; i < total_programs; ++i) {
-        if (task_divisors[i] == 0 || (scan_counter % task_divisors[i]) == 0) {
-            all_programs[i]->run();
+    if (plc_state == PLC_STATE_RUNNING) {
+        for (size_t i = 0; i < total_programs; ++i) {
+            if (task_divisors[i] == 0 || (scan_counter % task_divisors[i]) == 0) {
+                all_programs[i]->run();
+            }
         }
+        ++scan_counter;
+    } else {
+        // Re-zero every stopped cycle, not just on the transition: a Modbus
+        // client may have written coils into the image since the last cycle.
+        runtime_zero_output_image();
     }
-    ++scan_counter;
 
+    // 3. Outputs, in both states — zeros while stopped.
     updateOutputBuffers();
 
-    strucpp::__CURRENT_TIME_NS += (int64_t)base_tick_ns;
+    // 4. IEC time advances only while running, so TON/TOF/TP resume where
+    //    they left off instead of jumping by the stop duration.
+    if (plc_state == PLC_STATE_RUNNING) {
+        strucpp::__CURRENT_TIME_NS += (int64_t)base_tick_ns;
+    }
+
+    // 5. Hand the retained values to the platform. Every cycle while RUNNING —
+    //    a value that changed in the last scan before power loss is exactly the
+    //    one worth keeping. Whether this is actually committed to storage now is
+    //    the driver's call; the default is a no-op.
+    //
+    //    Not while stopped: the Linux daemon unloads the program on a STOP and
+    //    has no scan to save from, so saving here would be the one place the two
+    //    runtimes disagreed — and it would spend a board's flash budget
+    //    rewriting an unchanging blob for as long as the machine sits idle. The
+    //    values the program stopped with are already stored by the last RUNNING
+    //    cycle, and the flush on the STOP transition commits them.
+    if (plc_state == PLC_STATE_RUNNING) {
+        runtime_retain_save();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +900,45 @@ extern "C" uint8_t openplc_debug_set(uint8_t arr, uint16_t elem, uint8_t forcing
     return strucpp::debug::handle_set(arr, elem, forcing != 0, bytes, len);
 }
 
-extern "C" uint8_t openplc_debug_write(uint8_t arr, uint16_t elem, const uint8_t* bytes, uint16_t len)
+extern "C" uint8_t openplc_debug_write(uint8_t arr, uint16_t elem,
+                                       const uint8_t* bytes, uint16_t len)
 {
     return strucpp::debug::handle_write(arr, elem, bytes, len);
 }
+
+extern "C" const void* openplc_debug_ptr(uint8_t arr, uint16_t elem, uint16_t* out_len)
+{
+    return strucpp::debug::handle_ptr(arr, elem, out_len);
+}
+
+// The status macros in arduino_runtime_glue.h exist so the other side of the
+// boundary never has to include debug_dispatch.hpp. This is the one place that
+// sees both, so this is where they are held to each other.
+static_assert(OPENPLC_DEBUG_STATUS_OK == strucpp::debug::STATUS_OK,
+              "OPENPLC_DEBUG_STATUS_OK drifted from strucpp::debug::STATUS_OK");
+static_assert(OPENPLC_DEBUG_STATUS_OUT_OF_BOUNDS == strucpp::debug::STATUS_OUT_OF_BOUNDS,
+              "OPENPLC_DEBUG_STATUS_OUT_OF_BOUNDS drifted from strucpp::debug::STATUS_OUT_OF_BOUNDS");
+static_assert(OPENPLC_DEBUG_STATUS_DATA_TOO_LARGE == strucpp::debug::STATUS_DATA_TOO_LARGE,
+              "OPENPLC_DEBUG_STATUS_DATA_TOO_LARGE drifted from strucpp::debug::STATUS_DATA_TOO_LARGE");
+
+// Same reasoning for the string wire widths. `modbus_types.h` sizes the Modbus
+// frame from them -- a frame that cannot hold the widest value skips it in
+// silence, which is how a WSTRING read came back empty rather than failing --
+// and that header is plain C++ and cannot include debug_dispatch.hpp. This is
+// again the one place that sees both.
+static_assert(OPENPLC_DEBUG_STRING_WIRE == strucpp::debug::DEBUG_STRING_WIDTH,
+              "OPENPLC_DEBUG_STRING_WIRE drifted from strucpp::debug::DEBUG_STRING_WIDTH");
+// opcua_types.h names the two string tags for plain-C callers (the branch
+// between "scalar" and "{length, data} header" is not a table lookup). This TU
+// is the only place that sees both that header and strucpp's enum, so it is
+// where the duplication is held honest.
+static_assert(OPENPLC_DEBUG_STRING_CAP == strucpp::debug::DEBUG_STRING_CAP,
+              "OPENPLC_DEBUG_STRING_CAP disagrees with strucpp's DEBUG_STRING_CAP");
+
+static_assert(OPCUA_TAG_STRING == strucpp::debug::TAG_STRING,
+              "OPCUA_TAG_STRING in opcua_types.h disagrees with strucpp's TypeTag");
+static_assert(OPCUA_TAG_WSTRING == strucpp::debug::TAG_WSTRING,
+              "OPCUA_TAG_WSTRING in opcua_types.h disagrees with strucpp's TypeTag");
+
+static_assert(OPENPLC_DEBUG_WSTRING_WIRE == strucpp::debug::DEBUG_WSTRING_WIDTH,
+              "OPENPLC_DEBUG_WSTRING_WIRE drifted from strucpp::debug::DEBUG_WSTRING_WIDTH");

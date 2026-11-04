@@ -6,6 +6,9 @@
  */
 
 import type { PLCPou } from '../../middleware/shared/ports/types'
+import type { TypeContext } from './PLC/variable-declarations'
+import { parseVariableDeclarations } from './PLC/variable-declarations'
+import { applyVariablesToText } from './variable-text-edits'
 
 // ---------------------------------------------------------------------------
 // Structural types (avoids store layer import — architecture rule)
@@ -38,8 +41,8 @@ export interface EditorLike {
  * site. Folding them together makes the contract single-source-of-truth:
  * "give me a POU ready to write to disk."
  */
-export function sanitizePou(pou: PLCPou, editor: EditorLike | undefined): PLCPou {
-  let next: PLCPou = pou
+export function sanitizePou(pou: PLCPou, editor: EditorLike | undefined, context: TypeContext = {}): PLCPou {
+  const next: PLCPou = pou
 
   if (
     editor &&
@@ -48,13 +51,142 @@ export function sanitizePou(pou: PLCPou, editor: EditorLike | undefined): PLCPou
     editor.variable.display === 'code' &&
     editor.variable.code != null
   ) {
-    next = {
-      ...next,
-      variablesText: editor.variable.code,
-    } as PLCPou & { variablesText?: string }
+    // The live buffer is the user's most recent statement of what they want,
+    // including edits they have typed but not committed. It is taken verbatim
+    // and NOT reconciled below: the model has not caught up with it yet by
+    // definition, and "reconciling" would delete what they just typed.
+    // No cast: `variablesText` is a field of `PLCPou`, so an intersection here
+    // would only hide a rename of it from the compiler.
+    return stripGraphicalSelections({ ...next, variablesText: editor.variable.code })
   }
 
-  return stripGraphicalSelections(next)
+  return stripGraphicalSelections(reconcileVariablesTextForSave(next, context))
+}
+
+/**
+ * Last line of defence before the text is written to disk.
+ *
+ * The store patches `variablesText` on every mutation that goes through its
+ * actions, so in practice the two already agree. This exists for the case they
+ * do not: a mutation added later that forgets to patch, or one that reaches the
+ * variables array by a route nobody anticipated. Because the text is what gets
+ * serialised, a disagreement here is a change the user made and the file never
+ * received — silent data loss, which is worth a cheap check on every save.
+ *
+ * Deliberately NOT applied to a live editor buffer. A buffer can legitimately
+ * be ahead of the model — the user typed a declaration and saved without
+ * blurring — and there is no way to tell that apart from a stale text. Between
+ * dropping something they typed and keeping something the store missed, the
+ * first is worse, so the buffer wins and only the stored text is reconciled.
+ *
+ * Resolution is one-directional and deliberate: the text is PATCHED from the
+ * model, never regenerated. The model holds the newer semantic change; the text
+ * holds the comments and formatting that only it can carry. Patching keeps
+ * both, where regenerating would trade one for the other.
+ */
+function reconcileVariablesTextForSave(pou: PLCPou, context: TypeContext = {}): PLCPou {
+  const text = pou.variablesText
+  if (text === undefined) return pou
+
+  const variables = pou.interface?.variables ?? []
+  // The context matters: without it `classifyType` cannot resolve a base type,
+  // so `x : bool;` parses as the user data type `bool` while the model holds
+  // the canonical `BOOL`, and the comparison below reported a difference on
+  // every save of a lower-case declaration.
+  const parsed = parseVariableDeclarations(text, context)
+  // Unparseable text is preserved verbatim, as it always has been: it is the
+  // user's half-finished work and the code view is where they will fix it.
+  if (parsed.errors.length > 0) return pou
+
+  // `documentation` is compared the way the patcher writes it — newlines
+  // flattened, trimmed — so a documentation-only drift is caught (it is the
+  // exact drift this function exists to catch) without reporting a difference
+  // for a comment that is already byte-correct.
+  const flatten = (documentation: string | undefined) => (documentation ?? '').replace(/(\r\n|\n|\r)/gm, ' ').trim()
+
+  const describesSameVariables =
+    parsed.variables.length === variables.length &&
+    parsed.variables.every((candidate, index) => {
+      const expected = variables[index]
+      return (
+        candidate.name === expected.name &&
+        // IEC type names are case-insensitive and the model holds the canonical
+        // spelling, so folding the case here is what keeps `bool` from counting
+        // as a difference against `BOOL` on every single save.
+        candidate.type.value.toUpperCase() === expected.type.value.toUpperCase() &&
+        candidate.location === expected.location &&
+        (candidate.initialValue ?? '') === (expected.initialValue ?? '') &&
+        candidate.class === expected.class &&
+        flatten(candidate.documentation) === flatten(expected.documentation)
+      )
+    })
+
+  if (describesSameVariables) return pou
+  return { ...pou, variablesText: applyVariablesToText(text, variables, context) }
+}
+
+/**
+ * Canonicalize one graphical node for persistence. Beyond clearing selection
+ * state, this neutralizes runtime UI state that would otherwise byte-drift
+ * the serialized file against HEAD without any semantic change:
+ *
+ *   - `data.hasDivergence` is a render-time decoration (library-divergence
+ *     tooltip) that can leak into the store via rungLocal-derived writes.
+ *   - top-level `draggable` is toggled at runtime (drag-lock while a variable
+ *     input is focused); `data.draggable` is the design-time value set by the
+ *     node builders, so persist that instead.
+ */
+function sanitizeGraphicalNode(node: Record<string, unknown>): Record<string, unknown> {
+  const data = node.data as Record<string, unknown> | undefined
+  const { hasDivergence: _hasDivergence, ...cleanData } = data ?? {}
+  return {
+    ...node,
+    ...(data !== undefined ? { data: cleanData } : {}),
+    selected: false,
+    dragging: false,
+    draggable: Boolean(cleanData.draggable),
+  }
+}
+
+/**
+ * Deterministic `reactFlowViewport` from content, mirroring the formula in
+ * RungBody.updateReactFlowPanelExtent: bounds over all nodes plus the
+ * synthetic 150×40 origin node, floored at `defaultBounds`, +20px height
+ * padding. The runtime writes measured, timing-dependent values into
+ * `reactFlowViewport` (window size, drag history), so persisting the raw
+ * value makes byte stability depend on UI state. Serializing a pure function
+ * of content keeps unchanged rungs byte-identical. Returns the existing value
+ * when the rung lacks the inputs (e.g. FBD rungs have no defaultBounds).
+ */
+function canonicalRungViewport(rung: Record<string, unknown>): unknown {
+  const nodes = rung.nodes
+  const defaultBounds = rung.defaultBounds
+  if (!Array.isArray(nodes) || !Array.isArray(defaultBounds)) return rung.reactFlowViewport
+
+  let minX = 0
+  let minY = 0
+  let maxX = 150
+  let maxY = 40
+  for (const n of nodes as Array<Record<string, unknown>>) {
+    const pos = n.position as { x?: number; y?: number } | undefined
+    const measured = n.measured as { width?: number; height?: number } | undefined
+    const x = pos?.x ?? 0
+    const y = pos?.y ?? 0
+    const w = measured?.width ?? (n.width as number | undefined) ?? 0
+    const h = measured?.height ?? (n.height as number | undefined) ?? 0
+    if (x < minX) minX = x
+    if (y < minY) minY = y
+    if (x + w > maxX) maxX = x + w
+    if (y + h > maxY) maxY = y + h
+  }
+
+  let width = maxX - minX
+  let height = maxY - minY
+  const defaultWidth = Number(defaultBounds[0]) || 0
+  const defaultHeight = Number(defaultBounds[1]) || 0
+  if (width < defaultWidth) width = defaultWidth
+  if (height < defaultHeight) height = defaultHeight
+  return [width, height + 20]
 }
 
 function stripGraphicalSelections(pou: PLCPou): PLCPou {
@@ -74,12 +206,9 @@ function stripGraphicalSelections(pou: PLCPou): PLCPou {
           rungs: (body.rungs as Array<Record<string, unknown>>).map((rung) => ({
             ...rung,
             selectedNodes: [],
+            reactFlowViewport: canonicalRungViewport(rung),
             nodes: Array.isArray(rung.nodes)
-              ? (rung.nodes as Array<Record<string, unknown>>).map((n) => ({
-                  ...n,
-                  selected: false,
-                  dragging: false,
-                }))
+              ? (rung.nodes as Array<Record<string, unknown>>).map(sanitizeGraphicalNode)
               : rung.nodes,
           })),
         },
@@ -99,11 +228,7 @@ function stripGraphicalSelections(pou: PLCPou): PLCPou {
             ...rung,
             selectedNodes: [],
             nodes: Array.isArray(rung.nodes)
-              ? (rung.nodes as Array<Record<string, unknown>>).map((n) => ({
-                  ...n,
-                  selected: false,
-                  dragging: false,
-                }))
+              ? (rung.nodes as Array<Record<string, unknown>>).map(sanitizeGraphicalNode)
               : rung.nodes,
           },
         },

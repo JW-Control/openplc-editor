@@ -1,7 +1,9 @@
 import * as PrimitivePopover from '@radix-ui/react-popover'
 import { useAliasRegistry } from '@root/frontend/hooks/use-alias-registry'
+import { useDuplicateOutputLocations } from '@root/frontend/hooks/use-duplicate-output-locations'
 import { useProjectAliasBindings } from '@root/frontend/hooks/use-project-alias-bindings'
 import { useTargetCapabilities } from '@root/frontend/hooks/use-target-capabilities'
+import { tr } from '@root/frontend/locales/tr'
 import { isLiteralLocation } from '@root/middleware/shared/utils/iec-address/registry'
 import type { CellContext, RowData } from '@tanstack/react-table'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -9,7 +11,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
 import { pinSelectors, remoteDeviceSelectors, vendorIoSelectors } from '../../../hooks/use-store-selectors'
-import { useOpenPLCStore } from '../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../store'
 import { ProjectResponse } from '../../../store/slices/project'
 import { cn } from '../../../utils/cn'
 import { isLegalIdentifier, sanitizeVariableInput } from '../../../utils/keywords'
@@ -69,7 +71,8 @@ const EditableNameCellImpl = ({
   // enough to tip Radix's ref-tracking effects (used by sibling cells)
   // into React's nested-update limit. Both are only read inside `onBlur`
   // below (a rename commit), never during render, so they're fetched
-  // fresh via `useOpenPLCStore.getState()` there instead.
+  // fresh via `store.getState()` there instead.
+  const store = useOpenPLCStoreApi()
   const { editor, searchQuery, getVariable, updatePou, updateVariable, pous, configurations, isDebuggerVisible } =
     useOpenPLCStore(
       useShallow((s) => ({
@@ -138,8 +141,8 @@ const EditableNameCellImpl = ({
 
     if (!matchingGlobalVar) {
       toast({
-        title: 'Error',
-        description: `Global variable '${selectedName}' not found`,
+        title: tr('Error'),
+        description: tr("Global variable '{{selectedName}}' not found", { selectedName }),
         variant: 'fail',
       })
       return
@@ -156,8 +159,8 @@ const EditableNameCellImpl = ({
 
     if (!typeRes?.ok) {
       toast({
-        title: 'Warning',
-        description: 'Variable name updated but type could not be auto-filled',
+        title: tr('Warning'),
+        description: tr('Variable name updated but type could not be auto-filled'),
         variant: 'fail',
       })
     }
@@ -177,21 +180,21 @@ const EditableNameCellImpl = ({
       ladderFlowActions: { updateNode },
       fbdFlows,
       fbdFlowActions: { updateNode: updateFBDNode },
-    } = useOpenPLCStore.getState()
+    } = store.getState()
 
     const oldName = initialValue
     const newName = cellValue
 
     const [isNameLegal, reason] = isLegalIdentifier(newName)
     if (isNameLegal === false) {
-      toast({ title: 'Error', description: `'${newName}' ${reason}`, variant: 'fail' })
+      toast({ title: tr('Error'), description: `'${newName}' ${reason}`, variant: 'fail' })
       setCellValue(oldName)
       setIsEditing(false)
       return
     }
 
     if (!variable) {
-      toast({ title: 'Error', description: 'Variable not found', variant: 'fail' })
+      toast({ title: tr('Error'), description: tr('Variable not found'), variant: 'fail' })
       setCellValue(oldName)
       setIsEditing(false)
       return
@@ -202,8 +205,8 @@ const EditableNameCellImpl = ({
 
       if (!matchingGlobalVar) {
         toast({
-          title: 'Error',
-          description: `External variable '${newName}' must reference an existing global variable`,
+          title: tr('Error'),
+          description: tr("External variable '{{newName}}' must reference an existing global variable", { newName }),
           variant: 'fail',
         })
         setCellValue(oldName)
@@ -217,8 +220,11 @@ const EditableNameCellImpl = ({
 
       if (!typeMatches) {
         toast({
-          title: 'Error',
-          description: `Type mismatch: external variable type must match global variable '${matchingGlobalVar.name}' (${matchingGlobalVar.type.value})`,
+          title: tr('Error'),
+          description: tr("Type mismatch: external variable type must match global variable '{{name}}' ({{value}})", {
+            name: matchingGlobalVar.name,
+            value: matchingGlobalVar.type.value,
+          }),
           variant: 'fail',
         })
         setCellValue(oldName)
@@ -404,7 +410,7 @@ const EditableInitialValueCellImpl = ({
     //   const validation = validateInitialValue(cellValue, variable.type.value)
 
     //   if (!validation.valid) {
-    //     toast({ title: 'Error', description: validation.message, variant: 'fail' })
+    //     toast({ title: tr('Error'), description: validation.message, variant: 'fail' })
     //     setCellValue('')
     //     setIsEditing(false)
     //     return
@@ -539,7 +545,18 @@ const EditableLocationCellImpl = ({
       ? aliasBindings.find((binding) => binding.address === locationValue)
       : undefined
   const isManualConflict = locationConflict !== undefined
-  const hasLocationWarning = isOrphaned || isManualConflict
+  // Two literals on one OUTPUT address, which the per-list duplicate check
+  // cannot see: it reads this POU's variables, and the other declaration is
+  // usually in another POU or the global scope. Same glyph, same reasoning as
+  // the alias conflict above, and the same verdict as the compile: a WARNING,
+  // never a refusal. IEC 61131-3 permits it, so the editor permits it too —
+  // what it owes the user is the fact that the last write wins and which one
+  // that is depends on POU order. Saying it while they are still typing is
+  // cheaper than saying it at build time. Inputs and memory are excluded:
+  // only two WRITERS contradict.
+  const duplicateOutputs = useDuplicateOutputLocations()
+  const isDuplicateOutput = isLocationCell && (duplicateOutputs.get(locationValue)?.length ?? 0) > 1
+  const hasLocationWarning = isOrphaned || isManualConflict || isDuplicateOutput
 
   // When the input is blurred, we'll call our table meta's updateData function
   const onBlur = (value: string) => {
@@ -586,11 +603,21 @@ const EditableLocationCellImpl = ({
   // the variable is alias-bound, the literal address when manual. The
   // combobox `value` is the same string, so picking an alias option (whose
   // value is the alias name) or typing a literal both operate on `location`.
+  /* Excluded by SCOPE AND NAME together. Filtering by name alone removed the
+   * other writer too whenever both were called the same thing -- which is the
+   * common case, because the two declarations are usually in different POUs
+   * and `run` or `out` is an ordinary name in each. The tooltip then rendered
+   * with an empty list while the glyph still showed. */
+  const otherWriters = (duplicateOutputs.get(locationValue) ?? []).filter(
+    (writer) => !(writer.name === variable?.name && writer.scope === editor.meta.name),
+  )
   const warningTooltip = isOrphaned
     ? `Alias "${cellValue}" is not declared by any active I/O source — this variable is unlocated at compile time.`
     : locationConflict
       ? `Address ${cellValue} conflicts with alias "${locationConflict.aliasName}" assigned to "${locationConflict.variableName}". Two variables cannot share a location.`
-      : undefined
+      : isDuplicateOutput
+        ? `Output ${cellValue} is also driven by ${otherWriters.map((writer) => `"${writer.name}" in ${writer.scope}`).join(', ')}. IEC located addresses are global, so the last write in the scan would win, and which one that is depends on POU order.`
+        : undefined
 
   // The warning glyph must stay visible whether or not the row is selected.
   // The selected branch renders an editable combobox; previously the glyph
@@ -599,12 +626,23 @@ const EditableLocationCellImpl = ({
   const warningGlyph =
     hasLocationWarning && warningTooltip ? (
       <LocationWarningGlyph
-        label={isManualConflict ? 'Address conflicts with an alias' : 'Orphaned alias'}
+        label={
+          isManualConflict
+            ? 'Address conflicts with an alias'
+            : isDuplicateOutput
+              ? 'Output driven by more than one variable'
+              : 'Orphaned alias'
+        }
         tooltip={warningTooltip}
       />
     ) : null
 
-  return selected ? (
+  // The read-only rule must gate the selected branch too: without the
+  // `isEditable()` check the combobox rendered fully interactive on any
+  // selected row, letting the user attach a location to an interface-class
+  // (input/output/inOut/external/temp) variable — an invalid declaration
+  // that broke the project on reopen (GitHub issue #904).
+  return selected && isEditable() ? (
     <div className='flex w-full flex-1 items-center gap-1'>
       {warningGlyph}
       <GenericComboboxCell

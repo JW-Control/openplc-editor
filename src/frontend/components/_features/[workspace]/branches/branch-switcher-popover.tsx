@@ -1,4 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Branch } from '../../../../../middleware/shared/ports/version-control-port'
@@ -14,7 +16,8 @@ type BranchSwitcherPopoverProps = {
   onClose: () => void
   onSelect: (branch: Branch) => void
   onDelete: (branch: Branch) => void
-  onMerge: (branch: Branch) => void
+  /** Absent, rather than disabled, when this build has no merge screen to reach. */
+  onMerge?: (branch: Branch) => void
 }
 
 export function BranchSwitcherPopover({
@@ -80,8 +83,7 @@ export function BranchSwitcherPopover({
     }
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      // Don't close if the click is inside Radix-portalled content (popover form
-      // for create branch, or the branch actions dropdown menu)
+      // Don't close for clicks inside Radix-portalled content (create-branch form, actions menu).
       if (target.closest?.('[data-radix-popper-content-wrapper]')) return
       if (target.closest?.('[data-radix-menu-content]')) return
       if (popoverRef.current && !popoverRef.current.contains(target)) {
@@ -114,30 +116,28 @@ export function BranchSwitcherPopover({
         )}
         style={position ? { left: position.left, bottom: position.bottom } : { left: 8, bottom: 32 }}
       >
-        {/* Search */}
         <div className='p-2 pb-0'>
           <input
             type='text'
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder='Search branches...'
+            placeholder={tr('Search branches...')}
             autoFocus
             className='h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
           />
           <div className='mt-2 h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
         </div>
 
-        {/* Branch list */}
         <div className='max-h-56 overflow-y-auto px-2 py-1'>
           {isLoading && (
             <p className='px-2 py-3 text-center font-caption text-xs font-normal text-neutral-500 dark:text-neutral-400'>
-              Loading...
+              {tr('Loading...')}
             </p>
           )}
 
           {!isLoading && filtered.length === 0 && (
             <p className='px-2 py-3 text-center font-caption text-xs font-normal text-neutral-500 dark:text-neutral-400'>
-              No branches found
+              {tr('No branches found')}
             </p>
           )}
 
@@ -152,9 +152,8 @@ export function BranchSwitcherPopover({
                   isActive && 'bg-neutral-100 dark:bg-neutral-900',
                 )}
               >
-                {/* Clickable area — only branch icon + name triggers selection.
-                    Side elements (checkmark, default badge, dots menu) are OUTSIDE
-                    this button so they don't accidentally trigger a branch switch. */}
+                {/* Side elements (checkmark, badge, menu) stay outside this button so they
+                    don't trigger a branch switch. */}
                 <button
                   type='button'
                   onClick={() => {
@@ -163,7 +162,6 @@ export function BranchSwitcherPopover({
                   }}
                   className='flex min-w-0 flex-1 cursor-pointer items-center gap-[6px] bg-transparent text-left'
                 >
-                  {/* Git branch icon */}
                   <svg
                     className='h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400'
                     viewBox='0 0 16 16'
@@ -185,13 +183,12 @@ export function BranchSwitcherPopover({
                     default
                   </span>
                 )}
-                {/* Actions menu (3 dots) — reveals merge + delete on hover. */}
                 <div className='shrink-0' data-branch-actions>
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
                       <button
                         className='rounded p-0.5 opacity-0 transition-opacity hover:bg-neutral-200 group-hover:opacity-100 dark:hover:bg-neutral-800'
-                        title='More actions'
+                        title={tr('More actions')}
                       >
                         <svg
                           className='h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400'
@@ -210,37 +207,41 @@ export function BranchSwitcherPopover({
                         onCloseAutoFocus={(e) => e.preventDefault()}
                         className='z-[60] min-w-[140px] overflow-hidden rounded-md border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900'
                       >
-                        <DropdownMenu.Item
-                          disabled={isActive}
-                          onSelect={(e) => {
-                            e.preventDefault()
-                            if (isActive) return
-                            onMerge(branch)
-                            handleClose()
-                          }}
-                          title={isActive ? 'Cannot merge a branch into itself' : undefined}
-                          className={cn(
-                            'flex select-none items-center gap-2 px-3 py-1.5 text-xs outline-none',
-                            isActive
-                              ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-600'
-                              : 'cursor-pointer text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                          )}
-                        >
-                          <svg
+                        {onMerge && (
+                          <DropdownMenu.Item
+                            disabled={isActive}
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              if (isActive) return
+                              onMerge(branch)
+                              handleClose()
+                            }}
+                            title={isActive ? 'Cannot merge a branch into itself' : undefined}
                             className={cn(
-                              'h-3.5 w-3.5',
-                              isActive ? 'text-neutral-400 dark:text-neutral-600' : 'text-blue-500',
+                              'flex select-none items-center gap-2 px-3 py-1.5 text-xs outline-none',
+                              isActive
+                                ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-600'
+                                : 'cursor-pointer text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                             )}
-                            viewBox='0 0 16 16'
-                            fill='currentColor'
                           >
-                            <path d='M5 3.254V3.25v.005a.75.75 0 1 1 0-.005v.004zm.45 1.9a2.25 2.25 0 1 0-1.95.218v5.256a2.25 2.25 0 1 0 1.5 0V7.123A5.735 5.735 0 0 0 9.25 9h1.378a2.251 2.251 0 1 0 0-1.5H9.25a4.25 4.25 0 0 1-3.8-2.346zM12.75 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm-8.5 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z' />
-                          </svg>
-                          <span>
-                            Merge <span className='font-mono'>{branch.name}</span> into{' '}
-                            <span className='font-mono'>{currentBranchName}</span>
-                          </span>
-                        </DropdownMenu.Item>
+                            <svg
+                              className={cn(
+                                'h-3.5 w-3.5',
+                                isActive ? 'text-neutral-400 dark:text-neutral-600' : 'text-blue-500',
+                              )}
+                              viewBox='0 0 16 16'
+                              fill='currentColor'
+                            >
+                              <path d='M5 3.254V3.25v.005a.75.75 0 1 1 0-.005v.004zm.45 1.9a2.25 2.25 0 1 0-1.95.218v5.256a2.25 2.25 0 1 0 1.5 0V7.123A5.735 5.735 0 0 0 9.25 9h1.378a2.251 2.251 0 1 0 0-1.5H9.25a4.25 4.25 0 0 1-3.8-2.346zM12.75 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm-8.5 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z' />
+                            </svg>
+                            <span>
+                              {trRich('Merge {{branch}} into {{current}}', {
+                                branch: <span className='font-mono'>{branch.name}</span>,
+                                current: <span className='font-mono'>{currentBranchName}</span>,
+                              })}
+                            </span>
+                          </DropdownMenu.Item>
+                        )}
                         <DropdownMenu.Item
                           disabled={branch.isDefault}
                           onSelect={(e) => {
@@ -259,7 +260,7 @@ export function BranchSwitcherPopover({
                           <svg className='h-3.5 w-3.5' viewBox='0 0 16 16' fill='currentColor'>
                             <path d='M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25ZM4.005 5.073a.75.75 0 0 1 .673.627l.79 5.532a.75.75 0 0 0 .742.643h3.58a.75.75 0 0 0 .742-.643l.79-5.532a.75.75 0 0 1 1.49.214l-.79 5.532A2.25 2.25 0 0 1 9.79 13.5H6.21a2.25 2.25 0 0 1-2.23-1.928l-.79-5.532a.75.75 0 0 1 .626-.867Z' />
                           </svg>
-                          Delete
+                          {tr('Delete')}
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
@@ -270,7 +271,6 @@ export function BranchSwitcherPopover({
           })}
         </div>
 
-        {/* Create new branch */}
         <div className='px-2 pb-2'>
           <div className='mb-1 h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
           <CreateBranchPopover projectId={projectId} onCloseParent={handleClose} />

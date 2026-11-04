@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Generic Web-Worker LSP transport.
  *
@@ -26,7 +26,11 @@ import {
   BrowserMessageWriter,
   createMessageConnection,
   type MessageConnection,
-} from 'vscode-jsonrpc/browser'
+  // Import via the protocol package so the connection and the message types
+  // (InitializeRequest, DidOpen…, ParameterStructures) share ONE vscode-jsonrpc
+  // copy — a second copy fails ParameterStructures identity checks at runtime
+  // ("Unknown parameter structure byName"). See DOPE-505.
+} from 'vscode-languageserver-protocol/browser'
 
 export interface LspTransport {
   /** JSON-RPC connection.  Caller is responsible for `listen()`. */

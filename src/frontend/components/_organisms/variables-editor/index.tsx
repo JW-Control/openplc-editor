@@ -1,25 +1,21 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ColumnFiltersState } from '@tanstack/react-table'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
 
+import type { PLCPou } from '../../../../middleware/shared/ports/types'
 import { PLCVariable } from '../../../../middleware/shared/ports/types'
-import { CodeIcon } from '../../../assets/icons/interface/CodeIcon'
 import { MinusIcon } from '../../../assets/icons/interface/Minus'
 import { PlusIcon } from '../../../assets/icons/interface/Plus'
 import { StickArrowIcon } from '../../../assets/icons/interface/StickArrow'
-import { TableIcon } from '../../../assets/icons/interface/TableIcon'
-import { useOpenPLCStore } from '../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../store'
 import type { VariablesTable as VariablesTableType } from '../../../store/slices/editor'
 import { selectEditorForPou } from '../../../store/slices/editor/utils'
 import type { FBDFlowActions, FBDFlowState } from '../../../store/slices/fbd'
 import type { LadderFlowActions, LadderFlowState } from '../../../store/slices/ladder'
 import { TypeChangeValidationResult, validateTypeChange } from '../../../store/slices/project/validation/type-change'
+import { validateVariableSet } from '../../../store/slices/project/validation/variables'
 import { cn } from '../../../utils/cn'
-import {
-  duplicateVariableNameMessage,
-  findDuplicateVariableName,
-  parseIecStringToVariables,
-} from '../../../utils/generate-iec-string-to-variables'
+import { buildTypeContext, parseIecStringToVariables } from '../../../utils/generate-iec-string-to-variables'
 import { generateIecVariablesToString } from '../../../utils/generate-iec-variables-to-string'
 import {
   syncNodesWithVariables as syncNodesWithVariablesUtil,
@@ -31,13 +27,33 @@ import {
   propagateVariableRename,
   type ReferenceImpactAnalysis,
 } from '../../../utils/variable-references'
+import { applyVariablesToText } from '../../../utils/variable-text-edits'
 import { InputWithRef } from '../../_atoms/input'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../../_atoms/select'
 import TableActions from '../../_atoms/table-actions'
+import { ViewModeToggle } from '../../_atoms/view-mode-toggle'
 import { toast } from '../../_features/[app]/toast/use-toast'
 import { RenameImpactModal } from '../../_molecules/rename-impact-modal'
 import { TypeChangeModal } from '../../_molecules/type-change-modal'
 import { VariablesTable } from '../../_molecules/variables-table'
 import { VariablesCodeEditor } from '../variables-code-editor'
+
+/**
+ * The declaration text to put in the code view.
+ *
+ * The POU's own text when it has one, because that text is the source of
+ * truth (DOPE-650) and is the only thing carrying the user's comments, blank
+ * lines and alignment. Serialising the model is the fallback for a POU that
+ * has never had text — one created in memory this session.
+ *
+ * Every buffer-filling path goes through here. They used to call
+ * `generateIecVariablesToString` directly, which meant simply toggling to code
+ * view replaced the user's declarations with a canonical re-rendering of the
+ * table and dropped every comment, even though the text itself had survived
+ * the load intact.
+ */
+const declarationTextFor = (pou: PLCPou | undefined, variables: PLCVariable[]): string =>
+  pou?.variablesText ?? generateIecVariablesToString(variables)
 
 interface VariablesEditorProps {
   /**
@@ -62,6 +78,7 @@ interface VariablesEditorProps {
 }
 
 const VariablesEditor = ({ name: propName, isActive: _isActive = true }: VariablesEditorProps = {}) => {
+  const store = useOpenPLCStoreApi()
   const ROWS_NOT_SELECTED = -1
   // Multi-mount support: every open POU's VariablesEditor reads ITS
   // OWN model via the shared `selectEditorForPou` helper.  This is
@@ -70,81 +87,53 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
   // preference + hidden-snapshot fallback can't drift between the
   // textual and graphical multi-mount paths.
   const editor = useOpenPLCStore((s) => selectEditorForPou(s, propName))
-  // `ladderFlows`/`fbdFlows` are intentionally NOT subscribed here: they
-  // change on every keystroke in any open ladder/FBD canvas, and this
-  // component is only ever used from event-handler-style helpers below
-  // (never read during render), so subscribing to them forced this whole
-  // editor — and, transitively, every per-row cell in the variables
-  // table below — to re-render on every unrelated canvas edit. With many
-  // variable rows (each rendering a Radix Select/Popover/DropdownMenu),
-  // that turned ordinary typing elsewhere into a render storm that could
-  // tip Radix's ref-tracking effects into React's nested-update limit.
-  // Read them fresh via `useOpenPLCStore.getState()` at each call site
-  // instead.
   const {
-    updateNode,
-    updateNodes,
-    updateFBDNode,
-    updateFBDNodes,
-    shouldUseDarkMode,
-    isDebuggerVisible,
-    removeDebugVariable,
-    pous,
-    dataTypes,
+    ladderFlows,
+    ladderFlowActions: { updateNode, updateNodes },
+    fbdFlows,
+    fbdFlowActions: { updateNode: updateFBDNode, updateNodes: updateFBDNodes },
+    workspace: {
+      systemConfigs: { shouldUseDarkMode },
+      isDebuggerVisible,
+    },
+    workspaceActions: { removeDebugVariable },
+    project: {
+      data: { pous, dataTypes },
+    },
     libraries,
-    updateModelVariables,
-    updateModelVariablesForName,
-    createVariable,
-    deleteVariable,
-    rearrangeVariables,
-    updatePouDocumentation,
-    updatePouReturnType,
-    clearPouVariablesText,
-    setPouVariables,
-    updatePou,
-    updateVariable,
-    handleFileAndWorkspaceSavedState,
-    rawPushToHistory,
-  } = useOpenPLCStore(
-    useShallow((s) => ({
-      updateNode: s.ladderFlowActions.updateNode,
-      updateNodes: s.ladderFlowActions.updateNodes,
-      updateFBDNode: s.fbdFlowActions.updateNode,
-      updateFBDNodes: s.fbdFlowActions.updateNodes,
-      shouldUseDarkMode: s.workspace.systemConfigs.shouldUseDarkMode,
-      isDebuggerVisible: s.workspace.isDebuggerVisible,
-      removeDebugVariable: s.workspaceActions.removeDebugVariable,
-      pous: s.project.data.pous,
-      dataTypes: s.project.data.dataTypes,
-      libraries: s.libraries,
-      updateModelVariables: s.editorActions.updateModelVariables,
-      updateModelVariablesForName: s.editorActions.updateModelVariablesForName,
-      createVariable: s.projectActions.createVariable,
-      deleteVariable: s.projectActions.deleteVariable,
-      rearrangeVariables: s.projectActions.rearrangeVariables,
-      updatePouDocumentation: s.projectActions.updatePouDocumentation,
-      updatePouReturnType: s.projectActions.updatePouReturnType,
-      clearPouVariablesText: s.projectActions.clearPouVariablesText,
-      setPouVariables: s.projectActions.setPouVariables,
-      updatePou: s.projectActions.updatePou,
-      updateVariable: s.projectActions.updateVariable,
-      handleFileAndWorkspaceSavedState: s.sharedWorkspaceActions.handleFileAndWorkspaceSavedState,
-      rawPushToHistory: s.snapshotActions.pushToHistory,
-    })),
-  )
+    editorActions: { updateModelVariables, updateModelVariablesForName },
+    projectActions: {
+      createVariable,
+      deleteVariable,
+      rearrangeVariables,
+      updatePouDocumentation,
+      updatePouReturnType,
+      setPouVariablesText,
+      setPouVariables,
+      updatePou,
+      updateVariable,
+    },
+    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
+  } = useOpenPLCStore()
+
+  const {
+    project: {
+      data: { pous: snapshotPous, configurations },
+    },
+    snapshotActions: { pushToHistory: rawPushToHistory },
+  } = useOpenPLCStore()
 
   const pushToHistory = useCallback(
     (pouName: string) => {
-      const { project } = useOpenPLCStore.getState()
-      const pou = project.data.pous.find((p) => p.name === pouName)
+      const pou = snapshotPous.find((p) => p.name === pouName)
       if (!pou) return
       rawPushToHistory(pouName, {
         variables: pou.interface?.variables ?? [],
         body: pou.body.value,
-        globalVariables: project.data.configurations.resource.globalVariables,
+        globalVariables: configurations.resource.globalVariables,
       })
     },
-    [rawPushToHistory],
+    [snapshotPous, configurations.resource.globalVariables, rawPushToHistory],
   )
 
   /**
@@ -162,7 +151,10 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
     ) {
       return editor.variable.code
     }
-    return generateIecVariablesToString(tableData)
+    return declarationTextFor(
+      pous.find((candidate) => candidate.name === editor.meta.name),
+      tableData,
+    )
   })
   const [parseError, setParseError] = useState<string | null>(null)
   const [pouDescription, setPouDescription] = useState<string>('')
@@ -235,9 +227,17 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
 
   useEffect(() => {
     if (editorVariables.display !== 'code') {
-      setEditorCode(generateIecVariablesToString(tableData))
+      // The store patches `variablesText` on every table mutation, so it is
+      // already current here; reading it keeps the comments the model cannot
+      // carry.
+      setEditorCode(
+        declarationTextFor(
+          pous.find((candidate) => candidate.name === editor.meta.name),
+          tableData,
+        ),
+      )
     }
-  }, [tableData, editorVariables.display])
+  }, [tableData, editorVariables.display, editor.meta.name, pous])
 
   // Sync local view state from this instance's own model when the
   // POU is renamed or its display mode toggles (table ↔ code).  Each
@@ -261,7 +261,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
       setEditorCode(
         typeof code === 'string' && code.length > 0
           ? code
-          : generateIecVariablesToString(targetPou?.interface?.variables ?? []),
+          : declarationTextFor(targetPou, targetPou?.interface?.variables ?? []),
       )
     } else {
       setEditorVariables({
@@ -323,16 +323,11 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
 
       isParsingRef.current = true
 
-      void commitCodeRef
-        .current()
-        .then((ok) => {
-          if (ok) {
-            lastParsedCodeRef.current = editorCode
-          }
-        })
-        .finally(() => {
-          isParsingRef.current = false
-        })
+      // `commitCode` owns the watermark — setting it here would pin pre-commit text and re-commit a no-op.
+      const release = () => {
+        isParsingRef.current = false
+      }
+      void commitCodeRef.current().then(release, release)
     }
 
     const onDocMouseDown = (e: MouseEvent) => {
@@ -536,15 +531,12 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
     })
   }
 
-  const handleRowClick = useCallback(
-    (row: HTMLTableRowElement) => {
-      updateModelVariables({
-        display: 'table',
-        selectedRow: parseInt(row.id),
-      })
-    },
-    [updateModelVariables],
-  )
+  const handleRowClick = (row: HTMLTableRowElement) => {
+    updateModelVariables({
+      display: 'table',
+      selectedRow: parseInt(row.id),
+    })
+  }
 
   const handleReturnTypeChange = (value: string) => {
     updatePouReturnType(editor.meta.name, value)
@@ -559,6 +551,8 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     event.preventDefault()
     event.stopPropagation()
+    // This runs on blur: leaving the field without typing is not an edit.
+    if (event.target.value === (pou?.documentation ?? '')) return
     updatePouDocumentation(editor.meta.name, event.target.value)
     handleFileAndWorkspaceSavedState(editor.meta.name)
   }
@@ -796,8 +790,6 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
     try {
       pushToHistory(editor.meta.name)
 
-      const { ladderFlows, fbdFlows } = useOpenPLCStore.getState()
-
       let language: string | undefined
       if (editor.type === 'plc-graphical') {
         language = editor.graphical.language
@@ -808,8 +800,16 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
       if (!language) return false
 
       const newVariables = parseIecStringToVariables(editorCode, pous, dataTypes, libraries)
-      const duplicate = findDuplicateVariableName(newVariables)
-      if (duplicate) throw new Error(`Variable already exists: ${duplicateVariableNameMessage(duplicate)}`)
+
+      // Same gate the table applies cell by cell. Without it the text path
+      // wrote straight through `setPouVariables`, which never validates, so a
+      // declaration the table refuses was accepted the moment it was typed
+      // instead of picked (DOPE-650).
+      const validation = validateVariableSet(newVariables)
+      if (!validation.ok) {
+        const [first] = validation.errors
+        throw new Error(`${first.title} ${first.message}`)
+      }
 
       const renamedPairs = tableData.flatMap((previousVariable) => {
         const variableStillExists = newVariables.some(
@@ -957,7 +957,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
         },
         ladderFlows: freshLadderFlows,
         fbdFlows: freshFBDFlows,
-      } = useOpenPLCStore.getState()
+      } = store.getState()
 
       const freshPou = freshPous.find((p) => p.name === editor.meta.name)
       const freshVariables = freshPou?.interface?.variables ?? []
@@ -1000,15 +1000,42 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
       setParseError(null)
       handleFileAndWorkspaceSavedState(editor.meta.name)
 
-      if (freshPou && freshPou.interface && 'variablesText' in freshPou.interface) {
-        clearPouVariablesText(editor.meta.name)
-      }
+      // The text the user wrote IS the declaration (DOPE-650) — record it as
+      // the POU's, rather than clearing it and letting a serialisation of the
+      // model take its place.
+      //
+      // The buffer is deliberately left alone. It used to be replaced with
+      // `generateIecVariablesToString(freshVariables)` so it would match the
+      // synthesised LSP document line for line and keep its colours; that
+      // re-canonicalisation is what deleted every comment the moment the user
+      // clicked away. The LSP stub is now built from this same text
+      // (`serializePouSignatureToSTWithBodyOffset`), so the two agree without
+      // anything having to be rewritten.
+      // Reconcile the typed text against what was actually committed before
+      // storing it. `finalVariables` is not always what the buffer says: when
+      // the user DECLINES a type change in the modal, the old type is restored
+      // in the model while the buffer still carries the new one. Storing the
+      // buffer verbatim would let the declined type win, because this text is
+      // what gets serialised to disk and fed to the LSP stub — the user's "no"
+      // would silently become a yes on the next save (CodeRabbit, PR #1130).
+      //
+      // `applyVariablesToText` returns the text unchanged when nothing differs,
+      // which is the overwhelmingly common case, so the comments and spacing
+      // still survive byte for byte.
+      const committedText = applyVariablesToText(
+        editorCode,
+        finalVariables,
+        buildTypeContext(pous, dataTypes, libraries),
+      )
+      if (committedText !== editorCode) setEditorCode(committedText)
+      setPouVariablesText(editor.meta.name, committedText)
+      lastParsedCodeRef.current = committedText
 
       return true
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unexpected syntax error.'
       setParseError(message)
-      toast({ title: 'Syntax error', description: message, variant: 'fail' })
+      toast({ title: tr('Syntax error'), description: message, variant: 'fail' })
       return false
     }
   }
@@ -1091,28 +1118,43 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
         <div aria-label='Variables editor actions' className='relative flex h-8 w-full gap-4'>
           {editorVariables.display === 'table' && (
             <div aria-label='Variables editor table actions container' className='flex h-full w-full select-none gap-4'>
-              {editor.type === 'plc-textual' && editor.meta.pouType === 'function' && (
-                <div className='flex h-full max-w-lg flex-1 items-center gap-2'>
-                  <label
-                    htmlFor='return type'
-                    className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
-                  >
-                    Return type :
-                  </label>
-                  <select
-                    id='return-type'
-                    value={returnType}
-                    onChange={(e) => handleReturnTypeChange(e.target.value)}
-                    className='h-full w-full rounded-lg border border-neutral-500 bg-white px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
-                  >
-                    {returnTypeOptions.map((filter) => (
-                      <option key={filter} value={filter}>
-                        {filter}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {(editor.type === 'plc-textual' || editor.type === 'plc-graphical') &&
+                editor.meta.pouType === 'function' && (
+                  <div className='flex h-full max-w-lg flex-1 items-center gap-2'>
+                    <label
+                      htmlFor='return-type'
+                      className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
+                    >
+                      {tr('Return type :')}
+                    </label>
+                    <Select value={returnType} onValueChange={handleReturnTypeChange}>
+                      <SelectTrigger
+                        id='return-type'
+                        placeholder={returnType}
+                        withIndicator
+                        className='group flex h-full w-full items-center justify-between rounded-lg border border-neutral-500 px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:text-neutral-300'
+                      />
+                      <SelectContent
+                        position='popper'
+                        sideOffset={3}
+                        align='center'
+                        className='box h-fit max-h-[300px] min-w-44 overflow-y-auto rounded-lg bg-white outline-none dark:bg-neutral-950'
+                      >
+                        {returnTypeOptions.map((filter) => (
+                          <SelectItem
+                            key={filter}
+                            value={filter}
+                            className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
+                          >
+                            <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
+                              {filter}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
               <div
                 id='Pou documentation'
@@ -1123,7 +1165,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                   htmlFor='description'
                   className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
                 >
-                  Description :
+                  {tr('Description :')}
                 </label>
                 <InputWithRef
                   id='description'
@@ -1142,20 +1184,34 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                   htmlFor='class-filter'
                   className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
                 >
-                  Class Filter :
+                  {tr('Class Filter :')}
                 </label>
-                <select
-                  id='class-filter'
-                  value={editorVariables.classFilter}
-                  onChange={(e) => handleFilterChange(e.target.value as FilterOptionsType)}
-                  className='h-full w-full rounded-lg border border-neutral-500 bg-white px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
-                >
-                  {FilterOptions.map((filter) => (
-                    <option key={filter} value={filter}>
-                      {filter}
-                    </option>
-                  ))}
-                </select>
+                <Select value={editorVariables.classFilter} onValueChange={handleFilterChange}>
+                  <SelectTrigger
+                    id='class-filter'
+                    placeholder={editorVariables.classFilter}
+                    withIndicator
+                    className='group flex h-full w-full items-center justify-between rounded-lg border border-neutral-500 px-2 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-neutral-850 dark:text-neutral-300'
+                  />
+                  <SelectContent
+                    position='popper'
+                    sideOffset={3}
+                    align='center'
+                    className='box h-fit w-40 overflow-hidden rounded-lg bg-white outline-none dark:bg-neutral-950'
+                  >
+                    {FilterOptions.map((filter) => (
+                      <SelectItem
+                        key={filter}
+                        value={filter}
+                        className='flex w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 dark:hover:bg-neutral-900'
+                      >
+                        <span className='text-center font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
+                          {filter}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}
@@ -1207,37 +1263,16 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
               </div>
             )}
 
-            <div
-              aria-label='Variables visualization switch container'
-              className={cn('flex h-fit w-fit items-center justify-center rounded-md', {
-                'absolute right-0': editorVariables.display === 'code',
-              })}
-            >
-              <TableIcon
-                aria-label='Variables table visualization'
-                onClick={() => {
-                  void handleVisualizationTypeChange('table')
-                }}
-                size='md'
-                currentVisible={editorVariables.display === 'table'}
-                className={cn(
-                  editorVariables.display === 'table' ? 'fill-brand' : 'fill-neutral-100 dark:fill-neutral-900',
-                  'rounded-l-md transition-colors ease-in-out hover:cursor-pointer',
-                )}
-              />
-              <CodeIcon
-                aria-label='Variables code visualization'
-                onClick={() => {
-                  void handleVisualizationTypeChange('code')
-                }}
-                size='md'
-                currentVisible={editorVariables.display === 'code'}
-                className={cn(
-                  editorVariables.display === 'code' ? 'fill-brand' : 'fill-neutral-100 dark:fill-neutral-900',
-                  'rounded-r-md transition-colors ease-in-out hover:cursor-pointer',
-                )}
-              />
-            </div>
+            <ViewModeToggle
+              display={editorVariables.display}
+              onDisplayChange={(value) => {
+                void handleVisualizationTypeChange(value)
+              }}
+              containerLabel={tr('Variables visualization switch container')}
+              tableLabel={tr('Variables table visualization')}
+              codeLabel={tr('Variables code visualization')}
+              className={cn({ 'absolute right-0': editorVariables.display === 'code' })}
+            />
           </div>
         </div>
 
@@ -1285,38 +1320,16 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
             </div>
           )}
 
-          <div
-            aria-label='Variables visualization switch container'
-            className={cn('flex h-fit w-fit items-center justify-center rounded-md', {
-              'absolute right-0 top-0': editorVariables.display === 'code',
-            })}
-          >
-            <TableIcon
-              aria-label='Variables table visualization'
-              onClick={() => {
-                void handleVisualizationTypeChange('table')
-              }}
-              size='md'
-              currentVisible={editorVariables.display === 'table'}
-              className={cn(
-                editorVariables.display === 'table' ? 'fill-brand' : 'fill-neutral-100 dark:fill-neutral-900',
-                'rounded-l-md transition-colors ease-in-out hover:cursor-pointer',
-              )}
-            />
-            {/** TODO: Need to be implemented */}
-            <CodeIcon
-              aria-label='Variables code visualization'
-              onClick={() => {
-                void handleVisualizationTypeChange('code')
-              }}
-              size='md'
-              currentVisible={editorVariables.display === 'code'}
-              className={cn(
-                editorVariables.display === 'code' ? 'fill-brand' : 'fill-neutral-100 dark:fill-neutral-900',
-                'rounded-r-md transition-colors ease-in-out hover:cursor-pointer',
-              )}
-            />
-          </div>
+          <ViewModeToggle
+            display={editorVariables.display}
+            onDisplayChange={(value) => {
+              void handleVisualizationTypeChange(value)
+            }}
+            containerLabel={tr('Variables visualization switch container')}
+            tableLabel={tr('Variables table visualization')}
+            codeLabel={tr('Variables code visualization')}
+            className={cn({ 'absolute right-0 top-0': editorVariables.display === 'code' })}
+          />
         </div>
 
         {editorVariables.display === 'table' && (
@@ -1350,7 +1363,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
               pouName={editor.meta.name}
             />
 
-            {parseError && <p className='mt-2 text-xs text-red-500'>Error: {parseError}</p>}
+            {parseError && <p className='mt-2 text-xs text-red-500'>{tr('Error: {{parseError}}', { parseError })}</p>}
           </div>
         )}
       </div>

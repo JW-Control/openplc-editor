@@ -1,15 +1,21 @@
 import type { PLCVariable } from '../../middleware/shared/ports/types'
+import { parseDurationLiteral } from './iec-duration'
 import { type IECTypeMetadata, type IECWireFormat, lookupBaseType } from './iec-types-registry'
 
 /**
- * STRING / WSTRING wire size cap, in characters. Strucpp's
- * IECStringVar / IECWStringVar default to 254 chars in declarations
- * but the debug protocol pre-dates that change and still frames
- * length-prefixed payloads at 1 length byte + 126 code units. Pull
- * this into a constant so the parser/encoder/sizer all share the cap
- * — bump it in one place when the protocol catches up.
+ * STRING / WSTRING wire size cap, in characters, and the single place it is
+ * written down.
+ *
+ * Strucpp's `IECStringVar` / `IECWStringVar` default to 254 characters in
+ * declarations, but the debug protocol pre-dates that change and still frames
+ * length-prefixed payloads at 1 length byte + 126 code units. Every consumer
+ * reads it from here — the debugger decoder below, the Python SHM layout
+ * (`python/shm-type-map.ts` re-exports it as `SHM_STRING_CHARS`), and the
+ * declaration parser's user-facing message — so the transport, the layout built
+ * on it, and the limit quoted to the user cannot drift apart. Bump it once when
+ * the protocol catches up.
  */
-const DEBUG_STRING_CAP = 126
+export const DEBUG_STRING_CAP = 126
 
 function readInt8(data: Uint8Array, offset: number): number {
   const value = data[offset]
@@ -91,12 +97,22 @@ function formatDtValue(totalNs: bigint): string {
 }
 
 /**
- * Format a strucpp DATE (int64 nanoseconds since the Unix epoch, but
- * semantically date-only) as `D#YYYY-MM-DD`.
+ * Format a strucpp DATE as `D#YYYY-MM-DD`.
+ *
+ * DATE is a count of **days** since the Unix epoch, not nanoseconds. It is the
+ * one temporal type that is: TIME is a nanosecond duration, TOD is nanoseconds
+ * since midnight and DT is nanoseconds since the epoch, but STruC++ lowers a
+ * DATE literal through a helper it named `parseDateLiteralToDays`, and
+ * `D#2026-08-26` compiles to `20691LL`.
+ *
+ * This used to divide by 1_000_000 as though the payload were nanoseconds, so
+ * every DATE in the debugger read `D#1970-01-01` — 20691 nanoseconds rounds to
+ * zero milliseconds. The value on the device was always correct; only the
+ * display was wrong.
  */
-function formatDateValue(totalNs: bigint): string {
-  const ms = Number(totalNs / 1_000_000n)
-  const d = new Date(ms)
+function formatDateValue(totalDays: bigint): string {
+  const MS_PER_DAY = 86_400_000n
+  const d = new Date(Number(totalDays * MS_PER_DAY))
   if (Number.isNaN(d.getTime())) return 'ERR'
   return `D#${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
 }
@@ -325,10 +341,33 @@ export function encodeForceValue(input: string, typeName: string, enumValues?: s
 }
 
 /**
- * Encode dispatcher keyed on `wireFormat`. TIME / DATE / TOD / DT /
- * STRING / WSTRING force is not yet supported — those need IEC literal
- * parsing (`T#…`, `D#…`) and string framing, which the debugger UI
- * doesn't currently expose.
+ * Colour hint stored in the workspace's forced-variables map: `false`
+ * marks a forced-low value (rendered blue in the watch panel and the
+ * graphical editors), `true` forced-high.
+ */
+export function isForcedValueHigh(input: string): boolean {
+  // Drop a literal prefix so `T#-5s` reads as negative like `-5s` does.
+  const value = input
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z_]+#/, '')
+  return value !== 'false' && value !== '0' && !value.startsWith('-')
+}
+
+/**
+ * Unwrap an IEC STRING literal (`'text'`) to its content. Input arrives
+ * trimmed, so quoting is also how a force value keeps leading/trailing
+ * spaces.
+ */
+function stripStringLiteral(input: string): string {
+  const quoted = /^'([\s\S]*)'$/.exec(input)
+  return quoted ? quoted[1] : input
+}
+
+/**
+ * Encode dispatcher keyed on `wireFormat`. DATE / TOD / DT / WSTRING
+ * force is not yet supported — those need calendar-literal parsing
+ * (`D#…`, `TOD#…`, `DT#…`) and UTF-16 framing.
  */
 function encodeByWireFormat(originalInput: string, numericInput: string, meta: IECTypeMetadata): Uint8Array {
   switch (meta.wireFormat) {
@@ -382,11 +421,28 @@ function encodeByWireFormat(originalInput: string, numericInput: string, meta: I
       new DataView(buf.buffer).setFloat64(0, n, true)
       return buf
     }
-    case 'duration-ns-i64':
+    case 'duration-ns-i64': {
+      const buf = new Uint8Array(8)
+      new DataView(buf.buffer).setBigInt64(0, parseDurationLiteral(originalInput), true)
+      return buf
+    }
+    case 'len8-utf8': {
+      const text = stripStringLiteral(originalInput)
+      if (text.length > DEBUG_STRING_CAP) {
+        throw new Error(`STRING value too long: ${text.length} characters (max ${DEBUG_STRING_CAP})`)
+      }
+      const buf = new Uint8Array(1 + text.length)
+      buf[0] = text.length
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i)
+        if (code > 127) throw new Error(`STRING value must be ASCII: "${originalInput}"`)
+        buf[i + 1] = code
+      }
+      return buf
+    }
     case 'datetime-ns-i64':
     case 'date-ns-i64':
     case 'tod-ns-i64':
-    case 'len8-utf8':
     case 'len8-utf16le':
       throw new Error(`Forcing ${meta.name} values is not supported yet`)
     default: {

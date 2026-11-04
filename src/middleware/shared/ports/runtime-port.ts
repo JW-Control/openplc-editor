@@ -37,6 +37,7 @@
  *   - runtimeLogout()
  */
 
+import type { PluginCommandOutcome } from '../../../backend/shared/utils/vpp/screen-actions'
 import type {
   EtherCATRuntimeStatusResponse,
   EtherCATScanRequest,
@@ -61,9 +62,18 @@ export interface LoginResult {
   error?: string
 }
 
+/**
+ * RBAC role for a runtime account. `admin` may manage every account;
+ * `user` may edit only its own account and cannot create/delete users.
+ */
+export type RuntimeUserRole = 'admin' | 'user'
+
 export interface CreateUserParams {
   username: string
   password: string
+  /** Role for the new account. Ignored for the unauthenticated first-user
+   *  bootstrap (the runtime always makes the first user an admin). */
+  role?: RuntimeUserRole
 }
 
 export interface UsersInfoResult {
@@ -72,10 +82,59 @@ export interface UsersInfoResult {
   error?: string
 }
 
+/**
+ * Result of a {@link RuntimePort.getRuntimeCapabilities} call.
+ *
+ * `features` carries the EtherDOG hello features array. A runtime that publishes none (an
+ * older runtime or EtherDOG) gives an empty array. `null` means the features are unknown: the
+ * runtime did not answer, or its EtherDOG is not running; `error` says which.
+ */
+export interface RuntimeCapabilitiesResult {
+  features: readonly string[] | null
+  runtimeVersion?: string
+  error?: string
+}
+
+/** A user account as reported by the runtime. */
+export interface RuntimeUser {
+  id: number
+  username: string
+  role: RuntimeUserRole
+}
+
+export interface ListUsersResult {
+  success: boolean
+  users?: RuntimeUser[]
+  error?: string
+}
+
+export interface WhoAmIResult {
+  success: boolean
+  user?: RuntimeUser
+  error?: string
+}
+
+/**
+ * Fields to change on an existing account. Only the provided fields are
+ * applied. `currentPassword` is required by the runtime when changing your
+ * OWN password (not when an admin resets another user's password).
+ */
+export interface UpdateUserParams {
+  username?: string
+  password?: string
+  currentPassword?: string
+  role?: RuntimeUserRole
+}
+
 export interface RuntimeStatusResult {
   success: boolean
   status?: PlcStatus | (string & {})
   timingStats?: TimingStats
+  /** Run/stop mode-switch position reported by the runtime (`'run'` /
+   *  `'stop'`).  Devices with no switch-aware VPP plugin always report
+   *  `'run'`, and runtimes older than this field omit it entirely — treat
+   *  `undefined` as "no gating". */
+  switchPosition?: 'run' | 'stop'
   error?: string
 }
 
@@ -107,6 +166,26 @@ export interface DiscoveredRuntimeDevice {
   hostname: string
   runtimeVersion: string
   apiPort: number
+  /** Name of the source project the device is storing, when it has one.
+   *
+   *  Carried on the unauthenticated discovery reply so the retrieve picker can
+   *  be populated without logging in to every device on the network. Display
+   *  only: it is whatever the uploading client said, the device never opened
+   *  the archive to check, and the authoritative name comes from the archive
+   *  itself once retrieved. Absent means the device stores no project. */
+  projectName?: string
+  /** When that project was stored, ISO 8601. Absent alongside `projectName`. */
+  projectTimestamp?: string
+}
+
+/** The manifest carried inside a retrieved archive. */
+export interface RuntimeProjectSnapshotMetadata {
+  formatVersion: number
+  projectName: string
+  editorVersion: string
+  uploadedBy: string
+  timestamp: string
+  libraries: Array<{ name: string; version: string; hash: string }>
 }
 
 export interface DiscoverDevicesOptions {
@@ -120,7 +199,158 @@ export interface DiscoverDevicesResult {
   error?: string
 }
 
+/**
+ * A device the retrieve picker can offer, however the platform found it.
+ *
+ * The desktop finds these by scanning its LAN; web asks each orchestrator's
+ * agent. Both end up describing the same thing, which is why the picker does
+ * not need to know which happened.
+ */
+export interface RetrievableDevice {
+  /**
+   * Stable identity, defined by whichever platform produced it -- an address on
+   * the desktop, orchestrator and device id on web. Compared, never parsed.
+   */
+  key: string
+  /** The device's own name: an address, or a device name under an orchestrator. */
+  name: string
+  /** Where it lives, when that is a separate fact: an orchestrator's name, a hostname. */
+  location?: string
+  /**
+   * Whether this device answered discovery at all.
+   *
+   * The distinction the picker depends on: a device that answered and named no
+   * project genuinely stores none, while one that never answered has said
+   * nothing. Only the first may be greyed out.
+   */
+  answeredScan: boolean
+  projectName?: string
+  projectTimestamp?: string
+}
+
+/**
+ * A project fetched from a device but not yet opened.
+ *
+ * `payload` is deliberately opaque: a scratch directory on the desktop, archive
+ * bytes on web. It goes back to the same platform that produced it and nothing
+ * in between looks inside.
+ */
+export interface FetchedProject {
+  projectName: string
+  payload: unknown
+  libraries?: Array<{ name: string; version: string; status: 'installed' | 'differs' | 'missing' }>
+}
+
+/**
+ * Result shape shared by every bootloader call. `error` strings come from the
+ * bootloader itself and are written to be shown to a person.
+ */
+export type BootloaderApiResult<T> = { success: true; data: T } | { success: false; error: string }
+
+/**
+ * The runtime bootloader (RTOP-283): a second service on the device that
+ * starts the runtime container and stays reachable when the runtime will not
+ * run, so a version can be changed or repaired without shell access.
+ *
+ * Reached through the same agent proxy as the runtime, on its own port. A
+ * device with no bootloader -- an orchestrator-managed vPLC, or a native
+ * install -- simply fails getCapabilities, which is the ordinary answer and
+ * not an error to surface.
+ */
+export type BootloaderCapabilities = {
+  service: string
+  bootloaderVersion?: string
+  runtimeVersion?: string
+  state: string
+  recovery: boolean
+}
+
+export type BootloaderStatus = {
+  state: string
+  reason?: string
+  since?: string
+  crashCount?: number
+  healthSource?: string
+  containerId?: string
+  containerName?: string
+  image?: string
+  runtimeVersion?: string
+  recovery?: boolean
+}
+
+export type BootloaderLogs = {
+  logs: string
+  available: boolean
+  reason?: string
+  tail?: number
+}
+
+/**
+ * Update progress. `percent` is absent while the daemon has reported no size
+ * to work from -- for layers it already holds, and before any size is known --
+ * so a UI must treat "no percentage" as indeterminate, never as zero.
+ */
+export type BootloaderUpdateProgress = {
+  state: string
+  from?: string
+  to?: string
+  phase?: string
+  percent?: number | null
+  error?: string
+  startedAt?: string
+  finishedAt?: string | null
+}
+
+/**
+ * Host facts for the Runtime Status header, served by the bootloader.
+ *
+ * The bootloader rather than the runtime, because the bootloader is present on
+ * every device that can be updated at all -- including one running a runtime
+ * far older than this feature. A runtime-served equivalent only answered on
+ * runtimes new enough to have it, which is none of the devices in the field,
+ * so the screen sat empty exactly where it was most needed.
+ *
+ * It is also the better-placed of the two: the bootloader reads these from the
+ * Docker daemon, which runs on the host and answers for it, while a runtime
+ * inside a container can only describe its own namespace.
+ */
+export type RuntimeDeviceInfo = {
+  hostname?: string
+  architecture?: string
+  kernel?: string
+  system?: string
+  cpus?: number
+  memoryBytes?: number
+  dockerVersion?: string
+}
+
+export interface BootloaderPort {
+  getCapabilities(): Promise<BootloaderApiResult<BootloaderCapabilities>>
+  login(username: string, password: string): Promise<BootloaderApiResult<{ role?: string }>>
+  getStatus(): Promise<BootloaderApiResult<BootloaderStatus>>
+  /** Host facts for the Runtime Status header. Authenticated, like status. */
+  getDeviceInfo(): Promise<BootloaderApiResult<RuntimeDeviceInfo>>
+  getRuntimeLogs(tail?: number): Promise<BootloaderApiResult<BootloaderLogs>>
+  /** Upgrade and downgrade are the same call: no direction, no version floor. */
+  startUpdate(version: string): Promise<BootloaderApiResult<BootloaderUpdateProgress>>
+  getUpdateProgress(): Promise<BootloaderApiResult<BootloaderUpdateProgress>>
+  restartRuntime(): Promise<BootloaderApiResult<{ state?: string; reason?: string }>>
+  clearSession(): Promise<void>
+}
+
+export interface PluginCommandArgs {
+  /** Plugin name as `vpp_plugins.conf` registered it. */
+  plugin: string
+  command: string
+  params?: Record<string, unknown>
+  /** Abort and report a failure after this long. */
+  timeoutMs?: number
+}
+
 export interface RuntimePort {
+  /** The bootloader on this device, when one is present. */
+  bootloader: BootloaderPort
+
   /** Set the target device for subsequent API calls. */
   setDeviceContext?(context: { agentId: string; deviceId: string } | null): void
 
@@ -132,6 +362,27 @@ export interface RuntimePort {
 
   /** Check if the runtime has users and get its version. */
   getUsersInfo(): Promise<UsersInfoResult>
+
+  /**
+   * Fetch the EtherDOG features the connected runtime advertises.
+   * Called after a successful connect so the pre-build capability gate can
+   * refuse a project that uses features the runtime does not support.
+   * `features: []` means "no EtherCAT features advertised"; `features: null`
+   * means the runtime could not be reached at all.
+   */
+  getRuntimeCapabilities(): Promise<RuntimeCapabilitiesResult>
+
+  /** List all user accounts on the runtime (requires authentication). */
+  listUsers(): Promise<ListUsersResult>
+
+  /** Return the currently authenticated account (id, username, role). */
+  whoAmI(): Promise<WhoAmIResult>
+
+  /** Update an account's username, password and/or role. */
+  updateUser(userId: number, params: UpdateUserParams): Promise<{ success: boolean; error?: string }>
+
+  /** Delete an account by id (admin only; cannot delete your own account). */
+  deleteUser(userId: number): Promise<{ success: boolean; error?: string }>
 
   /** Get current PLC runtime status with optional timing statistics. */
   getStatus(includeStats?: boolean): Promise<RuntimeStatusResult>
@@ -160,6 +411,21 @@ export interface RuntimePort {
   clearCredentials(): Promise<{ success: boolean }>
 
   /**
+   * Invoke a VPP plugin command on the connected device — the `discover`,
+   * `test` and `status` actions a vendor screen declares.
+   *
+   * Rides the runtime's existing `POST /api/plugin-command` catch-all with the
+   * body it already accepts; no runtime change is involved. That route answers
+   * HTTP 200 even for a plugin failure, with the reason in an `error` key, so
+   * the outcome here is already interpreted — `ok: false` means the command
+   * did not do what was asked, whether the transport or the plugin said so.
+   *
+   * Optional: a platform with no device transport omits it, and the screen
+   * renders its device actions disabled instead of offering a dead button.
+   */
+  sendPluginCommand?(args: PluginCommandArgs): Promise<PluginCommandOutcome>
+
+  /**
    * Check if the runtime connection is ready for debug operations.
    * Each adapter implements its own readiness criteria:
    *   - Web: device context set and authenticated (orchestrator connection)
@@ -172,7 +438,20 @@ export interface RuntimePort {
    * Web adapter: sends zip as base64.
    * Editor adapter: sends via file path or streamed content.
    */
-  uploadProgram?(programData: string | ArrayBuffer): Promise<{ success: boolean; error?: string }>
+  uploadProgram?(
+    programData: string | ArrayBuffer,
+    /** The source project to store on the device alongside the program, so it
+     *  can be retrieved later. Optional: a runtime without snapshot support
+     *  ignores it, and an upload is complete without one. */
+    snapshot?: { archiveBase64: string; metadata: string },
+  ): Promise<{
+    success: boolean
+    error?: string
+    /** Set when the device took the program but refused the project beside it.
+     *  The upload succeeded; the caller should say so in the build log, because
+     *  the alternative is a device that silently cannot be retrieved from. */
+    snapshotWarning?: string
+  }>
 
   /**
    * Subscribe to token refresh events (e.g., JWT auto-renewal).
@@ -228,4 +507,92 @@ export interface RuntimePort {
 
   /** Get EtherCAT runtime status (plugin state, slave status, cycle metrics). */
   getEthercatRuntimeStatus?(): Promise<{ success: boolean; data?: EtherCATRuntimeStatusResponse; error?: string }>
+
+  // --- stored source project ---
+
+  /** Username of the live runtime session, for attributing a stored project to
+   *  whoever uploaded it. Only the username -- the password stays inside the
+   *  token authority. */
+  getSessionUsername?(): string | null
+
+  // --- Retrieve Project from PLC ---------------------------------------
+  //
+  // These exist so the picker itself can be one shared component. What differs
+  // between the two platforms is not the flow -- pick a device, get a session,
+  // fetch, open -- but where the devices come from and what "open" means: the
+  // desktop scans a LAN and unpacks to a scratch directory, web asks an
+  // orchestrator and parses into the workspace. Those are the only differences,
+  // so those are the only things behind the port.
+  //
+  // And only those. Each platform's own way of pulling the bytes down --
+  // `retrieveProject` on the desktop, `retrieveProjectArchive` on web -- used to
+  // be declared here too, alongside an `importRetrievedProject` nothing ever
+  // called. Nothing shared reached any of them: they are internals of the
+  // adapter that implements `fetchRetrievableProject`, and a port that offers
+  // three ways in when the picker uses one is an invitation to write a second
+  // flow through the other two.
+
+  /**
+   * The devices this platform can offer, already merged with whatever it knows
+   * about what they are storing.
+   *
+   * A platform that discovers progressively can also push rows through
+   * `onRetrievableDeviceFound`; this resolves when its sweep is done.
+   */
+  listRetrievableDevices?(): Promise<
+    { success: true; devices: RetrievableDevice[] } | { success: false; error: string }
+  >
+
+  /**
+   * Rows arriving one at a time, for a platform whose discovery streams.
+   *
+   * Optional: a platform that can only answer all at once simply does not
+   * implement it, and the picker fills in when `listRetrievableDevices`
+   * resolves. Subscribe before scanning or the first replies are lost.
+   */
+  onRetrievableDeviceFound?(callback: (device: RetrievableDevice) => void): Unsubscribe
+
+  /**
+   * The device a live session is held for, or '' when there is none.
+   *
+   * A device context alone is not a session: pointing the adapter at a device
+   * does not sign in, so this must stay empty until a login has succeeded.
+   * Compared against `RetrievableDevice.key`, never parsed.
+   */
+  connectedRetrievableDeviceKey?(): string
+
+  /**
+   * Point this platform at `device` for the calls that follow.
+   *
+   * Separate from fetching because the desktop's adapter reads its target from
+   * the store before authenticating, so the target has to move before the
+   * login, not with it.
+   */
+  selectRetrievableDevice?(device: RetrievableDevice): void
+
+  /**
+   * Fetch the stored project, without opening it.
+   *
+   * Split from `openFetchedProject` so the shared picker can run the
+   * unsaved-changes prompt in between -- after the fetch has succeeded, so a
+   * device that turns out to have nothing does not cost the user their project,
+   * and before anything is replaced.
+   */
+  fetchRetrievableProject?(
+    device: RetrievableDevice,
+  ): Promise<{ success: true; project: FetchedProject } | { success: false; error: string }>
+
+  /** Make a fetched project the open one. */
+  openFetchedProject?(project: FetchedProject): Promise<{ success: boolean; error?: string }>
+
+  /**
+   * Install libraries a retrieved project brought with it, by name.
+   *
+   * Takes the fetched project rather than a path so the shared picker does not
+   * have to know that one platform has a filesystem and the other does not.
+   */
+  installRetrievedLibraries?(
+    project: FetchedProject,
+    names: string[],
+  ): Promise<{ success: boolean; installed: string[]; failed: Array<{ name: string; error: string }> }>
 }

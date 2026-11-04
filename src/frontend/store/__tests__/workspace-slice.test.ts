@@ -36,7 +36,7 @@ describe('createWorkspaceSlice', () => {
     expect(workspace.isModalOpen).toEqual([])
     expect(workspace.discardChanges).toBe(false)
     expect(workspace.selectedProjectTreeLeaf).toEqual({ label: '', type: null })
-    expect(workspace.close).toEqual({ window: false, app: false, appDarwin: false })
+    expect(workspace.close).toEqual({ window: false, app: false })
     expect(workspace.isPlcLogsVisible).toBe(false)
     expect(workspace.plcLogs).toBe('')
     expect(workspace.plcLogsLastId).toBeNull()
@@ -61,7 +61,6 @@ describe('createWorkspaceSlice', () => {
     expect(workspace.debugGraphList).toEqual([])
     expect(workspace.debugDataStale).toBe(false)
     expect(workspace.debugMd5Mismatch).toBeNull()
-    expect(workspace.debugConnectionType).toBeNull()
   })
 
   // -------------------------------------------------------------------------
@@ -93,11 +92,6 @@ describe('createWorkspaceSlice', () => {
   it('setCloseApp', () => {
     store.getState().workspaceActions.setCloseApp(true)
     expect(store.getState().workspace.close.app).toBe(true)
-  })
-
-  it('setCloseAppDarwin', () => {
-    store.getState().workspaceActions.setCloseAppDarwin(true)
-    expect(store.getState().workspace.close.appDarwin).toBe(true)
   })
 
   it('setCloseWindow', () => {
@@ -404,6 +398,26 @@ describe('createWorkspaceSlice', () => {
     expect(store.getState().workspace.fbSelectedInstance.get('TON')).toBe('PROGRAM0::timer1')
   })
 
+  it('setDebugHarness installs and clears the session overlay', () => {
+    expect(store.getState().workspace.debugHarness).toBeNull()
+
+    const harness = {
+      programPou: {
+        name: 'LIBDBG_MAIN',
+        pouType: 'program' as const,
+        interface: { variables: [] },
+        body: { language: 'st' as const, value: 'PID_I();' },
+        documentation: '',
+      },
+      instances: [{ name: 'LIBDBG_INST', program: 'LIBDBG_MAIN', task: 'LIBDBG_TASK' }],
+    }
+    store.getState().workspaceActions.setDebugHarness(harness)
+    expect(store.getState().workspace.debugHarness).toEqual(harness)
+
+    store.getState().workspaceActions.setDebugHarness(null)
+    expect(store.getState().workspace.debugHarness).toBeNull()
+  })
+
   it('setDebugLocalMd5', () => {
     store.getState().workspaceActions.setDebugLocalMd5('abc123')
     expect(store.getState().workspace.debugLocalMd5).toBe('abc123')
@@ -429,19 +443,6 @@ describe('createWorkspaceSlice', () => {
 
     store.getState().workspaceActions.setDebugMd5Mismatch(null)
     expect(store.getState().workspace.debugMd5Mismatch).toBeNull()
-  })
-
-  it('setDebugConnectionType', () => {
-    expect(store.getState().workspace.debugConnectionType).toBeNull()
-
-    store.getState().workspaceActions.setDebugConnectionType('websocket')
-    expect(store.getState().workspace.debugConnectionType).toBe('websocket')
-
-    store.getState().workspaceActions.setDebugConnectionType('rtu')
-    expect(store.getState().workspace.debugConnectionType).toBe('rtu')
-
-    store.getState().workspaceActions.setDebugConnectionType(null)
-    expect(store.getState().workspace.debugConnectionType).toBeNull()
   })
 
   // -------------------------------------------------------------------------
@@ -478,11 +479,20 @@ describe('createWorkspaceSlice', () => {
       ]),
     )
     store.getState().workspaceActions.setFbSelectedInstance('FB', 'K')
+    store.getState().workspaceActions.setDebugHarness({
+      programPou: {
+        name: 'LIBDBG_MAIN',
+        pouType: 'program',
+        interface: { variables: [] },
+        body: { language: 'st', value: 'PID_I();' },
+        documentation: '',
+      },
+      instances: [{ name: 'LIBDBG_INST', program: 'LIBDBG_MAIN', task: 'LIBDBG_TASK' }],
+    })
     store.getState().workspaceActions.setDebugLocalMd5('md5')
     store.getState().workspaceActions.setDebugGraphList(['a'])
     store.getState().workspaceActions.setDebugDataStale(true)
     store.getState().workspaceActions.setDebugMd5Mismatch({ runtimeMd5: 'r', localMd5: 'l' })
-    store.getState().workspaceActions.setDebugConnectionType('websocket')
 
     store.getState().workspaceActions.clearDebugState()
 
@@ -499,11 +509,11 @@ describe('createWorkspaceSlice', () => {
     expect(workspace.debugExpandedNodes.size).toBe(0)
     expect(workspace.fbDebugInstances.size).toBe(0)
     expect(workspace.fbSelectedInstance.size).toBe(0)
+    expect(workspace.debugHarness).toBeNull()
     expect(workspace.debugLocalMd5).toBeNull()
     expect(workspace.debugGraphList).toEqual([])
     expect(workspace.debugDataStale).toBe(false)
     expect(workspace.debugMd5Mismatch).toBeNull()
-    expect(workspace.debugConnectionType).toBeNull()
   })
 
   // -------------------------------------------------------------------------
@@ -616,7 +626,6 @@ describe('createWorkspaceSlice', () => {
     expect(workspace.debugGraphList).toEqual([])
     expect(workspace.debugDataStale).toBe(false)
     expect(workspace.debugMd5Mismatch).toBeNull()
-    expect(workspace.debugConnectionType).toBeNull()
     expect(workspace.isPlcLogsVisible).toBe(false)
     expect(workspace.plcLogs).toBe('')
     expect(workspace.plcLogsLastId).toBeNull()
@@ -626,5 +635,16 @@ describe('createWorkspaceSlice', () => {
       timestampFormat: 'full',
     })
     expect(workspace.canEdit).toBe(true)
+  })
+
+  it('clearWorkspace closes the find-in-project modal and restores the layout, so neither reaches the next project', () => {
+    store.getState().workspaceActions.setModalOpen('findInProject', true)
+    store.getState().workspaceActions.toggleCollapse()
+
+    store.getState().workspaceActions.clearWorkspace()
+
+    const { workspace } = store.getState()
+    expect(workspace.isModalOpen).toEqual([])
+    expect(workspace.isCollapsed).toBe(false)
   })
 })

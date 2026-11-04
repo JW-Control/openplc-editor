@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
-import { useEffect, useRef, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
+import { tr } from '@root/frontend/locales/tr'
+import { memo, useEffect, useRef, useState } from 'react'
 
 import { PLCVariable } from '../../../../../middleware/shared/ports'
 import { useDebugger } from '../../../../../middleware/shared/providers'
@@ -8,20 +8,12 @@ import { useDebugCompositeKey } from '../../../../hooks/use-debug-composite-key'
 import { useDebugValue, useIsDebuggerVisible } from '../../../../hooks/use-debug-value'
 import { forceDebugVariable, releaseDebugVariable } from '../../../../services/debug-force-variable'
 import { resolveScopeExpressionType } from '../../../../services/graphical-scope'
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { RungLadderState } from '../../../../store/slices/ladder'
 import { cn } from '../../../../utils/cn'
 import { getLiteralType } from '../../../../utils/keywords'
-import { findFunctionBlockVariables, findStructureVariables } from '../../../../utils/pou-helpers'
-import {
-  floatToBuffer,
-  getVariableTypeInfo,
-  integerToBuffer,
-  parseFloatValue,
-  parseIntegerValue,
-  parseStringValue,
-  stringToBuffer,
-} from '../../../../utils/variable-types'
+import { encodeForceValue, isForcedValueHigh } from '../../../../utils/variable-sizes'
+import { toast } from '../../../_features/[app]/toast/use-toast'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { Modal, ModalContent, ModalTitle } from '../../../_molecules/modal'
 import { HighlightedTextArea } from '../../highlighted-textarea'
@@ -34,17 +26,11 @@ import { DEFAULT_VARIABLE_HEIGHT, DEFAULT_VARIABLE_WIDTH } from './utils/constan
 import { BlockNodeData, BlockVariant, LadderBlockConnectedVariables, VariableNode, VariableProps } from './utils/types'
 
 const VariableElement = (block: VariableProps) => {
+  const store = useOpenPLCStoreApi()
   const { id, data } = block
   const pouName = useBoundPou()
-  const { pous, dataTypes, globalVariables, librariesSystem, updateNode } = useOpenPLCStore(
-    useShallow((s) => ({
-      pous: s.project.data.pous,
-      dataTypes: s.project.data.dataTypes,
-      globalVariables: s.project.data.configurations.resource?.globalVariables,
-      librariesSystem: s.libraries.system,
-      updateNode: s.ladderFlowActions.updateNode,
-    })),
-  )
+  const pous = useOpenPLCStore((state) => state.project.data.pous)
+  const updateNode = useOpenPLCStore((state) => state.ladderFlowActions.updateNode)
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()
   const getCompositeKey = useDebugCompositeKey()
@@ -62,7 +48,7 @@ const VariableElement = (block: VariableProps) => {
       focus: () => void
       isFocused: boolean
       selectedVariable: { positionInArray: number; variableName: string }
-      triggerSubmit?: () => boolean | void
+      triggerSubmit?: () => void
     }
   >(null)
 
@@ -119,16 +105,15 @@ const VariableElement = (block: VariableProps) => {
    * useEffect to sync variableValue with data.variable.name when it changes externally
    * (e.g., from variable rename propagation or autocomplete selection).
    * Only sync when autocomplete is closed to avoid overwriting user input while typing.
-   * openAutocomplete and variableValue are intentionally NOT in the dependency array: including
-   * them re-runs this effect the moment the autocomplete closes (e.g. on outside click), which
-   * fires before the textarea's blur/submit and clobbers the just-typed value back to the old
-   * node value — a real render loop when blur and the outside-click listener race each other.
+   * Note: openAutocomplete is intentionally NOT in the dependency array to prevent a race
+   * condition where closing the autocomplete (before blur) would restore the old node value,
+   * overwriting the user's cleared input.
    */
   useEffect(() => {
     const name = data.variable?.name ?? ''
-    if (openAutocomplete) return
-    setVariableValue((prev) => (prev === name ? prev : name))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!openAutocomplete && name !== '') {
+      setVariableValue(name)
+    }
   }, [data.variable?.name])
 
   /**
@@ -145,41 +130,6 @@ const VariableElement = (block: VariableProps) => {
       setInputError(false)
       return
     }
-
-    // Fast local resolution for member expressions like TON0.Q or struct.field
-    if (name.includes('.')) {
-      const dotIndex = name.lastIndexOf('.')
-      const instName = name.slice(0, dotIndex).trim().toLowerCase()
-      const memberName = name.slice(dotIndex + 1).trim().toLowerCase()
-      const allVars = [
-        ...(pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []),
-        ...(globalVariables ?? []),
-      ]
-      const inst = allVars.find((v) => v.name.toLowerCase() === instName)
-      if (inst?.type?.value) {
-        const members =
-          findFunctionBlockVariables(inst.type.value, pous, librariesSystem ?? []) ??
-          findStructureVariables(inst.type.value, dataTypes ?? []) ??
-          []
-        const m = members.find((member) => member.name.toLowerCase() === memberName)
-        if (m?.type?.value) {
-          setIsAVariable(true)
-          setInputError(!validateVariableType(m.type.value, data.block.variableType).isValid)
-          return
-        }
-      }
-    }
-
-    // Fast local resolution for literals like '10', '20', 'T#500ms', etc.
-    const literalTypes = getLiteralType(name)
-    if (literalTypes) {
-      setIsAVariable(false)
-      const expectedType = data.block.variableType?.type?.value ?? 'ANY'
-      const isMatch = literalTypes.some((lt) => validateVariableType(lt, expectedType).isValid)
-      setInputError(!isMatch)
-      return
-    }
-
     let cancelled = false
     void resolveScopeExpressionType(pouName, name).then((res) => {
       if (cancelled) return
@@ -197,28 +147,16 @@ const VariableElement = (block: VariableProps) => {
     return () => {
       cancelled = true
     }
-  }, [
-    pous,
-    pouName,
-    data.variable?.name,
-    data.block.variableType.type.value,
-    librariesSystem,
-    dataTypes,
-    globalVariables,
-  ])
+  }, [pous, pouName, data.variable?.name, data.block.variableType.type.value])
 
   /**
    * Handle with the variable input onBlur event
    */
   const handleSubmitVariableValueOnTextareaBlur = (currentValue?: string) => {
     const variableNameToSubmit = currentValue ?? variableValue
-    if (variableNameToSubmit.endsWith('.')) {
-      setVariableValue(data.variable.name ?? '')
-      return
-    }
 
-    const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
-    const { pou, rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
+    const { project, ladderFlows } = store.getState()
+    const { pou, rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
       nodeId: id,
     })
     if (!pou || !rung || !node) return
@@ -258,9 +196,8 @@ const VariableElement = (block: VariableProps) => {
       setInputError(false)
     } else if (literalTypes) {
       setIsAVariable(false)
-      const expectedType = data.block.variableType?.type?.value ?? 'ANY'
-      const isMatch = literalTypes.some((lt) => validateVariableType(lt, expectedType).isValid)
-      setInputError(!isMatch)
+      const mismatchType = !literalTypes.includes(data.block.variableType.type.value)
+      setInputError(mismatchType)
       variable = { name: variableNameToSubmit }
     } else {
       setIsAVariable(true)
@@ -292,8 +229,7 @@ const VariableElement = (block: VariableProps) => {
 
   const getVariableType = (): string | undefined => {
     if (!data.variable || !data.variable.name) return undefined
-    const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
-    const { pou } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, { nodeId: id })
+    const pou = pous.find((pou) => pou.name === pouName)
     if (!pou) return undefined
     const variable = (pou.interface?.variables ?? []).find(
       (v) => v.name.toLowerCase() === data.variable.name.toLowerCase(),
@@ -305,21 +241,23 @@ const VariableElement = (block: VariableProps) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await forceDebugVariable(debugger_, compositeKey, debugIndex, new Uint8Array([1]), true)
+    if (data.variable.name)
+      await forceDebugVariable(store, debugger_, compositeKey, debugIndex, new Uint8Array([1]), true)
   }
 
   const handleForceFalse = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await forceDebugVariable(debugger_, compositeKey, debugIndex, new Uint8Array([0]), false)
+    if (data.variable.name)
+      await forceDebugVariable(store, debugger_, compositeKey, debugIndex, new Uint8Array([0]), false)
   }
 
   const handleReleaseForce = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await releaseDebugVariable(debugger_, compositeKey, debugIndex)
+    if (data.variable.name) await releaseDebugVariable(store, debugger_, compositeKey, debugIndex)
   }
 
   const handleForceValueOpen = (e: React.MouseEvent) => {
@@ -349,50 +287,29 @@ const VariableElement = (block: VariableProps) => {
       return
     }
 
-    const typeInfo = getVariableTypeInfo(variableType)
-    if (!typeInfo) {
+    let valueBuffer: Uint8Array
+    try {
+      valueBuffer = encodeForceValue(forceValue, variableType)
+    } catch (error) {
+      toast({
+        title: tr('Cannot force value'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'fail',
+      })
       setForceValueModalOpen(false)
       setForceValue('')
       return
     }
 
-    const normalizedType = variableType.toLowerCase()
-    const isFloatType = normalizedType === 'real' || normalizedType === 'lreal'
-    const isStringType = normalizedType === 'string'
-
-    let valueBuffer: Uint8Array
-    let forcedValueForState: boolean
-
-    if (isStringType) {
-      const parsedStringValue: string | null = parseStringValue(forceValue)
-      if (parsedStringValue === null) {
-        setForceValueModalOpen(false)
-        setForceValue('')
-        return
-      }
-      valueBuffer = stringToBuffer(parsedStringValue)
-      forcedValueForState = true
-    } else if (isFloatType) {
-      const parsedFloatValue = parseFloatValue(forceValue, typeInfo.byteSize)
-      if (parsedFloatValue === null) {
-        setForceValueModalOpen(false)
-        setForceValue('')
-        return
-      }
-      valueBuffer = floatToBuffer(parsedFloatValue, typeInfo.byteSize)
-      forcedValueForState = parsedFloatValue >= 0
-    } else {
-      const parsedIntValue = parseIntegerValue(forceValue, typeInfo)
-      if (parsedIntValue === null) {
-        setForceValueModalOpen(false)
-        setForceValue('')
-        return
-      }
-      valueBuffer = integerToBuffer(parsedIntValue, typeInfo.byteSize, typeInfo.signed)
-      forcedValueForState = parsedIntValue >= BigInt(0)
-    }
-
-    await forceDebugVariable(debugger_, compositeKey, debugIndex, valueBuffer, forcedValueForState, variableType)
+    await forceDebugVariable(
+      store,
+      debugger_,
+      compositeKey,
+      debugIndex,
+      valueBuffer,
+      isForcedValueHigh(forceValue),
+      variableType,
+    )
 
     setForceValueModalOpen(false)
     setForceValue('')
@@ -450,7 +367,6 @@ const VariableElement = (block: VariableProps) => {
           textAreaValue={variableValue}
           setTextAreaValue={setVariableValue}
           handleSubmit={handleSubmitVariableValueOnTextareaBlur}
-          submitWith={{ enter: false }}
           inputHeight={{
             height: DEFAULT_VARIABLE_HEIGHT,
             scrollLimiter: DEFAULT_VARIABLE_HEIGHT,
@@ -463,15 +379,8 @@ const VariableElement = (block: VariableProps) => {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') e.preventDefault()
             if (e.key === 'Enter' && openAutocomplete) {
               e.preventDefault()
-              const submitted = autocompleteRef.current?.triggerSubmit?.()
-              if (submitted !== false) {
-                inputVariableRef.current?.blur({ submit: false })
-              }
-              return
-            }
-            if (e.key === 'Enter' && !openAutocomplete) {
-              e.preventDefault()
-              inputVariableRef.current?.blur({ submit: true })
+              autocompleteRef.current?.triggerSubmit?.()
+              inputVariableRef.current?.blur({ submit: false })
               return
             }
             setKeyPressedAtTextarea(e.key)
@@ -480,7 +389,7 @@ const VariableElement = (block: VariableProps) => {
         />
         {openAutocomplete && (
           <div className='relative flex justify-center'>
-            <div className='absolute -bottom-1 left-1/2 -translate-x-1/2 flex justify-center'>
+            <div className='absolute -bottom-1'>
               <VariablesBlockAutoComplete
                 ref={autocompleteRef}
                 block={block}
@@ -489,12 +398,6 @@ const VariableElement = (block: VariableProps) => {
                 isOpen={openAutocomplete}
                 setIsOpen={(value) => setOpenAutocomplete(value)}
                 keyPressed={keyPressedAtTextarea}
-                onDrillDown={(instanceName) => {
-                  setVariableValue(`${instanceName}.`)
-                }}
-                onBeforeSubmit={(variableName) => {
-                  setVariableValue(variableName)
-                }}
               />
             </div>
           </div>
@@ -533,20 +436,20 @@ const VariableElement = (block: VariableProps) => {
                       className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                       onClick={(e) => void handleForceTrue(e)}
                     >
-                      <p>Force True</p>
+                      <p>{tr('Force True')}</p>
                     </div>
                     <div
                       className='flex w-full cursor-pointer items-center gap-2 px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                       onClick={(e) => void handleForceFalse(e)}
                     >
-                      <p>Force False</p>
+                      <p>{tr('Force False')}</p>
                     </div>
                     {isForced && (
                       <div
                         className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                         onClick={(e) => void handleReleaseForce(e)}
                       >
-                        <p>Release Force</p>
+                        <p>{tr('Release Force')}</p>
                       </div>
                     )}
                   </>
@@ -556,14 +459,14 @@ const VariableElement = (block: VariableProps) => {
                       className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                       onClick={handleForceValueOpen}
                     >
-                      <p>Force value...</p>
+                      <p>{tr('Force value...')}</p>
                     </div>
                     {isForced && (
                       <div
                         className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                         onClick={(e) => void handleReleaseForce(e)}
                       >
-                        <p>Release Force</p>
+                        <p>{tr('Release Force')}</p>
                       </div>
                     )}
                   </>
@@ -576,7 +479,7 @@ const VariableElement = (block: VariableProps) => {
 
       <Modal open={forceValueModalOpen} onOpenChange={handleForceValueModalChange}>
         <ModalContent className='flex h-fit min-h-0 w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>
-          <ModalTitle className='mb-4 text-lg font-semibold'>Force Value</ModalTitle>
+          <ModalTitle className='mb-4 text-lg font-semibold'>{tr('Force Value')}</ModalTitle>
 
           <p className='mb-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
             Enter the value to force for {data.variable?.name || 'this variable'}
@@ -585,7 +488,7 @@ const VariableElement = (block: VariableProps) => {
           <div className='flex w-full flex-col gap-4'>
             <div>
               <Label htmlFor='force-value-input' className='mb-2 block text-sm'>
-                Value
+                {tr('Value')}
               </Label>
               <input
                 id='force-value-input'
@@ -593,7 +496,7 @@ const VariableElement = (block: VariableProps) => {
                 value={forceValue}
                 onChange={(e) => setForceValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void handleForceValueConfirm()}
-                placeholder='Enter value'
+                placeholder={tr('Enter value')}
                 className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
                 autoFocus
               />
@@ -610,7 +513,7 @@ const VariableElement = (block: VariableProps) => {
                 onClick={handleForceValueCancel}
                 className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
             </div>
           </div>
@@ -624,4 +527,6 @@ const VariableElement = (block: VariableProps) => {
   )
 }
 
-export { VariableElement }
+const exportVariableElement = memo(VariableElement)
+
+export { exportVariableElement as VariableElement }

@@ -1,5 +1,5 @@
-import type { PLCDataType, PLCInstance, PLCPou, PLCVariable } from '../../../middleware/shared/ports/types'
-import { openPLCStoreBase } from '../../store'
+import type { LogObject, PLCDataType, PLCInstance, PLCPou, PLCVariable } from '../../../middleware/shared/ports/types'
+import { createTestStore } from '../../store/testing'
 import type { DebugMap, DebugVariableEntry } from '../debug-parser'
 import { packDebugAddr } from '../debug-parser'
 import {
@@ -11,7 +11,7 @@ import {
 } from '../debugger-session'
 
 /** System libraries pre-loaded into the store by `jest-vi-shim.ts`. */
-const SYSTEM_LIBS = openPLCStoreBase.getState().libraries.system
+const SYSTEM_LIBS = createTestStore().getState().libraries.system
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,18 +78,8 @@ function makeInstance(name: string, program: string, task = 'Task0'): PLCInstanc
 
 /** Simple log collector — NOT jest.fn(), just a plain function with a captured array. */
 function createLogCollector() {
-  const entries: {
-    id: string
-    level: string
-    message: string
-    compileError?: import('../../../middleware/shared/ports/types').StructuredCompileError
-  }[] = []
-  const log = (entry: {
-    id: string
-    level: 'error' | 'debug' | 'info' | 'warning'
-    message: string
-    compileError?: import('../../../middleware/shared/ports/types').StructuredCompileError
-  }) => {
+  const entries: LogObject[] = []
+  const log = (entry: LogObject) => {
     entries.push(entry)
   }
   return { entries, log }
@@ -146,13 +136,113 @@ describe('logCompilerEvent', () => {
     expect(entries[0].message).toBe('hello')
   })
 
-  it('generates unique IDs for each log entry', () => {
+  // Entry ids are the console slice's business, not this helper's. It used to
+  // mint one per line with `crypto.randomUUID` — which does not exist when the
+  // node serves the bundle over plain HTTP. What it owes callers now is one
+  // entry per line; the store keys them.
+  it('emits one entry per line and supplies no id of its own', () => {
     const { entries, log } = createLogCollector()
     logCompilerEvent({ message: 'a\nb' }, log)
 
-    expect(entries[0].id).toBeTruthy()
-    expect(entries[1].id).toBeTruthy()
-    expect(entries[0].id).not.toBe(entries[1].id)
+    expect(entries.map((e) => e.message)).toEqual(['a', 'b'])
+    expect(entries.every((e) => !('id' in e))).toBe(true)
+  })
+
+  // -------------------------------------------------------------------------
+  // Carriage-return progress redraws.
+  //
+  // arduino-cli rewrites one line with `\r` while downloading. Each chunk has
+  // to collapse to the frame a terminal would show, and be flagged so the
+  // console overwrites the previous frame instead of stacking a new entry.
+  // -------------------------------------------------------------------------
+  describe('carriage-return progress output', () => {
+    /** Collector that also records the per-write `redraw` directive. */
+    function createRedrawCollector() {
+      const writes: { message: string; transient?: boolean; redraw?: boolean }[] = []
+      const log: Parameters<typeof logCompilerEvent>[1] = (entry, options) => {
+        writes.push({ message: entry.message, transient: entry.transient, redraw: options?.redraw })
+      }
+      return { writes, log }
+    }
+
+    it('collapses a multi-frame chunk to the frame left on screen', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: '\rDownloading 10%\rDownloading 60%\rDownloading 99%' }, log)
+
+      expect(writes).toHaveLength(1)
+      expect(writes[0].message).toBe('Downloading 99%')
+      expect(writes[0].redraw).toBe(true)
+    })
+
+    it('marks a chunk that ended mid-line as still open', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: '\rcore 54.94 MiB / 93.67 MiB  58.65%' }, log)
+
+      expect(writes[0].transient).toBe(true)
+    })
+
+    it('commits the line when the redraw arrives with a trailing newline', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: '\rDownloading index: package_index.tar.bz2 downloaded\n' }, log)
+
+      // Still a redraw (it overwrites the progress frame above it) but no
+      // longer open, so the next download starts a fresh line.
+      expect(writes[0].redraw).toBe(true)
+      expect(writes[0].transient).toBe(false)
+    })
+
+    // A `\r` at the end of a line is a CRLF terminator, not a redraw. Counting
+    // it as one loses log lines on Windows: the ordinary line either overwrites
+    // the live progress line above it, or is itself overwritten by the next
+    // redraw. Both were reproduced before this was fixed.
+    it('does not let a Windows CRLF line overwrite the live progress line', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: '\rDownloading 50%' }, log)
+      logCompilerEvent({ message: 'Compiling sketch...\r\n' }, log)
+
+      expect(writes).toHaveLength(2)
+      expect(writes[1].message).toBe('Compiling sketch...')
+      expect(writes[1].redraw).toBe(false)
+    })
+
+    it('survives a CRLF split across two chunks', () => {
+      // The `\r` and the `\n` arrive in separate stdout events.
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: 'Windows line\r' }, log)
+      logCompilerEvent({ message: '\n' }, log)
+      logCompilerEvent({ message: '\rDownloading 5%' }, log)
+
+      expect(writes.map((w) => w.message)).toEqual(['Windows line', 'Downloading 5%'])
+      // The ordinary line must be closed, or the redraw replaces it.
+      expect(writes[0].redraw).toBe(false)
+      expect(writes[0].transient).toBe(false)
+    })
+
+    it('still treats a leading carriage return as a redraw', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: '\rDownloading 60%' }, log)
+      expect(writes[0].redraw).toBe(true)
+      expect(writes[0].transient).toBe(true)
+    })
+
+    it('leaves ordinary output untouched — no redraw, never transient', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: 'Linking everything together...\n' }, log)
+
+      expect(writes[0].redraw).toBe(false)
+      expect(writes[0].transient).toBe(false)
+    })
+
+    it('preserves indentation on gcc caret lines while trimming block edges', () => {
+      const { writes, log } = createRedrawCollector()
+      logCompilerEvent({ message: '\nsketch.ino:3:3: error: nope\n   undefinedFunction(42);\n   ^~~~~~~\n' }, log)
+
+      expect(writes.map((w) => w.message)).toEqual([
+        'sketch.ino:3:3: error: nope',
+        '   undefinedFunction(42);',
+        '   ^~~~~~~',
+      ])
+    })
   })
 
   describe('with compileError attached (structured strucpp diagnostic)', () => {
@@ -315,16 +405,20 @@ describe('deriveVariableIndexMap', () => {
 
     const { indexMap } = derive([pou], instances, map)
 
-    expect(indexMap.get('Main:START_PB')).toBe(addr(0, 0))
+    // Externals resolve under the canonical, POU-independent global key.
+    expect(indexMap.get('Config0:START_PB')).toBe(addr(0, 0))
     expect(indexMap.get('Main:LOCAL_X')).toBe(addr(0, 1))
-    // The instance-prefixed path must NOT resolve the global.
+    // Neither the instance-prefixed nor the program-scoped path resolves the
+    // global — every reference dedups to the one canonical key.
     expect(indexMap.has('INSTANCE0.START_PB')).toBe(false)
+    expect(indexMap.has('Main:START_PB')).toBe(false)
   })
 
-  it('maps a global shared by two programs to the same index under both keys', () => {
+  it('maps a global shared by two programs to one canonical global key', () => {
     // The regression this whole refactor targets: a VAR_GLOBAL referenced (as
-    // VAR_EXTERNAL) by two programs must resolve to ONE address under BOTH
-    // composite keys, so force + value display work on every referencing POU.
+    // VAR_EXTERNAL) by two programs must resolve to ONE address so force + value
+    // display work on every referencing POU. Both references now collapse onto
+    // the single canonical `Config0:*` key.
     const main = makePou('Main', 'program', [makeBaseVariable('START_PB', 'BOOL', 'external')])
     const another = makePou('Another', 'program', [makeBaseVariable('START_PB', 'BOOL', 'external')])
     const instances = [makeInstance('INSTANCE0', 'Main'), makeInstance('INSTANCE1', 'Another')]
@@ -332,8 +426,10 @@ describe('deriveVariableIndexMap', () => {
 
     const { indexMap } = derive([main, another], instances, map)
 
-    expect(indexMap.get('Main:START_PB')).toBe(addr(0, 0))
-    expect(indexMap.get('Another:START_PB')).toBe(addr(0, 0))
+    expect(indexMap.get('Config0:START_PB')).toBe(addr(0, 0))
+    // Per-program keys no longer exist — that collapse IS the dedup.
+    expect(indexMap.has('Main:START_PB')).toBe(false)
+    expect(indexMap.has('Another:START_PB')).toBe(false)
   })
 
   it('falls back to raw debug path for unmatched leaves (nested fields)', () => {

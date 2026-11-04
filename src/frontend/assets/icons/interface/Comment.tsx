@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -6,7 +7,7 @@ const CommentIcon = (props: ComponentPropsWithoutRef<'svg'>) => {
   const { className, ...rest } = props
   return (
     <svg className={cn(className)} viewBox='0 0 28 28' fill='none' xmlns='http://www.w3.org/2000/svg' {...rest}>
-      <title>Comment Icon</title>
+      <title>{tr('Comment Icon')}</title>
       <path
         opacity='0.4'
         d='M12.8335 4.66681H15.1668C20.9658 4.66681 25.6668 9.36782 25.6668 15.1668V21.0001C25.6668 23.5775 23.5775 25.6668 21.0001 25.6668H12.8335C7.0345 25.6668 2.3335 20.9658 2.3335 15.1668C2.3335 9.36782 7.0345 4.66681 12.8335 4.66681Z'

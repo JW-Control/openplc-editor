@@ -1,8 +1,9 @@
 /**
  * @jest-environment jsdom
  */
-import type { PLCPou } from '../../../../middleware/shared/ports/types'
-import { openPLCStoreBase } from '../../../store'
+import type { PLCDataType, PLCGlobalVariableList, PLCPou } from '../../../../middleware/shared/ports/types'
+import type { OpenPLCStore } from '../../../store'
+import { createTestStore } from '../../../store/testing'
 import { setBodyLineOffset } from '../../lsp-shared/body-offsets'
 import { redirectDefinitionToStore } from '../goto-definition-redirect'
 
@@ -27,7 +28,7 @@ function makeFbPou(name: string): PLCPou {
 }
 
 function setProjectPous(pous: PLCPou[]) {
-  openPLCStoreBase.setState((s) => ({
+  store.setState((s) => ({
     ...s,
     project: {
       ...s.project,
@@ -35,6 +36,7 @@ function setProjectPous(pous: PLCPou[]) {
         ...s.project.data,
         pous,
         dataTypes: [],
+        remoteDevices: [],
       },
     },
     editor: { type: 'available', meta: { name: 'available' } },
@@ -43,6 +45,12 @@ function setProjectPous(pous: PLCPou[]) {
     selectedTab: null,
   }))
 }
+
+let store: OpenPLCStore
+
+beforeEach(() => {
+  store = createTestStore()
+})
 
 describe('redirectDefinitionToStore', () => {
   beforeEach(() => {
@@ -54,17 +62,79 @@ describe('redirectDefinitionToStore', () => {
     // bails so Monaco can fall back (it'll still no-op, but at least
     // we're not claiming to have handled it).
     expect(
-      redirectDefinitionToStore({
+      redirectDefinitionToStore(store, {
         uri: 'inmemory://datatypes/__project__.st',
         range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
       }),
     ).toBe(false)
   })
 
+  describe('datatypes URI with data types present', () => {
+    // Aggregate doc: line 0 `TYPE`, 1 `Colors : (...)`, then Motor's
+    // STRUCT spans 2..4 (declaration, one field, END_STRUCT).
+    const dataTypes: PLCDataType[] = [
+      { name: 'Colors', derivation: 'enumerated', values: [{ description: 'RED' }], initialValue: '' },
+      {
+        name: 'Motor',
+        derivation: 'structure',
+        variable: [{ name: 'speed', type: { definition: 'base-type', value: 'INT' } }],
+      },
+    ]
+
+    beforeEach(() => {
+      setProjectPous([])
+      store.setState((s) => ({
+        ...s,
+        project: { ...s.project, data: { ...s.project.data, dataTypes } },
+      }))
+    })
+
+    it('opens the owning type in code mode with the cursor on its declaration line', () => {
+      expect(
+        redirectDefinitionToStore(store, {
+          uri: 'inmemory://datatypes/__project__.st',
+          range: { start: { line: 1, character: 2 }, end: { line: 1, character: 8 } },
+        }),
+      ).toBe(true)
+
+      const state = store.getState()
+      expect(state.selectedTab).toBe('Colors')
+      // The active editor holds the fresh model — `updateModelStructureForName`
+      // writes there when the name matches, leaving `editors[]` behind.
+      const model = state.editor
+      expect(model.type === 'plc-datatype' && model.structure.display).toBe('code')
+      // Entry line 0 sits below the view's own `TYPE` frame → Monaco line 2.
+      expect(model.cursorPosition).toEqual({ lineNumber: 2, column: 3, offset: 0, target: 'data-type' })
+    })
+
+    it('lands on a struct field line inside the owning type', () => {
+      // Aggregate line 3 = Motor's `speed` field (entry starts at 2).
+      expect(
+        redirectDefinitionToStore(store, {
+          uri: 'inmemory://datatypes/__project__.st',
+          range: { start: { line: 3, character: 4 }, end: { line: 3, character: 9 } },
+        }),
+      ).toBe(true)
+
+      const state = store.getState()
+      expect(state.selectedTab).toBe('Motor')
+      expect(state.editor.cursorPosition?.lineNumber).toBe(3)
+    })
+
+    it('returns false for the END_TYPE framing line past the last entry', () => {
+      expect(
+        redirectDefinitionToStore(store, {
+          uri: 'inmemory://datatypes/__project__.st',
+          range: { start: { line: 5, character: 0 }, end: { line: 5, character: 0 } },
+        }),
+      ).toBe(false)
+    })
+  })
+
   it('returns false when the target POU does not exist in the project', () => {
     setProjectPous([])
     expect(
-      redirectDefinitionToStore({
+      redirectDefinitionToStore(store, {
         uri: 'inmemory://pou/Ghost.st',
         range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
       }),
@@ -75,13 +145,13 @@ describe('redirectDefinitionToStore', () => {
     setProjectPous([makeStPou('Main')])
     setBodyLineOffset('inmemory://pou/Main.st', 5)
 
-    const handled = redirectDefinitionToStore({
+    const handled = redirectDefinitionToStore(store, {
       uri: 'inmemory://pou/Main.st',
       range: { start: { line: 2, character: 3 }, end: { line: 2, character: 10 } },
     })
 
     expect(handled).toBe(true)
-    const state = openPLCStoreBase.getState()
+    const state = store.getState()
     expect(state.editor.type).toBe('plc-textual')
     expect(state.editor.meta.name).toBe('Main')
     expect(state.editor.cursorPosition).toBeDefined()
@@ -95,12 +165,12 @@ describe('redirectDefinitionToStore', () => {
     setProjectPous([makeStPou('Main')])
     setBodyLineOffset('inmemory://pou/Main.st', 5)
 
-    redirectDefinitionToStore({
+    redirectDefinitionToStore(store, {
       uri: 'inmemory://pou/Main.st',
       range: { start: { line: 1, character: 0 }, end: { line: 1, character: 0 } },
     })
 
-    const state = openPLCStoreBase.getState()
+    const state = store.getState()
     expect(state.editor.type).toBe('plc-textual')
     if (state.editor.type === 'plc-textual') {
       expect(state.editor.variable.display).toBe('code')
@@ -111,12 +181,12 @@ describe('redirectDefinitionToStore', () => {
     setProjectPous([makeStPou('Main')])
     setBodyLineOffset('inmemory://pou/Main.st', 5)
 
-    redirectDefinitionToStore({
+    redirectDefinitionToStore(store, {
       uri: 'inmemory://pou/Main.st',
       range: { start: { line: 7, character: 2 }, end: { line: 7, character: 8 } },
     })
 
-    const state = openPLCStoreBase.getState()
+    const state = store.getState()
     expect(state.editor.cursorPosition).toBeDefined()
     expect(state.editor.cursorPosition!.target).toBe('body')
     // LSP line 7, offset 5 → body Monaco line 3 (1-indexed)
@@ -128,7 +198,7 @@ describe('redirectDefinitionToStore', () => {
     setProjectPous([makeStPou('Main')])
     setBodyLineOffset('inmemory://pou/Main.st', 4)
 
-    const handled = redirectDefinitionToStore({
+    const handled = redirectDefinitionToStore(store, {
       targetUri: 'inmemory://pou/Main.st',
       targetRange: { start: { line: 6, character: 0 }, end: { line: 6, character: 10 } },
       targetSelectionRange: { start: { line: 6, character: 4 }, end: { line: 6, character: 6 } },
@@ -136,7 +206,7 @@ describe('redirectDefinitionToStore', () => {
     })
 
     expect(handled).toBe(true)
-    const state = openPLCStoreBase.getState()
+    const state = store.getState()
     expect(state.editor.cursorPosition!.target).toBe('body')
     // Uses targetSelectionRange when both are present
     expect(state.editor.cursorPosition!.lineNumber).toBe(3) // 6 - 4 + 1
@@ -147,12 +217,12 @@ describe('redirectDefinitionToStore', () => {
     setProjectPous([makeFbPou('TankFB')])
     setBodyLineOffset('inmemory://pou/TankFB.st', 5)
 
-    redirectDefinitionToStore({
+    redirectDefinitionToStore(store, {
       uri: 'inmemory://pou/TankFB.st',
       range: { start: { line: 6, character: 0 }, end: { line: 6, character: 0 } },
     })
 
-    const state = openPLCStoreBase.getState()
+    const state = store.getState()
     expect(state.editor.type).toBe('plc-textual')
     expect(state.editor.meta.name).toBe('TankFB')
     // Tab opened
@@ -170,13 +240,13 @@ describe('redirectDefinitionToStore', () => {
     setProjectPous([makeStPou('Main')])
     setBodyLineOffset('inmemory://pou/Main.st', 5)
 
-    const handled = redirectDefinitionToStore({
+    const handled = redirectDefinitionToStore(store, {
       uri: 'inmemory://pou/Main.st',
       range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
     })
 
     expect(handled).toBe(true)
-    const state = openPLCStoreBase.getState()
+    const state = store.getState()
     expect(state.editor.meta.name).toBe('Main')
     // No cursorPosition set — declaration target doesn't carry a
     // useful caret location.
@@ -185,5 +255,257 @@ describe('redirectDefinitionToStore', () => {
     if (state.editor.type === 'plc-textual') {
       expect(state.editor.variable.display).toBe('table')
     }
+  })
+
+  it('redirects a SoftMotion axis global to the owning drive editor', () => {
+    // Minimal CiA 402 drive: controlWord (0x6040 out) + statusWord (0x6041 in)
+    // mapped, so collectAxes/softMotionAxisNames recognise it as an axis.
+    store.setState((s) => ({
+      ...s,
+      project: {
+        ...s.project,
+        data: {
+          ...s.project.data,
+          pous: [],
+          dataTypes: [],
+          remoteDevices: [
+            {
+              name: 'eth',
+              protocol: 'ethercat',
+              ethercatConfig: {
+                devices: [
+                  {
+                    id: 'd1',
+                    name: 'My_Axis',
+                    cia402: { enabled: true, scaleNum: 1, scaleDenom: 1, scaleFactor: 1 },
+                    channelInfo: [
+                      { channelId: 'c1', entryIndex: '0x6040', direction: 'output', iecType: 'UINT' },
+                      { channelId: 'c2', entryIndex: '0x6041', direction: 'input', iecType: 'UINT' },
+                    ],
+                    channelMappings: [
+                      { channelId: 'c1', iecLocation: '%QW0', alias: '' },
+                      { channelId: 'c2', iecLocation: '%IW0', alias: '' },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        } as never,
+      },
+      editor: { type: 'available', meta: { name: 'available' } },
+      editors: [],
+      tabs: [],
+      selectedTab: null,
+    }))
+
+    // Line 0 of the globals doc is `VAR_GLOBAL`; line 1 is the first axis.
+    const handled = redirectDefinitionToStore(store, {
+      uri: 'inmemory://softmotion/__axes__.st',
+      range: { start: { line: 1, character: 2 }, end: { line: 1, character: 9 } },
+    })
+
+    expect(handled).toBe(true)
+    const state = store.getState()
+    expect(state.editor.type).toBe('plc-ethercat-device')
+    expect(state.editor.meta.name).toBe('My_Axis')
+    if (state.editor.type === 'plc-ethercat-device') {
+      expect(state.editor.meta.busName).toBe('eth')
+      expect(state.editor.meta.deviceId).toBe('d1')
+    }
+  })
+
+  it('redirects a resource-global to the Resource editor', () => {
+    setProjectPous([])
+    const handled = redirectDefinitionToStore(store, {
+      uri: 'inmemory://globals/__resource__.st',
+      range: { start: { line: 2, character: 4 }, end: { line: 2, character: 15 } },
+    })
+    expect(handled).toBe(true)
+    const state = store.getState()
+    expect(state.editor.type).toBe('plc-resource')
+    expect(state.editor.meta.name).toBe('Resource')
+  })
+
+  it('returns false for a SoftMotion globals line with no matching axis', () => {
+    setProjectPous([])
+    expect(
+      redirectDefinitionToStore(store, {
+        uri: 'inmemory://softmotion/__axes__.st',
+        range: { start: { line: 1, character: 0 }, end: { line: 1, character: 0 } },
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('redirectDefinitionToStore — global variable lists', () => {
+  const lists: PLCGlobalVariableList[] = [
+    {
+      name: 'GVL',
+      variables: [
+        {
+          name: 'Output1',
+          class: 'global',
+          type: { definition: 'base-type', value: 'BOOL' },
+          location: '',
+          documentation: '',
+        },
+        {
+          name: 'Output2',
+          class: 'global',
+          type: { definition: 'base-type', value: 'BOOL' },
+          location: '',
+          documentation: '',
+        },
+      ],
+    },
+    {
+      name: 'MyGlobalList',
+      variables: [
+        {
+          name: 'MotorSpeed',
+          class: 'global',
+          type: { definition: 'base-type', value: 'INT' },
+          location: '',
+          documentation: '',
+        },
+      ],
+    },
+  ]
+
+  const setLists = (globalVariableLists: PLCGlobalVariableList[]) => {
+    store.setState((s) => ({
+      ...s,
+      project: {
+        ...s.project,
+        data: { ...s.project.data, pous: [], dataTypes: [], remoteDevices: [], globalVariableLists },
+      },
+      editor: { type: 'available', meta: { name: 'available' } },
+      editors: [],
+      tabs: [],
+      selectedTab: null,
+    }))
+  }
+
+  const at = (line: number) => ({
+    uri: 'inmemory://globals/__lists__.st',
+    range: { start: { line, character: 2 }, end: { line, character: 8 } },
+  })
+
+  beforeEach(() => setLists(lists))
+
+  /**
+   * The synthesized document, for reference — the lines the LSP points at:
+   *
+   *   0  TYPE
+   *   1  GVL_TYPE : STRUCT
+   *   2    Output1 : BOOL;
+   *   3    Output2 : BOOL;
+   *   4  END_STRUCT;
+   *   5  MyGlobalList_TYPE : STRUCT
+   *   6    MotorSpeed : INT;
+   *   7  END_STRUCT;
+   *   8  END_TYPE
+   *   9  VAR_GLOBAL
+   *  10    GVL : GVL_TYPE;
+   *  11    MyGlobalList : MyGlobalList_TYPE;
+   *  12  END_VAR
+   */
+  it('opens the owning list from a member line', () => {
+    // A member line carries no list name; ownership comes from where the line sits.
+    expect(redirectDefinitionToStore(store, at(2))).toBe(true)
+    expect(store.getState().selectedTab).toBe('GVL')
+  })
+
+  it('opens the second list from ITS member line, not the first', () => {
+    expect(redirectDefinitionToStore(store, at(6))).toBe(true)
+    expect(store.getState().selectedTab).toBe('MyGlobalList')
+  })
+
+  it('opens the list from its instance line', () => {
+    expect(redirectDefinitionToStore(store, at(11))).toBe(true)
+    expect(store.getState().selectedTab).toBe('MyGlobalList')
+  })
+
+  it('returns false when the project has no lists, so Monaco can fall back', () => {
+    setLists([])
+    expect(redirectDefinitionToStore(store, at(2))).toBe(false)
+  })
+
+  it('returns false for a line above any list, rather than guessing', () => {
+    // Line 0 is `TYPE` — a frame line, owned by no list.
+    expect(redirectDefinitionToStore(store, at(0))).toBe(false)
+  })
+
+  it('opens the list from its STRUCT header', () => {
+    expect(redirectDefinitionToStore(store, at(5))).toBe(true)
+    expect(store.getState().selectedTab).toBe('MyGlobalList')
+  })
+
+  it.each([
+    ['END_STRUCT; of the first list', 4],
+    ['END_TYPE', 8],
+    ['VAR_GLOBAL', 9],
+    ['END_VAR', 12],
+    ['a line past the end of the document', 99],
+  ])('returns false on %s rather than the nearest list', (_label, line) => {
+    expect(redirectDefinitionToStore(store, at(line))).toBe(false)
+  })
+
+  it('opens the list a member is declared IN, even when the member is named after another list', () => {
+    // Same shape as an instance line, and the name of a real list: resolving by name would
+    // open `MyGlobalList` instead of the list this member actually belongs to.
+    setLists([
+      {
+        name: 'GVL',
+        variables: [
+          {
+            name: 'MyGlobalList',
+            class: 'global',
+            type: { definition: 'base-type', value: 'BOOL' },
+            location: '',
+            documentation: '',
+          },
+        ],
+      },
+      {
+        name: 'MyGlobalList',
+        variables: [
+          {
+            name: 'MotorSpeed',
+            class: 'global',
+            type: { definition: 'base-type', value: 'INT' },
+            location: '',
+            documentation: '',
+          },
+        ],
+      },
+    ])
+    // 0 TYPE / 1 GVL_TYPE : STRUCT / 2   MyGlobalList : BOOL;
+    expect(redirectDefinitionToStore(store, at(2))).toBe(true)
+    expect(store.getState().selectedTab).toBe('GVL')
+  })
+
+  it('skips a memberless list, which contributes no lines to the document', () => {
+    // An empty STRUCT is not a legal type, so the serializers omit such a list entirely —
+    // the line map has to omit it too or every line after it is attributed to the wrong list.
+    setLists([
+      { name: 'Empty', variables: [] },
+      {
+        name: 'Real',
+        variables: [
+          {
+            name: 'Flag',
+            class: 'global',
+            type: { definition: 'base-type', value: 'BOOL' },
+            location: '',
+            documentation: '',
+          },
+        ],
+      },
+    ])
+    // 0 TYPE / 1 Real_TYPE : STRUCT / 2   Flag : BOOL;
+    expect(redirectDefinitionToStore(store, at(2))).toBe(true)
+    expect(store.getState().selectedTab).toBe('Real')
   })
 })

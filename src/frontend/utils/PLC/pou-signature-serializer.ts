@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2025 Autonomy / OpenPLC Project
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2025 Autonomy®
 /**
  * Serialise a POU to its ST signature stub.
  *
@@ -34,11 +34,56 @@
  * the user can't act on.
  */
 
-import type { PLCPou } from '../../../middleware/shared/ports/types'
+import type { PLCPou, PLCVariable } from '../../../middleware/shared/ports/types'
+import { resolveLocation } from '../../../middleware/shared/utils/iec-address/registry'
 import { generateIecVariablesToString } from '../generate-iec-variables-to-string'
+import { resolveLocationsInText } from '../variable-text-edits'
 import { getEndKeyword, getStartKeyword } from './pou-file-extensions'
 
 const OPAQUE_BODY_PLACEHOLDER = '; (* graphical body — opaque to LSP *)'
+
+/** Default for callers that have no alias index (tests, boot before the
+ *  registry exists).  `resolveLocation` maps every non-literal location to
+ *  '' against it, so the emitted ST is always parseable. */
+const EMPTY_ALIAS_INDEX: ReadonlyMap<string, string> = new Map()
+
+/**
+ * Resolve every variable's `location` from the stored single-field form
+ * (alias name OR literal `%addr`) to the literal address strucpp can parse.
+ *
+ * The LSP is a consumer that must never see aliases, exactly like the
+ * compiler — `AT label2` is not valid IEC ST, and strucpp abandons the whole
+ * VAR block on it, so every symbol after the first alias-bound variable
+ * disappears from the POU's scope (no autocomplete, red graphical boxes).
+ * The mapping mirrors `getCompileReadyProjectData()`: a literal passes
+ * through verbatim, a live alias becomes its address, an orphaned alias
+ * becomes '' (the `AT` clause is dropped).
+ *
+ * Only the LSP projection is resolved.  The store keeps the alias-name form
+ * so the variables table / text view and the saved file all still show
+ * `label2`, not `%IW0`.
+ *
+ * Line-count invariant: this only ever rewrites text *within* a declaration
+ * line, so `bodyLineOffset` and the `pouvars://` diagnostics mirror stay
+ * correct.
+ */
+function withResolvedLocations(variables: PLCVariable[], aliasIndex: ReadonlyMap<string, string>): PLCVariable[] {
+  return variables.map((variable) =>
+    variable.location ? { ...variable, location: resolveLocation(variable.location, aliasIndex) } : variable,
+  )
+}
+
+/**
+ * The POU's declaration text with alias locations resolved, or a serialisation
+ * of the model when the POU carries no text yet.
+ */
+function resolveVariablesTextLocations(pou: PLCPou, aliasIndex: ReadonlyMap<string, string>): string {
+  const text = pou.variablesText
+  if (text === undefined) {
+    return generateIecVariablesToString(withResolvedLocations(pou.interface?.variables ?? [], aliasIndex))
+  }
+  return resolveLocationsInText(text, (location) => resolveLocation(location, aliasIndex))
+}
 
 function buildDeclarationLine(pou: PLCPou): string {
   const startKeyword = getStartKeyword(pou.pouType)
@@ -62,8 +107,11 @@ function buildDeclarationLine(pou: PLCPou): string {
  *     no textual ST representation at all.  Each of those POU
  *     editors keeps its own native autocomplete / tooling.
  */
-export function serializePouSignatureToST(pou: PLCPou): string {
-  return serializePouSignatureToSTWithBodyOffset(pou).text
+export function serializePouSignatureToST(
+  pou: PLCPou,
+  aliasIndex: ReadonlyMap<string, string> = EMPTY_ALIAS_INDEX,
+): string {
+  return serializePouSignatureToSTWithBodyOffset(pou, aliasIndex).text
 }
 
 /**
@@ -79,14 +127,33 @@ export function serializePouSignatureToST(pou: PLCPou): string {
  * offset to map LSP coordinates back to Monaco's body-only view.
  *
  * Computed as the line count of `${declaration}\n${variables}\n` —
- * the literal prefix the template prepends before `${body}`.
+ * the literal prefix the template prepends before `${body}`.  The
+ * template guarantees a real offset is always >= 2; `st-lsp`'s
+ * `resolveStLspContext` relies on that to tell a synced POU apart from
+ * `getBodyLineOffset`'s unknown-URI fallback of 0.
+ *
+ * `aliasIndex` maps a producer alias to its current IEC address; every
+ * variable's `location` is resolved through it so the stub carries literal
+ * `%…` addresses only.  See {@link withResolvedLocations}.
  */
-export function serializePouSignatureToSTWithBodyOffset(pou: PLCPou): {
+export function serializePouSignatureToSTWithBodyOffset(
+  pou: PLCPou,
+  aliasIndex: ReadonlyMap<string, string> = EMPTY_ALIAS_INDEX,
+): {
   text: string
   bodyLineOffset: number
 } {
   const declaration = buildDeclarationLine(pou)
-  const variables = generateIecVariablesToString(pou.interface?.variables ?? [])
+  // The user's own declaration text, with only the alias operands swapped for
+  // the addresses they resolve to (DOPE-650). Serialising from the model
+  // instead would produce a document that no longer matches the code buffer
+  // line for line, and `pouVarsTokenViewport` blanks the semantic tokens for
+  // every line where the two disagree — which is why the buffer used to be
+  // re-canonicalised on commit, deleting the user's comments with it.
+  //
+  // Falls back to serialising the model for a POU that has no text yet (one
+  // created in memory this session and not saved).
+  const variables = resolveVariablesTextLocations(pou, aliasIndex)
   const body = pou.body.language === 'st' ? (pou.body.value as string) : OPAQUE_BODY_PLACEHOLDER
   const endKeyword = getEndKeyword(pou.pouType)
   const prefix = `${declaration}\n${variables}\n`
@@ -117,6 +184,11 @@ export function serializePouSignatureToSTWithBodyOffset(pou: PLCPou): {
  *
  * `bodyExpr` MUST be a single line (no newlines) — the position math
  * assumes the expression occupies one body line.
+ *
+ * `aliasIndex` resolves alias-bound locations to literal `%…` addresses, as
+ * in {@link serializePouSignatureToSTWithBodyOffset} — without it a single
+ * alias-bound variable breaks the VAR block and the query returns no
+ * candidates at all.
  */
 const SCOPE_QUERY_POU_NAME = '__openplc_scope_query__'
 
@@ -124,6 +196,7 @@ export function serializePouScopeForQuery(
   pou: PLCPou,
   bodyExpr: string,
   uniqueId?: number | string,
+  aliasIndex: ReadonlyMap<string, string> = EMPTY_ALIAS_INDEX,
 ): { text: string; position: { line: number; character: number } } {
   // Emit with the POU's REAL kind + return type so the VAR sections stay
   // legal (e.g. VAR_IN_OUT is only valid in FUNCTION_BLOCK/FUNCTION — a
@@ -146,7 +219,7 @@ export function serializePouScopeForQuery(
   // yellow, no autocomplete). Re-emit externals as plain `VAR`: they carry their
   // real type inline, so the symbol and its members resolve self-containedly.
   // Scope-query-only — the POU's real stub keeps `VAR_EXTERNAL`.
-  const scopeVariables = (pou.interface?.variables ?? []).map((variable) =>
+  const scopeVariables = withResolvedLocations(pou.interface?.variables ?? [], aliasIndex).map((variable) =>
     variable.class === 'external' ? { ...variable, class: 'local' as const } : variable,
   )
   const variables = generateIecVariablesToString(scopeVariables)

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { EtherCATDevice } from '@root/middleware/shared/ports/ethercat-types'
 
@@ -40,24 +41,26 @@ const DeviceScanTable = ({ devices, selectedPosition, onSelectDevice, isScanning
         <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-900'>
           <tr>
             <th className='w-[8%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-              Pos
+              {tr('Pos')}
             </th>
             <th className='w-[20%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-              Name
+              {tr('Name')}
             </th>
             <th className='w-[12%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-              Vendor
+              {tr('Vendor')}
             </th>
             <th className='w-[15%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-              Product
+              {tr('Product')}
             </th>
             <th className='w-[10%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-              State
+              {tr('State')}
             </th>
             <th className='w-[10%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
               CoE
             </th>
-            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>I/O Size</th>
+            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+              {tr('I/O Size')}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -66,14 +69,16 @@ const DeviceScanTable = ({ devices, selectedPosition, onSelectDevice, isScanning
               <td colSpan={7} className='px-4 py-8 text-center'>
                 <div className='flex flex-col items-center gap-2'>
                   <div className='h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent' />
-                  <span className='text-sm text-neutral-500 dark:text-neutral-400'>Scanning for devices...</span>
+                  <span className='text-sm text-neutral-500 dark:text-neutral-400'>
+                    {tr('Scanning for devices...')}
+                  </span>
                 </div>
               </td>
             </tr>
           ) : devices.length === 0 ? (
             <tr>
               <td colSpan={7} className='px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-                No devices found. Select an interface and click "Scan Devices".
+                {tr('No devices found. Select an interface and click "Scan Devices".')}
               </td>
             </tr>
           ) : (

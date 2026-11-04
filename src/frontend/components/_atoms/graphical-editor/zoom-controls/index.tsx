@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { PointerEvent, useCallback, useRef, useState } from 'react'
 
 type ZoomControlsProps = {
@@ -90,7 +91,7 @@ export const ZoomControls = ({ zoomLevel, onZoomIn, onZoomOut, onReset }: ZoomCo
         <button
           type='button'
           aria-label='Move zoom control'
-          title='Drag to move'
+          title={tr('Drag to move')}
           className='flex h-6 w-4 cursor-grab touch-none items-center justify-center text-neutral-400 active:cursor-grabbing'
           onPointerDown={handleGripPointerDown}
           onPointerMove={handleGripPointerMove}
@@ -102,7 +103,7 @@ export const ZoomControls = ({ zoomLevel, onZoomIn, onZoomOut, onReset }: ZoomCo
         <button
           type='button'
           aria-label='Zoom out'
-          title='Zoom out (Ctrl + -)'
+          title={tr('Zoom out (Ctrl + -)')}
           className='flex h-6 w-6 items-center justify-center rounded font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800'
           onClick={onZoomOut}
         >
@@ -111,7 +112,7 @@ export const ZoomControls = ({ zoomLevel, onZoomIn, onZoomOut, onReset }: ZoomCo
         <button
           type='button'
           aria-label='Reset zoom'
-          title='Reset zoom (Ctrl + 0)'
+          title={tr('Reset zoom (Ctrl + 0)')}
           className='min-w-[3.5ch] px-1 text-center hover:underline'
           onClick={onReset}
         >
@@ -120,7 +121,7 @@ export const ZoomControls = ({ zoomLevel, onZoomIn, onZoomOut, onReset }: ZoomCo
         <button
           type='button'
           aria-label='Zoom in'
-          title='Zoom in (Ctrl + +)'
+          title={tr('Zoom in (Ctrl + +)')}
           className='flex h-6 w-6 items-center justify-center rounded font-semibold hover:bg-neutral-100 dark:hover:bg-neutral-800'
           onClick={onZoomIn}
         >

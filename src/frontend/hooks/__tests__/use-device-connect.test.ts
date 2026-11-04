@@ -1,0 +1,505 @@
+import type { DevicePort } from '@root/middleware/shared/ports/device-port'
+import { WEB_CAPABILITIES } from '@root/middleware/shared/ports/platform-capabilities'
+import type { SystemPort } from '@root/middleware/shared/ports/system-port'
+import type { BoardInfo } from '@root/middleware/shared/ports/types'
+import type { PlatformPorts } from '@root/middleware/shared/providers/types'
+import { renderHook } from '@testing-library/react'
+
+jest.mock('../../services/device-link-resolution', () => ({
+  resolveDeviceLinkWithUx: (...args: unknown[]) => mockResolveDeviceLinkWithUx(...args),
+}))
+jest.mock('../../utils/device-connect-events', () => ({ requestDeviceFlash: () => mockRequestDeviceFlash() }))
+
+import type { OpenPLCStore } from '../../store'
+import { createStoreWrapper, createTestStore } from '../../store/testing'
+import { useDeviceConnect } from '../use-device-connect'
+
+const mockConnect = jest.fn()
+const mockDisconnect = jest.fn().mockResolvedValue({ success: true })
+const mockOnConnectionStatus = jest.fn().mockReturnValue(() => undefined)
+const mockResolveDeviceLinkWithUx = jest.fn((..._args: unknown[]) => Promise.resolve(mockResolution))
+const mockRequestDeviceFlash = jest.fn()
+
+/** What the shared resolution returns: ordered ways to reach the device. */
+const serialCandidate = {
+  channelLabel: 'Modbus RTU',
+  channelIndex: 0,
+  config: { connectionType: 'rtu', connectionParams: { port: 'COM5', baudRate: 115200, slaveId: 1 } },
+}
+/** Shape the hook consumes: what can be tried now, and what needs input first. */
+let mockResolution: unknown = { candidates: [serialCandidate], awaitingInput: [] }
+
+const mockReadLicense = jest.fn()
+const mockRefreshLicense = jest.fn()
+const mockOpenExternalLink = jest.fn().mockResolvedValue({ success: true })
+
+function stubPort<T extends object>(overrides: Partial<T> = {}): T {
+  return new Proxy(overrides as T, {
+    get(target, prop, receiver) {
+      if (prop in target) return Reflect.get(target, prop, receiver)
+      return typeof prop === 'string' ? () => undefined : undefined
+    },
+  })
+}
+
+function buildPorts(): PlatformPorts {
+  return {
+    compiler: stubPort(),
+    runtime: stubPort(),
+    debugger: stubPort(),
+    simulator: stubPort(),
+    project: stubPort(),
+    device: stubPort<DevicePort>({
+      connect: mockConnect,
+      disconnect: mockDisconnect,
+      onConnectionStatus: mockOnConnectionStatus,
+      readLicense: mockReadLicense,
+      refreshLicense: mockRefreshLicense,
+    }),
+    orchestrator: stubPort(),
+    system: stubPort<SystemPort>({
+      getEdgeFrontendUrl: () => 'https://edge.example.com',
+      openExternalLink: mockOpenExternalLink,
+    }),
+    window: stubPort(),
+    accelerator: stubPort(),
+    theme: stubPort(),
+    versionControl: stubPort(),
+    navigation: stubPort(),
+    library: stubPort(),
+    capabilities: WEB_CAPABILITIES,
+  }
+}
+
+const board = { debug: {} } as unknown as BoardInfo
+
+let store: OpenPLCStore
+let ports: PlatformPorts
+
+/**
+ * Store actions are wrapped so calls can be asserted while still writing through:
+ * the hook reads the live status back to decide whether a settled state still
+ * needs publishing, so a write-only spy would make that branch untestable.
+ * Immer freezes the action namespaces, hence a swapped copy instead of spyOn.
+ */
+function installActionSpies() {
+  const { modalActions, deviceActions } = store.getState()
+  const spies = {
+    openModal: jest.fn(modalActions.openModal),
+    setDeviceConnectionStatus: jest.fn(deviceActions.setDeviceConnectionStatus),
+    setDeviceLicenseReport: jest.fn(deviceActions.setDeviceLicenseReport),
+    clearDeviceLicense: jest.fn(deviceActions.clearDeviceLicense),
+  }
+  store.setState({
+    modalActions: { ...modalActions, openModal: spies.openModal },
+    deviceActions: {
+      ...deviceActions,
+      setDeviceConnectionStatus: spies.setDeviceConnectionStatus,
+      setDeviceLicenseReport: spies.setDeviceLicenseReport,
+      clearDeviceLicense: spies.clearDeviceLicense,
+    },
+  })
+  return spies
+}
+
+let spies: ReturnType<typeof installActionSpies>
+
+/** The status the store ended up in — what the Connect button actually reads. */
+const currentStatus = (): string => store.getState().deviceConnection.status
+
+function renderConnect(boardInfo: BoardInfo) {
+  return renderHook(() => useDeviceConnect(boardInfo), { wrapper: createStoreWrapper(store, ports) })
+}
+
+function latestOnResponse(): (index: number) => void {
+  const calls = spies.openModal.mock.calls
+  const [, props] = calls[calls.length - 1]
+  return (props as { onResponse: (i: number) => void }).onResponse
+}
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  store = createTestStore()
+  store.getState().deviceActions.setDeviceBoard('Test Board')
+  store.getState().deviceActions.setCommunicationPort('COM5')
+  ports = buildPorts()
+  spies = installActionSpies()
+  mockResolution = { candidates: [serialCandidate], awaitingInput: [] }
+  mockDisconnect.mockResolvedValue({ success: true })
+  mockOnConnectionStatus.mockReturnValue(() => undefined)
+})
+
+describe('useDeviceConnect', () => {
+  // Mirroring pushed link status is NOT this hook's job: the link outlives the
+  // device screen, so that subscription lives in `useDeviceConnectionMonitor`
+  // (mounted at workspace level) and is tested there.
+
+  const tcpCandidate = {
+    channelLabel: 'Modbus TCP',
+    channelIndex: 0,
+    config: { connectionType: 'tcp', connectionParams: { ipAddress: '192.168.0.50' } },
+  }
+
+  it('hands the connection EVERY resolved candidate, in order', async () => {
+    // Connect does not choose a transport: the main process tries the list and
+    // keeps the first that answers, which is what lets a stale Modbus TCP address
+    // fall through to the cable. Choosing here is what previously stranded a
+    // Modbus-TCP-only project on "select a communication port".
+    mockResolution = { candidates: [serialCandidate, tcpCandidate], awaitingInput: [] }
+    mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+
+    const { result } = renderConnect(board)
+    await result.current.connect()
+
+    expect(mockConnect).toHaveBeenCalledWith([serialCandidate.config, tcpCandidate.config])
+  })
+
+  it('does nothing when resolution was cancelled or impossible', async () => {
+    // The shared resolution has already told the user why (a cancelled prompt is
+    // the user's answer), so this must not stack a second dialog on top.
+    mockResolution = null
+
+    const { result } = renderConnect(board)
+    await result.current.connect()
+
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(spies.openModal).not.toHaveBeenCalled()
+  })
+
+  it('never asks for a DHCP address when a silent candidate connects', async () => {
+    // The user's report: with DHCP on, Connect asked for an address before trying
+    // anything. With a cable attached that question is pure interruption, so the
+    // deferred channel must stay unasked when the cable works.
+    mockResolution = { candidates: [serialCandidate], awaitingInput: [1] }
+    mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+
+    const { result } = renderConnect(board)
+    await result.current.connect()
+
+    expect(mockResolveDeviceLinkWithUx).toHaveBeenCalledTimes(1)
+    expect(mockResolveDeviceLinkWithUx.mock.calls[0][3]).toMatchObject({ deferPrompts: true })
+    expect(mockConnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for the deferred address only after the silent candidates fail', async () => {
+    mockResolveDeviceLinkWithUx
+      .mockImplementationOnce(() => Promise.resolve({ candidates: [serialCandidate], awaitingInput: [1] }))
+      .mockImplementationOnce(() => Promise.resolve({ candidates: [tcpCandidate], awaitingInput: [] }))
+    mockConnect
+      .mockResolvedValueOnce({ status: 'no-response' })
+      .mockResolvedValueOnce({ status: 'connected-with-firmware' })
+
+    const { result } = renderConnect(board)
+    await result.current.connect()
+
+    // Second resolve targets ONLY the channel that needed input.
+    expect(mockResolveDeviceLinkWithUx).toHaveBeenCalledTimes(2)
+    expect(mockResolveDeviceLinkWithUx.mock.calls[1][3]).toMatchObject({ onlyChannels: [1] })
+    expect(mockConnect).toHaveBeenNthCalledWith(2, [tcpCandidate.config])
+    // It connected on the second pass, so no failure dialog.
+    expect(spies.openModal).not.toHaveBeenCalled()
+  })
+
+  it('names every endpoint it tried when nothing answers', async () => {
+    mockResolution = { candidates: [serialCandidate, tcpCandidate], awaitingInput: [] }
+    mockConnect.mockResolvedValue({ status: 'no-response' })
+
+    const { result } = renderConnect(board)
+    await result.current.connect()
+
+    const [, props] = spies.openModal.mock.calls[0]
+    expect((props as { message: string }).message).toContain('192.168.0.50')
+    expect((props as { message: string }).message).toContain('COM5')
+  })
+
+  it('marks the link as connecting before handing the candidates over', async () => {
+    mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+    const { result } = renderConnect(board)
+    await result.current.connect()
+    expect(spies.setDeviceConnectionStatus).toHaveBeenCalledWith('connecting', null)
+    expect(mockConnect).toHaveBeenCalledWith([serialCandidate.config])
+  })
+
+  it('opens no dialog when a firmware answered', async () => {
+    mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+    const { result } = renderConnect(board)
+    await expect(result.current.connect()).resolves.toBe(true)
+    expect(spies.openModal).not.toHaveBeenCalled()
+  })
+
+  it.each(['no-response', 'no-firmware', 'error'] as const)(
+    'reports no link when the outcome is %s',
+    async (status) => {
+      mockConnect.mockResolvedValue({ status })
+      const { result } = renderConnect(board)
+      await expect(result.current.connect()).resolves.toBe(false)
+    },
+  )
+
+  it('reports no link when resolution was cancelled', async () => {
+    mockResolution = null
+    const { result } = renderConnect(board)
+    await expect(result.current.connect()).resolves.toBe(false)
+  })
+
+  it('shows a no-response error dialog', async () => {
+    mockConnect.mockResolvedValue({ status: 'no-response' })
+    const { result } = renderConnect(board)
+    await result.current.connect()
+    expect(spies.openModal.mock.calls[0][1]).toMatchObject({ title: 'No Response' })
+  })
+
+  it('surfaces a connection error', async () => {
+    mockConnect.mockResolvedValue({ status: 'error', error: 'boom' })
+    const { result } = renderConnect(board)
+    await result.current.connect()
+    expect(spies.openModal.mock.calls[0][1]).toMatchObject({ title: 'Connection Error', message: 'boom' })
+  })
+
+  it('offers to flash on no-firmware and requests a build when accepted', async () => {
+    mockConnect.mockResolvedValue({ status: 'no-firmware' })
+    const { result } = renderConnect(board)
+    await result.current.connect()
+    expect(spies.openModal.mock.calls[0][1]).toMatchObject({ title: 'No Firmware Detected' })
+    latestOnResponse()(0)
+    expect(mockRequestDeviceFlash).toHaveBeenCalledTimes(1)
+    latestOnResponse()(1)
+    expect(mockRequestDeviceFlash).toHaveBeenCalledTimes(1)
+  })
+
+  it('disconnect closes the held link', async () => {
+    const { result } = renderConnect(board)
+    await result.current.disconnect()
+    expect(mockDisconnect).toHaveBeenCalledTimes(1)
+    expect(spies.setDeviceConnectionStatus).toHaveBeenCalledWith('disconnected', null)
+  })
+
+  it('derives isConnecting / isConnected from the store status', () => {
+    store.getState().deviceActions.setDeviceConnectionStatus('connected', 'COM5')
+    const { result } = renderConnect(board)
+    expect(result.current.isConnected).toBe(true)
+    expect(result.current.isConnecting).toBe(false)
+    expect(result.current.status).toBe('connected')
+  })
+
+  /**
+   * The Connect button is disabled while the status reads 'connecting', and
+   * Disconnect only fires when it reads 'connected'. So a status left at
+   * 'connecting' is a dead button with no way back short of reopening the project.
+   * Every path out of `connect()` must therefore leave a settled status — including
+   * the ones that never reach the main process, which is where the wedge was.
+   */
+  describe('never leaves the button stuck on "connecting"', () => {
+    it('settles when the user cancels the address prompt and nothing else was tried', async () => {
+      // A DHCP-only target: no silent candidate at all, one channel awaiting input.
+      // Cancelling the prompt used to leave 'connecting' set forever, because
+      // device.connect() was never called and so nothing ever pushed a status.
+      mockResolveDeviceLinkWithUx
+        .mockImplementationOnce(() => Promise.resolve({ candidates: [], awaitingInput: [0] }))
+        .mockImplementationOnce(() => Promise.resolve(null))
+
+      const { result } = renderConnect(board)
+      await result.current.connect()
+
+      expect(mockConnect).not.toHaveBeenCalled()
+      expect(currentStatus()).toBe('disconnected')
+      // Nothing was attempted, so there is no failure to report either.
+      expect(spies.openModal).not.toHaveBeenCalled()
+    })
+
+    it('settles when the prompted pass resolves no usable candidate', async () => {
+      mockResolveDeviceLinkWithUx
+        .mockImplementationOnce(() => Promise.resolve({ candidates: [], awaitingInput: [0] }))
+        .mockImplementationOnce(() => Promise.resolve({ candidates: [], awaitingInput: [] }))
+
+      const { result } = renderConnect(board)
+      await result.current.connect()
+
+      expect(currentStatus()).toBe('disconnected')
+    })
+
+    it('settles after a failure dialog', async () => {
+      mockConnect.mockResolvedValue({ status: 'no-response' })
+      const { result } = renderConnect(board)
+      await result.current.connect()
+      expect(spies.openModal.mock.calls[0][1]).toMatchObject({ title: 'No Response' })
+      expect(currentStatus()).toBe('disconnected')
+    })
+
+    it('settles when the connect IPC call rejects outright', async () => {
+      mockConnect.mockRejectedValue(new Error('bridge is gone'))
+      const { result } = renderConnect(board)
+      await expect(result.current.connect()).rejects.toThrow('bridge is gone')
+      expect(currentStatus()).toBe('disconnected')
+    })
+
+    it('leaves a successful connection alone for the main process to publish', async () => {
+      // The status push and this reply travel separate IPC channels, so settling on
+      // success too would risk overwriting 'connected' with a spurious flicker.
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+      const { result } = renderConnect(board)
+      await result.current.connect()
+      expect(currentStatus()).toBe('connecting')
+      expect(spies.setDeviceConnectionStatus).not.toHaveBeenCalledWith('disconnected', null)
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // VPP licensing
+  // -----------------------------------------------------------------------
+  describe('licensing', () => {
+    /** A board whose VPP is sold licensed. `board` above deliberately is not. */
+    const licensedBoard = {
+      compiler: 'arduino-cli',
+      core: 'esp32:esp32',
+      preview: '',
+      specs: {},
+      debug: {},
+      capabilities: { isLicensable: true },
+      vpp: {
+        packageId: 'com.openplc.espressif-licensed',
+        vendor: 'Espressif',
+        deviceId: 'esp32-generic',
+        packagePath: '/pkg',
+        screens: {},
+        moduleSystem: { enabled: false, maxSlots: 0, modules: [] },
+      },
+    } as unknown as BoardInfo
+
+    it('runs NO licensing traffic for a board whose VPP is not sold licensed', async () => {
+      // The common case, and the reason licensability is the first gate: a free
+      // board's connect must be exactly what it was before licensing existed.
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+
+      const { result } = renderConnect(board)
+      await result.current.connect()
+
+      expect(mockRefreshLicense).not.toHaveBeenCalled()
+      expect(mockReadLicense).not.toHaveBeenCalled()
+      expect(spies.openModal).not.toHaveBeenCalled()
+    })
+
+    it('settles the licence over the held link after a successful connect', async () => {
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+      mockRefreshLicense.mockResolvedValue({
+        deviceId: '659a3520540f803625ddc34081e893d3',
+        outcome: { state: 'licensed', how: 'already-stored' },
+      })
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+
+      expect(mockRefreshLicense).toHaveBeenCalledWith({ packageId: 'com.openplc.espressif-licensed' })
+      expect(spies.setDeviceLicenseReport).toHaveBeenCalledWith({
+        deviceId: '659a3520540f803625ddc34081e893d3',
+        outcome: { state: 'licensed', how: 'already-stored' },
+      })
+      // A licensed device is a silent success — no dialog on every connect.
+      expect(spies.openModal).not.toHaveBeenCalled()
+    })
+
+    it('does not touch licensing when no firmware answered', async () => {
+      // There is nothing to ask: the flash dialog is the whole message, and a
+      // licence dialog stacked on top of it would bury it.
+      mockConnect.mockResolvedValue({ status: 'no-firmware' })
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+
+      expect(mockRefreshLicense).not.toHaveBeenCalled()
+      expect(spies.openModal.mock.calls[0][1]).toMatchObject({ title: 'No Firmware Detected' })
+    })
+
+    it('does not touch licensing when the device never answered at all', async () => {
+      mockConnect.mockResolvedValue({ status: 'no-response' })
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+
+      expect(mockRefreshLicense).not.toHaveBeenCalled()
+    })
+
+    it('prompts about demo mode and offers a purchase when the backend reports no entitlement', async () => {
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+      mockRefreshLicense.mockResolvedValue({
+        deviceId: '659a3520540f803625ddc34081e893d3',
+        outcome: { state: 'unlicensed', entitlementChecked: true },
+      })
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+
+      const [, props] = spies.openModal.mock.calls[0]
+      expect(props).toMatchObject({ title: 'No Licence for This Device' })
+      expect((props as { buttons: string[] }).buttons).toEqual(['Buy Licence', 'Continue in Demo Mode'])
+
+      // Buying opens the device-BOUND purchase page: the id derived main-side is
+      // what makes the purchase attach to this board rather than to nothing.
+      latestOnResponse()(0)
+      await Promise.resolve()
+      expect(mockOpenExternalLink).toHaveBeenCalledWith(
+        'https://edge.example.com/buy?vppId=com.openplc.espressif-licensed&deviceId=659a3520540f803625ddc34081e893d3',
+      )
+    })
+
+    it('reports a failed check as a failure, never as "not licensed"', async () => {
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+      mockRefreshLicense.mockResolvedValue({
+        outcome: { state: 'check-failed', error: 'Activation request failed: 429' },
+      })
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+
+      const [, props] = spies.openModal.mock.calls[0]
+      expect(props).toMatchObject({ title: 'Licence Check Failed' })
+      expect((props as { buttons: string[] }).buttons).not.toContain('Buy Licence')
+    })
+
+    it('re-runs the flow when the user retries, and explains the NEW outcome', async () => {
+      // What makes a purchase completed in the browser land without a reconnect.
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+      mockRefreshLicense
+        .mockResolvedValueOnce({ outcome: { state: 'check-failed', error: 'Request timeout' } })
+        .mockResolvedValueOnce({
+          deviceId: '659a3520540f803625ddc34081e893d3',
+          outcome: { state: 'licensed', how: 'activated' },
+        })
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+      expect(spies.openModal).toHaveBeenCalledTimes(1)
+
+      latestOnResponse()(0)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(mockRefreshLicense).toHaveBeenCalledTimes(2)
+      // The retry succeeded, and success is silent — no second dialog.
+      expect(spies.openModal).toHaveBeenCalledTimes(1)
+    })
+
+    it('turns a rejected licensing IPC call into check-failed rather than losing it', async () => {
+      mockConnect.mockResolvedValue({ status: 'connected-with-firmware' })
+      mockRefreshLicense.mockRejectedValue(new Error('bridge is gone'))
+
+      const { result } = renderConnect(licensedBoard)
+      await result.current.connect()
+
+      expect(spies.setDeviceLicenseReport).toHaveBeenCalledWith({
+        outcome: { state: 'check-failed', error: 'bridge is gone' },
+      })
+      expect(spies.openModal.mock.calls[0][1]).toMatchObject({ title: 'Licence Check Failed' })
+    })
+
+    it('drops the licence on a DELIBERATE disconnect', async () => {
+      // The user is done with this device; a badge left behind would assert
+      // possession for hardware nothing is talking to. A link that merely DROPS
+      // keeps it — that is the device slice's job, not this hook's.
+      const { result } = renderConnect(licensedBoard)
+      await result.current.disconnect()
+
+      expect(spies.clearDeviceLicense).toHaveBeenCalledTimes(1)
+    })
+  })
+})

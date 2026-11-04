@@ -65,6 +65,66 @@ const lookup = (path: string, pathToAddr: Map<string, DebugLeafInfo>): LeafAddre
 }
 
 /**
+ * The `pouName` an OPC-UA node carries when it addresses a CONFIGURATION
+ * VAR_GLOBAL rather than a program's own storage. The variable picker stamps
+ * it on every global it offers — including a VAR_EXTERNAL reference listed
+ * under the POU that declares it — so this string is the node model's whole
+ * record of scope, and the one place that decides what it means.
+ */
+export const GLOBAL_SCOPE_POU = 'GVL'
+
+/**
+ * Is this node addressed in the global scope?
+ *
+ * `GVL` and `CONFIG` are reserved SENTINELS the variable picker and the
+ * configuration emit for a global — they are not POU names a user types. Matched
+ * exactly, not case-folded: lowercasing routed a user program literally named
+ * `Config` (or `Gvl`) into the global scope, binding its variables to whatever
+ * global happened to share a name. A real POU keeps its own name and its own
+ * instance-prefixed address.
+ */
+export const isGlobalScopePou = (pouName: string): boolean => pouName === GLOBAL_SCOPE_POU || pouName === 'CONFIG'
+
+/**
+ * A program-scoped path that missed, retried in the global scope.
+ *
+ * `INSTANCE0.<path>` absent from the debug map while the bare `<path>` resolves
+ * means one thing: the POU named it VAR_EXTERNAL, so it never had storage of
+ * its own and the address belongs to the CONFIGURATION global. That cannot be a
+ * mis-binding — a variable a program really owns is always in the map under its
+ * instance, so this branch is unreachable for one.
+ *
+ * Only address spaces saved BEFORE the picker started attributing VAR_EXTERNAL
+ * to the global scope need it; new ones arrive with `pouName` already
+ * `GLOBAL_SCOPE_POU`. Without it those configs fail the build outright —
+ * "Cannot resolve OPC-UA variable address … Expected debug path:
+ * INSTANCE0.TEST_GLOBAL" — with no way to fix them but to re-pick the variable.
+ */
+const lookupAsGlobal = (
+  pouName: string,
+  variablePath: string,
+  pathToAddr: Map<string, DebugLeafInfo>,
+  fallbackWarnings?: string[],
+): LeafAddress | null => {
+  if (isGlobalScopePou(pouName)) return null // the global path was already the first try
+  const addr = lookup(buildGlobalDebugPath(variablePath), pathToAddr)
+  if (addr) {
+    // This ONLY fires for a pre-migration address space: a VAR_EXTERNAL saved
+    // under the referencing program before the picker started stamping the
+    // global scope. It cannot be silent, because it is also the one way a
+    // genuinely-missing program-local (renamed, deleted) with a same-named
+    // global would bind to the wrong memory — so name it, every time, and let
+    // the build log show it. New projects never reach here.
+    fallbackWarnings?.push(
+      `OPC-UA variable "${pouName}:${variablePath}" resolved to the global "${variablePath}" ` +
+        `because no program-scoped leaf matched. If they are different variables, re-pick it in ` +
+        `the address space.`,
+    )
+  }
+  return addr
+}
+
+/**
  * Build the full STruC++ debug path for a node — handling the
  * GVL/CONFIG (global) vs instance-prefixed cases. Returns null if
  * the program POU doesn't have an instance in Resources (the user
@@ -75,7 +135,7 @@ const pathForNode = (
   variablePath: string,
   instances: PLCInstanceInfo[],
 ): { path: string } | { error: OpcUaConfigError } => {
-  if (pouName === 'GVL' || pouName === 'CONFIG' || pouName.toUpperCase() === 'GVL') {
+  if (isGlobalScopePou(pouName)) {
     return { path: buildGlobalDebugPath(variablePath) }
   }
   const instanceName = findInstanceName(pouName, toInstanceMapping(instances))
@@ -101,12 +161,16 @@ export const resolveVariableAddress = (
   node: OpcUaNodeConfig,
   pathToAddr: Map<string, DebugLeafInfo>,
   instances: PLCInstanceInfo[],
+  fallbackWarnings?: string[],
 ): LeafAddress => {
   const result = pathForNode(node.pouName, node.variablePath, instances)
   if ('error' in result) throw result.error
 
   const addr = lookup(result.path, pathToAddr)
   if (addr) return addr
+
+  const asGlobal = lookupAsGlobal(node.pouName, node.variablePath, pathToAddr, fallbackWarnings)
+  if (asGlobal) return asGlobal
 
   throw new OpcUaConfigError(
     `${node.pouName}:${node.variablePath}`,
@@ -135,6 +199,7 @@ const resolveFieldRecursively = (
   pathToAddr: Map<string, DebugLeafInfo>,
   instanceName: string | null,
   droppedPaths: string[],
+  fallbackWarnings?: string[],
 ): ResolvedField | null => {
   const fullFieldPath = `${parentPath}.${field.fieldPath}`
 
@@ -144,7 +209,15 @@ const resolveFieldRecursively = (
   if (field.fields && field.fields.length > 0) {
     const nestedFields = field.fields
       .map((nestedField) =>
-        resolveFieldRecursively(nestedField, fullFieldPath, pouName, pathToAddr, instanceName, droppedPaths),
+        resolveFieldRecursively(
+          nestedField,
+          fullFieldPath,
+          pouName,
+          pathToAddr,
+          instanceName,
+          droppedPaths,
+          fallbackWarnings,
+        ),
       )
       .filter((f): f is ResolvedField => f !== null)
 
@@ -164,11 +237,10 @@ const resolveFieldRecursively = (
   // Leaf field. datatype/size come from the compiler's debug map (the
   // canonical source), not the stored field.datatype — the runtime
   // encodes/decodes this leaf by exactly these.
-  const debugPath =
-    pouName === 'GVL' || pouName === 'CONFIG'
-      ? buildGlobalDebugPath(fullFieldPath)
-      : buildDebugPath(instanceName!, fullFieldPath)
-  const addr = lookup(debugPath, pathToAddr)
+  const debugPath = isGlobalScopePou(pouName)
+    ? buildGlobalDebugPath(fullFieldPath)
+    : buildDebugPath(instanceName!, fullFieldPath)
+  const addr = lookup(debugPath, pathToAddr) ?? lookupAsGlobal(pouName, fullFieldPath, pathToAddr, fallbackWarnings)
   if (!addr) {
     droppedPaths.push(`${pouName}:${fullFieldPath}`)
     return null
@@ -195,9 +267,10 @@ export const resolveStructureAddresses = (
   pathToAddr: Map<string, DebugLeafInfo>,
   instances: PLCInstanceInfo[],
   droppedPaths: string[] = [],
+  fallbackWarnings?: string[],
 ): ResolvedField[] => {
   if (!node.fields || node.fields.length === 0) {
-    const addr = resolveVariableAddress(node, pathToAddr, instances)
+    const addr = resolveVariableAddress(node, pathToAddr, instances, fallbackWarnings)
     return [
       {
         name: node.variablePath,
@@ -211,7 +284,7 @@ export const resolveStructureAddresses = (
   }
 
   let instanceName: string | null = null
-  if (node.pouName !== 'GVL' && node.pouName !== 'CONFIG') {
+  if (!isGlobalScopePou(node.pouName)) {
     instanceName = findInstanceName(node.pouName, toInstanceMapping(instances))
     if (!instanceName) {
       throw new OpcUaConfigError(
@@ -224,7 +297,15 @@ export const resolveStructureAddresses = (
 
   return node.fields
     .map((field) =>
-      resolveFieldRecursively(field, node.variablePath, node.pouName, pathToAddr, instanceName, droppedPaths),
+      resolveFieldRecursively(
+        field,
+        node.variablePath,
+        node.pouName,
+        pathToAddr,
+        instanceName,
+        droppedPaths,
+        fallbackWarnings,
+      ),
     )
     .filter((f): f is ResolvedField => f !== null)
 }
@@ -272,4 +353,138 @@ export const resolveArrayAddress = (
       `  Expected debug path: ${result.path}[<index>]\n` +
       `  No array elements with that prefix found in debug-map.json.`,
   )
+}
+
+/** One debug-map leaf below an array element, split into member segments. */
+interface ElementLeaf {
+  /** Member path under the element (`['A']`, `['INNER', 'B']`). */
+  segments: string[]
+  info: DebugLeafInfo
+}
+
+/**
+ * Split the debug-map suffix that follows an array's base path into
+ * segments, keeping index runs attached to the token they subscript:
+ *
+ *   `[1].A`        → ['[1]', 'A']
+ *   `[1][2].A.B`   → ['[1][2]', 'A', 'B']
+ *   `[3].INNER[0]` → ['[3]', 'INNER[0]']
+ *
+ * Dots only ever separate members (indices are numeric), so a plain
+ * split is enough.
+ */
+const splitSuffixSegments = (suffix: string): string[] => suffix.split('.').filter((part) => part.length > 0)
+
+/** Numeric sort key for an element token: `[1]` → [1], `[2][3]` → [2, 3]. */
+const elementIndexKey = (elementToken: string): number[] =>
+  [...elementToken.matchAll(/-?\d+/g)].map((match) => Number(match[0]))
+
+/** Dimension-wise comparison so elements come out in IEC index order. */
+const compareIndexKeys = (a: number[], b: number[]): number => {
+  const width = Math.max(a.length, b.length)
+  const perDimension = Array.from({ length: width }, (_, i) => (a[i] ?? 0) - (b[i] ?? 0))
+  return perDimension.find((diff) => diff !== 0) ?? 0
+}
+
+/**
+ * Group leaves into a field tree by their segment at `depth`. A group
+ * whose own leaf exists at that depth is a leaf field (address from the
+ * debug map); otherwise it is a container and recurses.
+ */
+const fieldsFromLeaves = (
+  leaves: ElementLeaf[],
+  depth: number,
+  permissions: ResolvedField['permissions'],
+): ResolvedField[] => {
+  const groups = new Map<string, ElementLeaf[]>()
+  for (const leaf of leaves) {
+    const head = leaf.segments[depth]
+    const bucket = groups.get(head)
+    if (bucket) bucket.push(leaf)
+    else groups.set(head, [leaf])
+  }
+
+  const fields: ResolvedField[] = []
+  for (const [name, group] of groups) {
+    const own = group.find((leaf) => leaf.segments.length === depth + 1)
+    if (own) {
+      fields.push({
+        name,
+        datatype: own.info.type || 'UNKNOWN',
+        size: own.info.size,
+        arr: own.info.arr,
+        elem: own.info.elem,
+        permissions,
+      })
+      continue
+    }
+    fields.push({
+      name,
+      // Container — the struct/FB type name isn't in the debug map and
+      // the runtime only needs it for leaves (it creates an Object node).
+      datatype: 'UNKNOWN',
+      size: null,
+      arr: null,
+      elem: null,
+      permissions,
+      fields: fieldsFromLeaves(group, depth + 1, permissions),
+    })
+  }
+  return fields
+}
+
+/**
+ * Resolve an array whose elements are a derived type (UDT / FB instance)
+ * into per-element structure fields, straight from the compiler's debug
+ * map.
+ *
+ * Such an array has no leaf of its own — the debug map only carries
+ * `ARR[i].FIELD` (and deeper) — so `resolveArrayAddress` cannot address
+ * it by design. The variable picker pre-expands the elements into the
+ * node's `fields` only when the array is 1-D and small enough
+ * (MAX_ARRAY_EXPANSION), so bigger or multi-dimensional UDT arrays reach
+ * the compiler as a bare `array` node with no fields. Rebuilding the
+ * element fields from the debug map covers every case and keeps the
+ * compiler as the single source of truth for type/size/address.
+ *
+ * Returns `[]` when the array has no sub-element leaves — i.e. a plain
+ * array of base types, which `resolveArrayAddress` handles.
+ */
+export const resolveArrayElementFields = (
+  node: OpcUaNodeConfig,
+  pathToAddr: Map<string, DebugLeafInfo>,
+  instances: PLCInstanceInfo[],
+): ResolvedField[] => {
+  const result = pathForNode(node.pouName, node.variablePath, instances)
+  if ('error' in result) throw result.error
+
+  const basePath = result.path.toUpperCase()
+  const prefix = `${basePath}[`
+
+  // element token → its leaves, in debug-map (memory layout) order
+  const perElement = new Map<string, ElementLeaf[]>()
+  for (const [path, info] of pathToAddr) {
+    if (!path.startsWith(prefix)) continue
+    const segments = splitSuffixSegments(path.slice(basePath.length))
+    const memberSegments = segments.slice(1)
+    // A bare `ARR[i]` leaf is a base-type element, not an array of UDT.
+    if (memberSegments.length === 0) continue
+    const elementToken = segments[0]
+    const leaf: ElementLeaf = { segments: memberSegments, info }
+    const bucket = perElement.get(elementToken)
+    if (bucket) bucket.push(leaf)
+    else perElement.set(elementToken, [leaf])
+  }
+
+  return [...perElement.entries()]
+    .sort(([a], [b]) => compareIndexKeys(elementIndexKey(a), elementIndexKey(b)))
+    .map(([elementToken, leaves]) => ({
+      name: elementToken,
+      datatype: node.elementType || 'UNKNOWN',
+      size: null,
+      arr: null,
+      elem: null,
+      permissions: node.permissions,
+      fields: fieldsFromLeaves(leaves, 0, node.permissions),
+    }))
 }

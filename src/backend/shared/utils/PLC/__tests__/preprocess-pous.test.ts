@@ -286,6 +286,64 @@ describe('preprocessPous — C++', () => {
 // ---------------------------------------------------------------------------
 // Mixed scenarios
 // ---------------------------------------------------------------------------
+describe('preprocessPous — Python target support', () => {
+  it('rejects Python POUs when the target cannot run them', () => {
+    const project = makeProjectData([makePythonPou('PyBlock', 'def block_loop():\n    pass')])
+    const logs: Array<[string, string]> = []
+    const result = preprocessPous(project, false, (level, message) => logs.push([level, message]), {
+      supported: false,
+      targetLabel: 'Arduino Mega',
+    })
+
+    expect(result.validationFailed).toBe(true)
+    expect(result.validationError).toContain('Python function blocks are not supported on Arduino Mega')
+    expect(result.validationError).toContain('"PyBlock"')
+    expect(logs.some(([level]) => level === 'error')).toBe(true)
+  })
+
+  it('names every offending POU in the rejection', () => {
+    const project = makeProjectData([
+      makePythonPou('First', 'def block_loop():\n    pass'),
+      makePythonPou('Second', 'def block_loop():\n    pass'),
+    ])
+    const result = preprocessPous(project, false, () => {}, { supported: false, targetLabel: 'Arduino Uno' })
+
+    expect(result.validationError).toContain('"First", "Second"')
+  })
+
+  it('leaves the project untouched when it rejects', () => {
+    const project = makeProjectData([makePythonPou('PyBlock', 'def block_loop():\n    pass')])
+    const result = preprocessPous(project, false, () => {}, { supported: false, targetLabel: 'Arduino Mega' })
+
+    // No ST lowering, no injected runtime variables — the POU is as authored.
+    expect(result.projectData.pous[0].body.language).toBe('python')
+  })
+
+  it('does not reject a project with no Python POUs', () => {
+    const project = makeProjectData([makeStPou('Main', 'x := 1;')])
+    const result = preprocessPous(project, false, () => {}, { supported: false, targetLabel: 'Arduino Mega' })
+
+    expect(result.validationFailed).toBe(false)
+    expect(result.validationError).toBeUndefined()
+  })
+
+  it('processes Python normally when the target supports it', () => {
+    const project = makeProjectData([makePythonPou('PyBlock', 'def block_loop():\n    pass')])
+    const result = preprocessPous(project, false, () => {}, { supported: true, targetLabel: 'OpenPLC Runtime v4' })
+
+    expect(result.validationFailed).toBe(false)
+    expect(result.projectData.pous[0].body.language).toBe('st')
+  })
+
+  it('processes Python normally when no support hint is given (library builds)', () => {
+    const project = makeProjectData([makePythonPou('PyBlock', 'def block_loop():\n    pass')])
+    const result = preprocessPous(project, false, () => {})
+
+    expect(result.validationFailed).toBe(false)
+    expect(result.projectData.pous[0].body.language).toBe('st')
+  })
+})
+
 describe('preprocessPous — mixed', () => {
   it('handles a project with ST, Python, and C++ POUs', () => {
     const project = makeProjectData([
@@ -309,5 +367,155 @@ describe('preprocessPous — mixed', () => {
     const logger = collectLog()
     const { projectData } = preprocessPous(project, false, logger.log)
     expect(projectData.originalCppPous).toBeUndefined()
+  })
+
+  it('generates SoftMotion axis artifacts for a CiA 402 EtherCAT drive', () => {
+    const project: PLCProjectData = {
+      ...makeProjectData([makeStPou('main', 'pwr(Axis := X_Axis, Enable := TRUE);')]),
+      remoteDevices: [
+        {
+          name: 'ethercat-bus',
+          protocol: 'ethercat',
+          ethercatConfig: {
+            devices: [
+              {
+                id: 'd1',
+                name: 'X_Axis',
+                esiDeviceRef: { repositoryItemId: 'r', deviceIndex: 0 },
+                vendorId: '0x0',
+                productCode: '0x0',
+                revisionNo: '0x0',
+                addedFrom: 'repository',
+                config: {},
+                cia402: { enabled: true, scaleNum: 1, scaleDenom: 1, scaleFactor: 1 },
+                channelInfo: [
+                  {
+                    channelId: 'c1',
+                    name: 'Controlword',
+                    direction: 'output',
+                    pdoIndex: '0x1600',
+                    entryIndex: '0x6040',
+                    entrySubIndex: '0x0',
+                    dataType: 'UINT',
+                    bitLen: 16,
+                    iecType: 'UINT',
+                  },
+                  {
+                    channelId: 'c2',
+                    name: 'Statusword',
+                    direction: 'input',
+                    pdoIndex: '0x1A00',
+                    entryIndex: '0x6041',
+                    entrySubIndex: '0x0',
+                    dataType: 'UINT',
+                    bitLen: 16,
+                    iecType: 'UINT',
+                  },
+                ],
+                channelMappings: [
+                  { channelId: 'c1', iecLocation: '%QW0' },
+                  { channelId: 'c2', iecLocation: '%IW0' },
+                ],
+              },
+            ],
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      ],
+    }
+    const logger = collectLog()
+    const { projectData } = preprocessPous(project, false, logger.log)
+    // Bridge program + axis global generated; VAR_EXTERNAL injected into main.
+    expect(projectData.pous.some((p) => p.name === '__sm3_bridge')).toBe(true)
+    expect(
+      projectData.configurations.resource.globalVariables.some(
+        (g) => g.name === 'X_Axis' && g.type.value === 'AXIS_REF_SM3',
+      ),
+    ).toBe(true)
+    const main = projectData.pous.find((p) => p.name === 'main')!
+    expect(main.interface!.variables.some((v) => v.name === 'X_Axis' && v.class === 'external')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Python interface refusals (DOPE-584 AC 3 and AC 9)
+// ---------------------------------------------------------------------------
+describe('preprocessPous — Python interface refusals', () => {
+  // These two refusals had no test at all, which left AC 9 asserted only by the
+  // implementation. Both stop the build on purpose: a variable the two sides of
+  // the SHM boundary cannot describe identically does not merely go missing —
+  // `struct.unpack` reads every later field from the wrong offset, so the damage
+  // lands on an unrelated variable.
+
+  it('refuses `temp` on a Python POU and explains why (AC 9)', () => {
+    const project = makeProjectData([
+      makePythonPou('PyBlock', 'def block_loop():\n    pass', [
+        makeVariable('a', 'input'),
+        makeVariable('scratch', 'temp'),
+      ]),
+    ])
+    const logs: Array<[string, string]> = []
+    const result = preprocessPous(project, false, (level, message) => logs.push([level, message]))
+
+    expect(result.validationFailed).toBe(true)
+    expect(result.validationError).toContain('scratch')
+    expect(logs.some(([level]) => level === 'error')).toBe(true)
+  })
+
+  it('refuses a type the SHM boundary cannot describe, naming the variable', () => {
+    const project = makeProjectData([
+      makePythonPou('PyBlock', 'def block_loop():\n    pass', [
+        makeVariable('a', 'input'),
+        makeVariable('mystery', 'input', 'NotAType'),
+      ]),
+    ])
+    const result = preprocessPous(project, false, () => {})
+
+    expect(result.validationFailed).toBe(true)
+    expect(result.validationError).toContain('mystery')
+  })
+
+  it('accepts a multi-dimensional array on a Python POU, following the compiler', () => {
+    const grid: PLCVariable = {
+      name: 'grid',
+      class: 'input',
+      type: {
+        definition: 'array',
+        value: 'ARRAY [0..1,0..2] OF INT',
+        data: {
+          baseType: { definition: 'base-type', value: 'INT' },
+          dimensions: [{ dimension: '0..1' }, { dimension: '0..2' }],
+        },
+      },
+      location: '',
+      documentation: '',
+      debug: false,
+    }
+    const project = makeProjectData([makePythonPou('PyBlock', 'def block_loop():\n    pass', [grid])])
+    const result = preprocessPous(project, false, () => {})
+
+    // Refused under the count-based model, which had one leaf and a single
+    // subscript. The compiler enumerates `GRID[0][0]`…`GRID[1][2]` as six
+    // leaves, and following that enumeration makes rank 2 ordinary.
+    expect(result.validationFailed).toBe(false)
+  })
+
+  it('accepts a one-dimensional array, so the rank refusal is not over-broad', () => {
+    const row: PLCVariable = {
+      name: 'row',
+      class: 'input',
+      type: {
+        definition: 'array',
+        value: 'ARRAY [0..3] OF INT',
+        data: { baseType: { definition: 'base-type', value: 'INT' }, dimensions: [{ dimension: '0..3' }] },
+      },
+      location: '',
+      documentation: '',
+      debug: false,
+    }
+    const project = makeProjectData([makePythonPou('PyBlock', 'def block_loop():\n    pass', [row])])
+    const result = preprocessPous(project, false, () => {})
+
+    expect(result.validationFailed).toBe(false)
   })
 })

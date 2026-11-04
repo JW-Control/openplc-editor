@@ -1,8 +1,29 @@
-import { addEdge, Node } from '@xyflow/react'
+import { addEdge, type Node } from '@xyflow/react'
 import { produce } from 'immer'
+import { isEqual, omit } from 'lodash'
 import { StateCreator } from 'zustand'
 
-import { FBDFlowSlice, FBDFlowState } from './types'
+import { FBDFlowSlice, FBDFlowState, FBDRungState } from './types'
+
+// Interaction state React Flow and the boxes toggle while the user clicks
+// around, plus `measured`, which React Flow re-measures on every mount and can
+// come out a pixel different (a font still loading, for one).
+const UI_ONLY_NODE_KEYS = ['selected', 'draggable', 'dragging', 'measured'] as const
+
+const isSameDiagramContent = (a: Node, b: Node): boolean =>
+  isEqual(omit(a, UI_ONLY_NODE_KEYS), omit(b, UI_ONLY_NODE_KEYS))
+
+// A flow that failed validation can reach here without a node list; keeping it
+// as-is (not coerced to []) makes it compare unequal, so it still counts as an edit.
+// Selecting a wire is interaction state too.
+const diagramContentOf = (rung: FBDRungState) => ({
+  ...omit(rung, ['nodes', 'edges', 'selectedNodes']),
+  nodes: Array.isArray(rung.nodes) ? rung.nodes.map((node) => omit(node, UI_ONLY_NODE_KEYS)) : rung.nodes,
+  edges: Array.isArray(rung.edges) ? rung.edges.map((edge) => omit(edge, ['selected'])) : rung.edges,
+})
+
+const isSameRungContent = (a: FBDRungState, b: FBDRungState): boolean =>
+  isEqual(diagramContentOf(a), diagramContentOf(b))
 
 export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice> = (setState) => ({
   fbdFlows: [],
@@ -15,6 +36,11 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
       setState(
         produce(({ fbdFlows }: FBDFlowState) => {
           const flowIndex = fbdFlows.findIndex((f) => f.name === flow.name)
+          // Loading NEVER rewrites the diagram. A project saved before a VAR_IN_OUT pin became
+          // input-only still carries the pin's stale output side, and converting it here would
+          // mutate the user's graph behind their back — dropping wires with no signal and no
+          // way back. The block's update badge does it instead, on demand: see
+          // `hasLegacyInOutOutputHandle` for how such a block is detected.
           const rung = {
             ...flow.rung,
             selectedNodes: [],
@@ -92,8 +118,11 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
           const flow = fbdFlows.find((flow) => flow.name === editorName)
           if (!flow) return
 
+          // The canvas pushes its local copy here on every change, selecting
+          // a node and the mount-time re-measure included.
+          const isEdit = !isSameRungContent(flow.rung, rung)
           flow.rung = rung
-          flow.updated = true
+          if (isEdit) flow.updated = true
         }),
       )
     },
@@ -144,8 +173,12 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
           const nodeIndex = flow.rung.nodes.findIndex((n) => n.id === nodeId)
           if (nodeIndex === -1) return
 
+          const previous = flow.rung.nodes[nodeIndex]
           flow.rung.nodes[nodeIndex] = node
-          flow.updated = true
+          // The boxes commit on blur and lock dragging on focus, so merely
+          // clicking into one and out again lands here. Only a change to what
+          // the diagram says is an edit.
+          if (!isSameDiagramContent(previous, node)) flow.updated = true
         }),
       )
     },
@@ -171,24 +204,14 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
           const flow = fbdFlows.find((flow) => flow.name === editorName)
           if (!flow) return
 
-          flow.rung.nodes.push(node)
+          // Conditional in-place writes: immer only copies nodes whose values
+          // actually change, so unchanged siblings keep their identity.
+          for (const n of flow.rung.nodes) {
+            if (n.selected !== false) n.selected = false
+          }
+          flow.rung.nodes.push({ ...node, selected: true })
 
-          const selectedNodes: Node[] = []
-          flow.rung.nodes = flow.rung.nodes.map((n) => {
-            if (n.id === node.id) {
-              selectedNodes.push(n)
-              return {
-                ...n,
-                selected: true,
-              }
-            }
-            return {
-              ...n,
-              selected: false,
-            }
-          })
-
-          flow.rung.selectedNodes = selectedNodes
+          flow.rung.selectedNodes = [node]
           flow.updated = true
         }),
       )
@@ -216,21 +239,17 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
 
           const selectedNodes = flow.rung.selectedNodes
           if (!selectedNodes) flow.rung.selectedNodes = []
+          // Selection is interaction state, not an edit: it does not mark the flow.
           if (!flow.rung.selectedNodes.find((n) => n.id === node.id)) {
             flow.rung.selectedNodes.push(node)
-            flow.updated = true
           }
 
-          flow.rung.nodes = flow.rung.nodes.map((n) => {
-            if (n.id === node.id) {
-              return {
-                ...n,
-                selected: true,
-                draggable: (node.data as { draggable?: boolean }).draggable,
-              }
-            }
-            return n
-          })
+          const target = flow.rung.nodes.find((n) => n.id === node.id)
+          if (target) {
+            const draggable = (node.data as { draggable?: boolean }).draggable
+            if (target.selected !== true) target.selected = true
+            if (target.draggable !== draggable) target.draggable = draggable
+          }
         }),
       )
     },
@@ -243,15 +262,8 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
           const selectedNodes = flow.rung.selectedNodes.filter((n) => n.id !== node.id)
           flow.rung.selectedNodes = selectedNodes
 
-          flow.rung.nodes = flow.rung.nodes.map((n) => {
-            if (n.id === node.id) {
-              return {
-                ...n,
-                selected: false,
-              }
-            }
-            return n
-          })
+          const target = flow.rung.nodes.find((n) => n.id === node.id)
+          if (target && target.selected !== false) target.selected = false
         }),
       )
     },
@@ -262,23 +274,16 @@ export const createFBDFlowSlice: StateCreator<FBDFlowSlice, [], [], FBDFlowSlice
           if (!flow) return
 
           const selectedNodes = nodes
-          if (!flow.rung.selectedNodes) flow.rung.selectedNodes = []
           flow.rung.selectedNodes = selectedNodes
 
-          flow.rung.nodes = flow.rung.nodes.map((node) => {
-            if (selectedNodes.find((n) => n.id === node.id)) {
-              return {
-                ...node,
-                selected: true,
-                draggable: (node.data as { draggable?: boolean }).draggable,
-              }
-            }
-            return {
-              ...node,
-              selected: false,
-              draggable: (node.data as { draggable?: boolean }).draggable,
-            }
-          })
+          // Conditional in-place writes: immer only copies nodes whose values
+          // actually change, so unchanged siblings keep their identity.
+          for (const node of flow.rung.nodes) {
+            const isSelected = selectedNodes.some((n) => n.id === node.id)
+            const draggable = (node.data as { draggable?: boolean }).draggable
+            if (node.selected !== isSelected) node.selected = isSelected
+            if (node.draggable !== draggable) node.draggable = draggable
+          }
         }),
       )
     },

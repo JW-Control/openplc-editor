@@ -2,6 +2,15 @@
  * @jest-environment jsdom
  */
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
+import type { OpenPLCStore } from '../../../store'
+import { createTestStore } from '../../../store/testing'
+import {
+  __clearBodyLineOffsetsForTests,
+  getBodyLineOffset as mockGetBodyLineOffset,
+  setBodyLineOffset as mockRealSetBodyLineOffset,
+} from '../../lsp-shared/body-offsets'
+import { lspRangeToMonaco as mockLspRangeToMonaco } from '../../lsp-shared/converters'
+import { lspMirrorUri as mockLspMirrorUri } from '../../lsp-shared/lsp-mirror'
 
 // Mock the shared orchestrator BEFORE importing the service so the
 // service module pulls in the mock.  The mock returns a stub
@@ -12,17 +21,25 @@ const setBodyLineOffset = jest.fn()
 const deleteBodyLineOffset = jest.fn()
 
 jest.mock('../../lsp-shared', () => {
-  // Re-export everything else by re-requiring the real module under a
-  // different specifier — keeps imports of types / converters live for
-  // anything we haven't mocked.  But for the names we DO mock, route
-  // through the jest.fn so each test can introspect call args.
+  // The orchestrator and the offset writes go through jest.fns so each
+  // test can introspect call args; the offset also reaches the real
+  // registry, and the pure helpers are the real ones, so the definition
+  // mapper under test computes what it would in the app.
   return {
     startLanguageService: (opts: unknown) => startLanguageService(opts),
-    setBodyLineOffset: (...args: unknown[]) => setBodyLineOffset(...args),
+    setBodyLineOffset: (uri: string, offset: number) => {
+      setBodyLineOffset(uri, offset)
+      mockRealSetBodyLineOffset(uri, offset)
+    },
     deleteBodyLineOffset: (...args: unknown[]) => deleteBodyLineOffset(...args),
+    getBodyLineOffset: (uri: string) => mockGetBodyLineOffset(uri),
+    lspRangeToMonaco: (range: unknown, offset: number) =>
+      mockLspRangeToMonaco(range as Parameters<typeof mockLspRangeToMonaco>[0], offset),
+    lspMirrorUri: (uri: string) => mockLspMirrorUri(uri),
   }
 })
 
+import type { StartLanguageServiceOptions } from '../../lsp-shared/start-language-service'
 import { startPythonLsp } from '../index'
 
 interface MockLanguageService {
@@ -61,7 +78,7 @@ function installMockSharedService(): { service: MockLanguageService; sendNotific
   return { service, sendNotification }
 }
 
-function makeBoolVar(name: string, varClass: 'input' | 'output' | 'local' = 'input'): PLCVariable {
+function makeBoolVar(name: string, varClass: PLCVariable['class'] = 'input'): PLCVariable {
   return {
     id: name,
     name,
@@ -89,15 +106,19 @@ const POU_URI = 'file:///MyPou'
 const POU_LSP_URI = `${POU_URI}.py`
 const POU_NAME = 'MyPou'
 
+let store: OpenPLCStore
+
 beforeEach(() => {
+  store = createTestStore()
   jest.clearAllMocks()
+  __clearBodyLineOffsetsForTests()
 })
 
 describe('startPythonLsp configuration', () => {
   it('passes Python-specific config to startLanguageService', () => {
     installMockSharedService()
 
-    startPythonLsp({ workerUrl: 'about:blank' })
+    startPythonLsp({ store, workerUrl: 'about:blank' })
 
     expect(startLanguageService).toHaveBeenCalledTimes(1)
     const opts = startLanguageService.mock.calls[0][0]
@@ -113,7 +134,7 @@ describe('startPythonLsp configuration', () => {
   it('exposes the shared service ready promise', async () => {
     installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     await expect(service.ready).resolves.toBeUndefined()
   })
 
@@ -121,7 +142,7 @@ describe('startPythonLsp configuration', () => {
     installMockSharedService()
     const onCrash = jest.fn()
 
-    startPythonLsp({ workerUrl: 'about:blank', onCrash })
+    startPythonLsp({ store, workerUrl: 'about:blank', onCrash })
 
     const opts = startLanguageService.mock.calls[0][0]
     expect(opts.onCrash).toBe(onCrash)
@@ -130,7 +151,7 @@ describe('startPythonLsp configuration', () => {
   it('omits the monaco option when no Monaco namespace is provided', () => {
     installMockSharedService()
 
-    startPythonLsp({ workerUrl: 'about:blank' })
+    startPythonLsp({ store, workerUrl: 'about:blank' })
 
     const opts = startLanguageService.mock.calls[0][0]
     expect('monaco' in opts).toBe(false)
@@ -141,7 +162,7 @@ describe('attachPou', () => {
   it('records the body-line offset before opening the document', () => {
     installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     const vars = [makeBoolVar('red_light', 'input'), makeIntVar('counter', 'output')]
     service.attachPou(POU_URI, POU_NAME, vars, 'red_light = True\n')
 
@@ -158,7 +179,7 @@ describe('attachPou', () => {
   it('opens the document at the .py-suffixed LSP URI with preamble + body', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     const vars = [makeBoolVar('red_light', 'input')]
     service.attachPou(POU_URI, POU_NAME, vars, 'red_light = True\n')
 
@@ -180,9 +201,11 @@ describe('attachPou', () => {
   it('records a zero offset when no IEC variables map to Python globals', () => {
     installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
-    // `local` vars don't get hoisted into module scope; preamble is empty.
-    service.attachPou(POU_URI, POU_NAME, [makeBoolVar('x', 'local')], 'pass\n')
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
+    // `temp` is the one class a Python block cannot express — it is refused at
+    // compile time and so never becomes a module global. Everything else,
+    // `local` included, is hoisted and does get a preamble line.
+    service.attachPou(POU_URI, POU_NAME, [makeBoolVar('x', 'temp')], 'pass\n')
 
     expect(setBodyLineOffset).toHaveBeenCalledWith(POU_LSP_URI, 0)
   })
@@ -190,7 +213,7 @@ describe('attachPou', () => {
   it('sends pyright/createFile before opening the document', () => {
     const { service: mockService, sendNotification } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.attachPou(POU_URI, POU_NAME, [makeBoolVar('x', 'input')], 'x = True\n')
 
     // basedpyright only treats files that exist in its in-memory
@@ -210,7 +233,7 @@ describe('notifyBodyChange', () => {
   it('forwards an augmented document with the previously-installed preamble', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     const vars = [makeBoolVar('red_light', 'input')]
     service.attachPou(POU_URI, POU_NAME, vars, 'red_light = True\n')
     service.notifyBodyChange(POU_URI, 'red_light = False\n')
@@ -228,7 +251,7 @@ describe('notifyBodyChange', () => {
   it('leaves version assignment to the shared service across successive calls', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.attachPou(POU_URI, POU_NAME, [], 'x = 1\n')
     service.notifyBodyChange(POU_URI, 'x = 2\n')
     service.notifyBodyChange(POU_URI, 'x = 3\n')
@@ -245,7 +268,7 @@ describe('notifyBodyChange', () => {
   it('uses an empty preamble for URIs that were never attached', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.notifyBodyChange(POU_URI, 'x = 1\n')
 
     const [, changedText] = mockService.changeDocument.mock.calls[0]
@@ -257,7 +280,7 @@ describe('notifyVariablesChange', () => {
   it('regenerates the preamble and re-records the offset', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.attachPou(POU_URI, POU_NAME, [makeBoolVar('a', 'input')], 'a = True\n')
     const firstOffset = setBodyLineOffset.mock.calls[0][1]
 
@@ -277,7 +300,7 @@ describe('detachPou', () => {
   it('closes the document and clears registry entries', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.attachPou(POU_URI, POU_NAME, [makeBoolVar('x', 'input')], 'x = True\n')
     service.detachPou(POU_URI)
 
@@ -288,7 +311,7 @@ describe('detachPou', () => {
   it('sends pyright/deleteFile after closing the document', () => {
     const { service: mockService, sendNotification } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.attachPou(POU_URI, POU_NAME, [makeBoolVar('x', 'input')], 'x = True\n')
     sendNotification.mockClear()
     service.detachPou(POU_URI)
@@ -306,7 +329,7 @@ describe('detachPou', () => {
   it('does not throw when called on a never-attached URI', () => {
     installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     expect(() => service.detachPou(POU_URI)).not.toThrow()
   })
 })
@@ -315,9 +338,57 @@ describe('dispose', () => {
   it('disposes the underlying shared service', () => {
     const { service: mockService } = installMockSharedService()
 
-    const service = startPythonLsp({ workerUrl: 'about:blank' })
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
     service.dispose()
 
     expect(mockService.dispose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('definition targets', () => {
+  const at = (uri: string, line: number) => ({
+    uri,
+    range: { start: { line, character: 0 }, end: { line, character: 9 } },
+  })
+
+  function attachedMapper() {
+    installMockSharedService()
+    const service = startPythonLsp({ store, workerUrl: 'about:blank' })
+    service.attachPou(POU_URI, POU_NAME, [makeBoolVar('red_light')], 'print(red_light)\n')
+    const opts = startLanguageService.mock.calls[0][0] as StartLanguageServiceOptions
+    const preambleLines = mockGetBodyLineOffset(POU_LSP_URI)
+    const source = { modelUri: POU_URI, lspUri: POU_LSP_URI, lineOffset: preambleLines }
+    return { map: opts.mapDefinitionLocation!, navigate: opts.navigateOutline!, source, preambleLines }
+  }
+
+  it('keeps a body target in the source model, shifted past the preamble', () => {
+    const { map, source, preambleLines } = attachedMapper()
+    expect(preambleLines).toBeGreaterThan(0)
+
+    expect(map(at(POU_LSP_URI, preambleLines + 2), source)).toEqual({
+      uri: POU_URI,
+      range: { startLineNumber: 3, startColumn: 1, endLineNumber: 3, endColumn: 10 },
+    })
+  })
+
+  it('sends a preamble target to the document mirror, unshifted', () => {
+    const { map, source, preambleLines } = attachedMapper()
+
+    expect(map(at(POU_LSP_URI, preambleLines - 1), source)).toEqual({
+      uri: mockLspMirrorUri(POU_LSP_URI),
+      range: { startLineNumber: preambleLines, startColumn: 1, endLineNumber: preambleLines, endColumn: 10 },
+    })
+  })
+
+  it('drops a target outside the source document, such as a typeshed stub', () => {
+    const { map, source } = attachedMapper()
+
+    expect(map(at('file:///typeshed/stdlib/builtins.pyi', 40), source)).toBeNull()
+  })
+
+  it('declines to navigate a document it never attached', () => {
+    const { navigate } = attachedMapper()
+
+    expect(navigate({ uri: 'file:///Other.py', lineLsp: 0, characterLsp: 0 })).toBe(false)
   })
 })

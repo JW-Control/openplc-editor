@@ -1,4 +1,5 @@
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ScannedDeviceMatch } from '@root/middleware/shared/ports/esi-types'
 import type { EtherCATDevice, NetworkInterface } from '@root/middleware/shared/ports/ethercat-types'
@@ -37,6 +38,8 @@ type DiagnosticsTabProps = {
   onSelectScannedDevice: (position: number, selected: boolean) => void
   onSelectAllScanned: (selected: boolean) => void
   onAddSelectedFromScan: () => void
+  isAdding: boolean
+  addProgress: { current: number; total: number } | null
 }
 
 const DiagnosticsTab = ({
@@ -62,6 +65,8 @@ const DiagnosticsTab = ({
   onSelectScannedDevice,
   onSelectAllScanned,
   onAddSelectedFromScan,
+  isAdding,
+  addProgress,
 }: DiagnosticsTabProps) => {
   return (
     <div className='flex flex-1 flex-col gap-4 overflow-hidden'>
@@ -79,9 +84,11 @@ const DiagnosticsTab = ({
       {!isConnectedToRuntime && (
         <div className='flex flex-1 items-center justify-center rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700'>
           <div className='text-center'>
-            <p className='text-sm font-medium text-neutral-700 dark:text-neutral-300'>Not connected to runtime</p>
+            <p className='text-sm font-medium text-neutral-700 dark:text-neutral-300'>
+              {tr('Not connected to runtime')}
+            </p>
             <p className='mt-1 text-xs text-neutral-500 dark:text-neutral-400'>
-              Connect to the OpenPLC Runtime to scan for EtherCAT devices.
+              {tr('Connect to the OpenPLC Runtime to scan for EtherCAT devices.')}
             </p>
           </div>
         </div>
@@ -92,7 +99,7 @@ const DiagnosticsTab = ({
         <div className='flex flex-1 items-center justify-center rounded-lg border border-dashed border-yellow-300 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-900/20'>
           <div className='text-center'>
             <p className='text-sm font-medium text-yellow-700 dark:text-yellow-300'>
-              EtherCAT Discovery Service Not Available
+              {tr('EtherCAT Discovery Service Not Available')}
             </p>
             <p className='mt-1 max-w-md text-xs text-yellow-600 dark:text-yellow-400'>{serviceMessage}</p>
           </div>
@@ -114,7 +121,7 @@ const DiagnosticsTab = ({
 
             <button
               onClick={onScan}
-              disabled={isScanning || !selectedInterface}
+              disabled={isScanning || isAdding || !selectedInterface}
               className={cn(
                 'flex h-[30px] items-center gap-2 rounded-md px-4 text-sm font-medium transition-colors',
                 'bg-brand text-white hover:bg-brand-medium-dark',
@@ -124,7 +131,7 @@ const DiagnosticsTab = ({
               {isScanning ? (
                 <>
                   <ArrowIcon size='sm' className='animate-spin stroke-white' />
-                  Scanning...
+                  {tr('Scanning...')}
                 </>
               ) : (
                 'Scan'
@@ -150,7 +157,7 @@ const DiagnosticsTab = ({
             <div className='mb-4 flex items-center justify-between'>
               <div className='flex items-center gap-4'>
                 <span className='text-sm text-neutral-700 dark:text-neutral-300'>
-                  Found {matchCounts.total} device(s):
+                  {tr('Found {{total}} device(s):', { total: matchCounts.total })}
                 </span>
                 <span className='text-xs text-green-600 dark:text-green-400'>{matchCounts.exact} exact</span>
                 <span className='text-xs text-yellow-600 dark:text-yellow-400'>{matchCounts.partial} partial</span>
@@ -159,9 +166,20 @@ const DiagnosticsTab = ({
               {selectedScannedDevices.size > 0 && (
                 <button
                   onClick={onAddSelectedFromScan}
-                  className='rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-medium-dark'
+                  disabled={isAdding}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-medium-dark',
+                    'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-brand',
+                  )}
                 >
-                  Add Selected ({selectedScannedDevices.size})
+                  {isAdding ? (
+                    <>
+                      <ArrowIcon size='sm' className='animate-spin stroke-white' />
+                      {addProgress ? `Adding ${addProgress.current}/${addProgress.total}…` : 'Adding…'}
+                    </>
+                  ) : (
+                    `Add Selected (${selectedScannedDevices.size})`
+                  )}
                 </button>
               )}
             </div>

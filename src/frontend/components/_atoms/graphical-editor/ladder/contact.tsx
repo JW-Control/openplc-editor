@@ -1,16 +1,15 @@
 import * as Popover from '@radix-ui/react-popover'
-import { useEffect, useRef, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
+import { tr } from '@root/frontend/locales/tr'
+import { memo, useEffect, useRef, useState } from 'react'
 
 import { useDebugger } from '../../../../../middleware/shared/providers'
 import { useDebugCompositeKey } from '../../../../hooks/use-debug-composite-key'
 import { useDebugValue, useIsDebuggerVisible } from '../../../../hooks/use-debug-value'
 import { forceDebugVariable, releaseDebugVariable } from '../../../../services/debug-force-variable'
 import { isExpressionValidForType } from '../../../../services/graphical-scope'
-import { useOpenPLCStore } from '../../../../store'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { cn } from '../../../../utils/cn'
-import { validateVariableType } from '../../../../utils/PLC/validate-variable-type'
-import { findFunctionBlockVariables, findStructureVariables } from '../../../../utils/pou-helpers'
+import { edgeTriggerInstanceName, edgeTriggerTypeForVariant } from '../../../../utils/PLC/edge-trigger-instance'
 import { useBoundPou } from '../../../_features/[workspace]/editor/graphical/active-context'
 import { HighlightedTextArea } from '../../highlighted-textarea'
 import { VariablesBlockAutoComplete } from './autocomplete'
@@ -21,24 +20,21 @@ import type { ContactProps } from './utils/types'
 
 export type { ContactNode } from './utils/types'
 
-export const Contact = (block: ContactProps) => {
+const Contact = (block: ContactProps) => {
+  const store = useOpenPLCStoreApi()
   const { selected, data, id } = block
   const pouName = useBoundPou()
-  const { pous, dataTypes, globalVariables, librariesSystem, updateNode } = useOpenPLCStore(
-    useShallow((s) => ({
-      pous: s.project.data.pous,
-      dataTypes: s.project.data.dataTypes,
-      globalVariables: s.project.data.configurations.resource?.globalVariables,
-      librariesSystem: s.libraries.system,
-      updateNode: s.ladderFlowActions.updateNode,
-    })),
-  )
+  const pous = useOpenPLCStore((state) => state.project.data.pous)
+  const updateNode = useOpenPLCStore((state) => state.ladderFlowActions.updateNode)
 
   const debugger_ = useDebugger()
   const isDebuggerVisible = useIsDebuggerVisible()
   const getCompositeKey = useDebugCompositeKey()
   const compositeKey = getCompositeKey(data.variable.name)
   const { value: debugValue, isForced, forcedValue, debugIndex } = useDebugValue(compositeKey)
+  const edgeTriggerType = edgeTriggerTypeForVariant(data.variant)
+  const edgeTriggerName = edgeTriggerType ? edgeTriggerInstanceName(edgeTriggerType, data.numericId) : null
+  const { value: edgeOutputValue } = useDebugValue(edgeTriggerName ? getCompositeKey(`${edgeTriggerName}.Q`) : '')
 
   const contact = DEFAULT_CONTACT_TYPES[data.variant]
   const [contactVariableValue, setContactVariableValue] = useState<string>(data.variable.name)
@@ -56,45 +52,38 @@ export const Contact = (block: ContactProps) => {
       focus: () => void
       isFocused: boolean
       selectedVariable: { positionInArray: number; variableName: string }
-      triggerSubmit: () => boolean | void
+      triggerSubmit: () => void
     }
   >(null)
-
-  const skipNextVariableBlurSubmitRef = useRef(false)
 
   const [openAutocomplete, setOpenAutocomplete] = useState<boolean>(false)
   const [keyPressedAtTextarea, setKeyPressedAtTextarea] = useState<string>('')
 
-  const variableEditorElementId = 'contact-variable-input-' + id
-
-  const openVariableAutocomplete = () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('openplc:ladder-variable-autocomplete-open', {
-          detail: { id: variableEditorElementId },
-        }),
-      )
-    }
-
-    setOpenAutocomplete(true)
-    setKeyPressedAtTextarea('')
-  }
-
   useEffect(() => {
-    const handleAutocompleteOpen = (event: Event) => {
-      const openedId = (event as CustomEvent<{ id: string }>).detail?.id
-      if (openedId !== variableEditorElementId) {
-        setOpenAutocomplete(false)
-        setKeyPressedAtTextarea('')
-      }
+    if (inputVariableRef.current && inputWrapperRef.current) {
+      // top
+      inputWrapperRef.current.style.top = inputVariableRef.current.scrollHeight >= 24 ? '-24px' : '-20px'
     }
+  }, [contactVariableValue])
 
-    window.addEventListener('openplc:ladder-variable-autocomplete-open', handleAutocompleteOpen)
-
-    return () => {
-      window.removeEventListener('openplc:ladder-variable-autocomplete-open', handleAutocompleteOpen)
+  /**
+   * useEffect to sync contactVariableValue with data.variable.name when it changes externally
+   * (e.g., from variable rename propagation)
+   */
+  useEffect(() => {
+    if (data.variable && data.variable.name !== '') {
+      setContactVariableValue(data.variable.name)
     }
-  }, [variableEditorElementId])
+  }, [data.variable.name])
+
+  /**
+   * useEffect to focus the variable input when the block is selected
+   */
+  useEffect(() => {
+    if (inputVariableRef.current && selected) {
+      inputVariableRef.current.focus()
+    }
+  }, [])
 
   /**
    * Validate the contact's variable against the full project scope via the
@@ -105,43 +94,6 @@ export const Contact = (block: ContactProps) => {
    */
   useEffect(() => {
     const name = data.variable?.name?.trim() ?? ''
-    if (!name) {
-      setWrongVariable(false)
-      return
-    }
-
-    const localVariable = pous
-      .find((pou) => pou.name === pouName)
-      ?.interface?.variables?.find((variable) => variable.name.toLowerCase() === name.toLowerCase())
-
-    if (localVariable?.type?.value && validateVariableType(localVariable.type.value, 'BOOL').isValid) {
-      setWrongVariable(false)
-      return
-    }
-
-    // Fast local resolution for member expressions like TON0.Q or struct.field
-    if (name.includes('.')) {
-      const dotIndex = name.lastIndexOf('.')
-      const instName = name.slice(0, dotIndex).trim().toLowerCase()
-      const memberName = name.slice(dotIndex + 1).trim().toLowerCase()
-      const allVars = [
-        ...(pous.find((pou) => pou.name === pouName)?.interface?.variables ?? []),
-        ...(globalVariables ?? []),
-      ]
-      const inst = allVars.find((v) => v.name.toLowerCase() === instName)
-      if (inst?.type?.value) {
-        const members =
-          findFunctionBlockVariables(inst.type.value, pous, librariesSystem ?? []) ??
-          findStructureVariables(inst.type.value, dataTypes ?? []) ??
-          []
-        const m = members.find((member) => member.name.toLowerCase() === memberName)
-        if (m?.type?.value && validateVariableType(m.type.value, 'BOOL').isValid) {
-          setWrongVariable(false)
-          return
-        }
-      }
-    }
-
     let cancelled = false
     void isExpressionValidForType(pouName, name, 'BOOL').then((valid) => {
       if (!cancelled) setWrongVariable(!valid)
@@ -149,16 +101,20 @@ export const Contact = (block: ContactProps) => {
     return () => {
       cancelled = true
     }
-  }, [pous, pouName, data.variable.name, librariesSystem, dataTypes, globalVariables])
+  }, [pous, pouName, data.variable.name])
 
   const debuggerStrokeColor = (() => {
     if (!isDebuggerVisible || !data.variable.name || wrongVariable) return undefined
     if (debugValue === undefined) return undefined
+    if (isForced) return forcedValue ? '#80C000' : '#4080FF'
 
-    const isTrue = debugValue === '1' || debugValue.toUpperCase() === 'TRUE'
+    // An edge contact passes power only in the scan its trigger fires, so it shows the trigger, never the variable.
+    const shownValue = edgeTriggerType ? edgeOutputValue : debugValue
+    if (shownValue === undefined) return undefined
+
+    const isTrue = shownValue === '1' || shownValue.toUpperCase() === 'TRUE'
     const displayState = data.variant === 'negated' ? !isTrue : isTrue
 
-    if (isForced) return forcedValue ? '#80C000' : '#4080FF'
     return displayState ? '#00FF00' : '#0464FB'
   })()
 
@@ -169,21 +125,23 @@ export const Contact = (block: ContactProps) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await forceDebugVariable(debugger_, compositeKey, debugIndex, new Uint8Array([1]), true)
+    if (data.variable.name)
+      await forceDebugVariable(store, debugger_, compositeKey, debugIndex, new Uint8Array([1]), true)
   }
 
   const handleForceFalse = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await forceDebugVariable(debugger_, compositeKey, debugIndex, new Uint8Array([0]), false)
+    if (data.variable.name)
+      await forceDebugVariable(store, debugger_, compositeKey, debugIndex, new Uint8Array([0]), false)
   }
 
   const handleReleaseForce = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsContextMenuOpen(false)
-    if (data.variable.name) await releaseDebugVariable(debugger_, compositeKey, debugIndex)
+    if (data.variable.name) await releaseDebugVariable(store, debugger_, compositeKey, debugIndex)
   }
 
   const handleClick = (e: React.MouseEvent) => {
@@ -198,22 +156,17 @@ export const Contact = (block: ContactProps) => {
    * Handle with the variable input onBlur event
    */
   const handleSubmitContactVariableOnTextareaBlur = (variableName?: string) => {
-    if (skipNextVariableBlurSubmitRef.current) {
-      skipNextVariableBlurSubmitRef.current = false
-      return
-    }
-
     const variableNameToSubmit = variableName || contactVariableValue
-    if (variableNameToSubmit.endsWith('.')) {
-      setContactVariableValue(data.variable.name ?? '')
-      return
-    }
-    const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
-    const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
+    const { project, ladderFlows } = store.getState()
+    const { rung, node } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
       nodeId: id,
       variableName: variableNameToSubmit,
     })
     if (!rung || !node) return
+
+    // Blur with an unchanged name is not an edit — skip the write so merely
+    // clicking in and out of a contact never marks the POU as modified.
+    if (variableNameToSubmit === (node.data as { variable?: { name?: string } }).variable?.name) return
 
     // Persist whatever the user typed; the validation effect resolves and
     // type-checks it against the full project scope and drives the red state.
@@ -233,7 +186,7 @@ export const Contact = (block: ContactProps) => {
 
   const onChangeHandler = () => {
     if (!openAutocomplete) {
-      openVariableAutocomplete()
+      setOpenAutocomplete(true)
     }
   }
 
@@ -254,29 +207,12 @@ export const Contact = (block: ContactProps) => {
         onClick={isDebuggerVisible ? handleClick : undefined}
       >
         {contact.svg(wrongVariable, debuggerStrokeColor)}
-        <div
-          className='absolute -top-8 left-1/2 z-20 h-6 w-[96px] -translate-x-1/2'
-          data-ladder-variable-editor='true'
-          ref={inputWrapperRef}
-          onPointerDownCapture={(event) => {
-            event.stopPropagation()
-            openVariableAutocomplete()
-          }}
-          onClickCapture={(event) => {
-            event.stopPropagation()
-            openVariableAutocomplete()
-          }}
-          onDoubleClickCapture={(event) => {
-            event.stopPropagation()
-            openVariableAutocomplete()
-          }}
-        >
+        <div className='absolute left-1/2 w-[72px] -translate-x-1/2' ref={inputWrapperRef}>
           <HighlightedTextArea
             id={`contact-variable-input-${id}`}
             textAreaValue={contactVariableValue}
             setTextAreaValue={setContactVariableValue}
             handleSubmit={handleSubmitContactVariableOnTextareaBlur}
-            submitWith={{ enter: false }}
             inputHeight={{
               height: 24,
               scrollLimiter: 32,
@@ -288,12 +224,13 @@ export const Contact = (block: ContactProps) => {
             readOnly={isDebuggerVisible}
             onFocus={(e) => {
               e.target.select()
-              openVariableAutocomplete()
-              const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
-              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
+              const { project, ladderFlows } = store.getState()
+              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
                 nodeId: id ?? '',
               })
               if (!node || !rung) return
+              // Drag-lock while typing is UI state, not an edit — transient
+              // so focusing the input never marks the flow as modified.
               updateNode({
                 editorName: pouName,
                 nodeId: node.id,
@@ -302,12 +239,13 @@ export const Contact = (block: ContactProps) => {
                   ...node,
                   draggable: false,
                 },
+                transient: true,
               })
               return
             }}
             onBlur={() => {
-              const { ladderFlows: freshLadderFlows } = useOpenPLCStore.getState()
-              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, freshLadderFlows, {
+              const { project, ladderFlows } = store.getState()
+              const { node, rung } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
                 nodeId: id ?? '',
               })
               if (!node || !rung) return
@@ -319,6 +257,7 @@ export const Contact = (block: ContactProps) => {
                   ...node,
                   draggable: node.data.draggable as boolean,
                 },
+                transient: true,
               })
               return
             }}
@@ -327,15 +266,8 @@ export const Contact = (block: ContactProps) => {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') e.preventDefault()
               if (e.key === 'Enter' && openAutocomplete) {
                 e.preventDefault()
-                const submitted = autocompleteRef.current?.triggerSubmit?.()
-                if (submitted !== false) {
-                  inputVariableRef.current?.blur({ submit: false })
-                }
-                return
-              }
-              if (e.key === 'Enter' && !openAutocomplete) {
-                e.preventDefault()
-                inputVariableRef.current?.blur({ submit: true })
+                autocompleteRef.current?.triggerSubmit?.()
+                inputVariableRef.current?.blur({ submit: false })
                 return
               }
               setKeyPressedAtTextarea(e.key)
@@ -344,7 +276,7 @@ export const Contact = (block: ContactProps) => {
           />
           {openAutocomplete && (
             <div className='relative flex justify-center'>
-              <div className='absolute -bottom-4 left-1/2 -translate-x-1/2 flex justify-center'>
+              <div className='absolute -bottom-4'>
                 <VariablesBlockAutoComplete
                   ref={autocompleteRef}
                   block={block}
@@ -353,15 +285,6 @@ export const Contact = (block: ContactProps) => {
                   isOpen={openAutocomplete}
                   setIsOpen={(value) => setOpenAutocomplete(value)}
                   keyPressed={keyPressedAtTextarea}
-                  keepOpenForSelector="[data-ladder-variable-editor='true']"
-                  onDrillDown={(instanceName) => {
-                    setContactVariableValue(`${instanceName}.`)
-                  }}
-                  onBeforeSubmit={(variableName) => {
-                    skipNextVariableBlurSubmitRef.current = true
-                    setContactVariableValue(variableName)
-                  }}
-                  keepOpenForElementId={`contact-variable-input-${id}`}
                 />
               </div>
             </div>
@@ -394,20 +317,20 @@ export const Contact = (block: ContactProps) => {
                       className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                       onClick={(e) => void handleForceTrue(e)}
                     >
-                      <p>Force True</p>
+                      <p>{tr('Force True')}</p>
                     </div>
                     <div
                       className='flex w-full cursor-pointer items-center gap-2 px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                       onClick={(e) => void handleForceFalse(e)}
                     >
-                      <p>Force False</p>
+                      <p>{tr('Force False')}</p>
                     </div>
                     {isForced && (
                       <div
                         className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                         onClick={(e) => void handleReleaseForce(e)}
                       >
-                        <p>Release Force</p>
+                        <p>{tr('Release Force')}</p>
                       </div>
                     )}
                   </Popover.Content>
@@ -422,3 +345,7 @@ export const Contact = (block: ContactProps) => {
     </div>
   )
 }
+
+const exportContact = memo(Contact)
+
+export { exportContact as Contact }

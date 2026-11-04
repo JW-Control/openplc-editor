@@ -1,5 +1,6 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion'
 import { ChevronDownIcon, Pencil1Icon, PlusIcon, TrashIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { S7CommBufferType, S7CommDataBlock } from '../../../../../../../middleware/shared/ports/types'
@@ -8,6 +9,7 @@ import { cn } from '../../../../../../utils/cn'
 import { InputWithRef } from '../../../../../_atoms/input'
 import { Label } from '../../../../../_atoms/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../../../../../_atoms/select'
+import { DuplicateProtocolNotice } from '../duplicate-protocol-notice'
 
 type S7CommUIDataBlock = S7CommDataBlock
 
@@ -39,25 +41,25 @@ const DEFAULT_LOGGING = {
 }
 
 const NETWORK_INTERFACE_OPTIONS = [
-  { value: '0.0.0.0', label: 'All Interfaces (0.0.0.0)' },
-  { value: '127.0.0.1', label: 'Localhost (127.0.0.1)' },
+  { value: '0.0.0.0', label: tr('All Interfaces (0.0.0.0)') },
+  { value: '127.0.0.1', label: tr('Localhost (127.0.0.1)') },
 ]
 
 const BUFFER_TYPE_OPTIONS: { value: S7CommBufferType; label: string; description: string }[] = [
-  { value: 'bool_input', label: 'Boolean Input (%IX)', description: '1 bit - Digital inputs' },
-  { value: 'bool_output', label: 'Boolean Output (%QX)', description: '1 bit - Digital outputs' },
-  { value: 'bool_memory', label: 'Boolean Memory (%MX)', description: '1 bit - Internal markers' },
-  { value: 'byte_input', label: 'Byte Input (%IB)', description: '1 byte - Byte inputs' },
-  { value: 'byte_output', label: 'Byte Output (%QB)', description: '1 byte - Byte outputs' },
-  { value: 'int_input', label: 'Word Input (%IW)', description: '2 bytes - Word inputs' },
-  { value: 'int_output', label: 'Word Output (%QW)', description: '2 bytes - Word outputs' },
-  { value: 'int_memory', label: 'Word Memory (%MW)', description: '2 bytes - Word memory' },
-  { value: 'dint_input', label: 'Double Word Input (%ID)', description: '4 bytes - DWord inputs' },
-  { value: 'dint_output', label: 'Double Word Output (%QD)', description: '4 bytes - DWord outputs' },
-  { value: 'dint_memory', label: 'Double Word Memory (%MD)', description: '4 bytes - DWord memory' },
-  { value: 'lint_input', label: 'Long Word Input (%IL)', description: '8 bytes - LWord inputs' },
-  { value: 'lint_output', label: 'Long Word Output (%QL)', description: '8 bytes - LWord outputs' },
-  { value: 'lint_memory', label: 'Long Word Memory (%ML)', description: '8 bytes - LWord memory' },
+  { value: 'bool_input', label: tr('Boolean Input (%IX)'), description: tr('1 bit - Digital inputs') },
+  { value: 'bool_output', label: tr('Boolean Output (%QX)'), description: tr('1 bit - Digital outputs') },
+  { value: 'bool_memory', label: tr('Boolean Memory (%MX)'), description: tr('1 bit - Internal markers') },
+  { value: 'byte_input', label: tr('Byte Input (%IB)'), description: tr('1 byte - Byte inputs') },
+  { value: 'byte_output', label: tr('Byte Output (%QB)'), description: tr('1 byte - Byte outputs') },
+  { value: 'int_input', label: tr('Word Input (%IW)'), description: tr('2 bytes - Word inputs') },
+  { value: 'int_output', label: tr('Word Output (%QW)'), description: tr('2 bytes - Word outputs') },
+  { value: 'int_memory', label: tr('Word Memory (%MW)'), description: tr('2 bytes - Word memory') },
+  { value: 'dint_input', label: tr('Double Word Input (%ID)'), description: tr('4 bytes - DWord inputs') },
+  { value: 'dint_output', label: tr('Double Word Output (%QD)'), description: tr('4 bytes - DWord outputs') },
+  { value: 'dint_memory', label: tr('Double Word Memory (%MD)'), description: tr('4 bytes - DWord memory') },
+  { value: 'lint_input', label: tr('Long Word Input (%IL)'), description: tr('8 bytes - LWord inputs') },
+  { value: 'lint_output', label: tr('Long Word Output (%QL)'), description: tr('8 bytes - LWord outputs') },
+  { value: 'lint_memory', label: tr('Long Word Memory (%ML)'), description: tr('8 bytes - LWord memory') },
 ]
 
 // Accordion components
@@ -155,19 +157,19 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
     const start = parseInt(startBuffer, 10)
 
     if (isNaN(dbNum) || dbNum < 1 || dbNum > 65535) {
-      setError('DB Number must be between 1 and 65535')
+      setError(tr('DB Number must be between 1 and 65535'))
       return
     }
     if (existingDbNumbers.includes(dbNum) && dbNum !== editingBlock?.dbNumber) {
-      setError(`DB${dbNum} already exists`)
+      setError(tr('DB{{dbNum}} already exists', { dbNum }))
       return
     }
     if (isNaN(size) || size < 1 || size > 65536) {
-      setError('Size must be between 1 and 65536 bytes')
+      setError(tr('Size must be between 1 and 65536 bytes'))
       return
     }
-    if (isNaN(start) || start < 0 || start > 1023) {
-      setError('Start buffer must be between 0 and 1023')
+    if (isNaN(start) || start < 0 || start > 65535) {
+      setError(tr('Start buffer must be between 0 and 65535'))
       return
     }
 
@@ -197,7 +199,7 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
 
         <div className='flex flex-col gap-4'>
           <div className='flex items-center gap-4'>
-            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>DB Number</Label>
+            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>{tr('DB Number')}</Label>
             <InputWithRef
               type='number'
               value={dbNumber}
@@ -209,19 +211,19 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
           </div>
 
           <div className='flex items-center gap-4'>
-            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>Description</Label>
+            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>{tr('Description')}</Label>
             <InputWithRef
               type='text'
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={128}
-              placeholder='Optional description'
+              placeholder={tr('Optional description')}
               className='h-[30px] flex-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
             />
           </div>
 
           <div className='flex items-center gap-4'>
-            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>Size (bytes)</Label>
+            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>{tr('Size (bytes)')}</Label>
             <InputWithRef
               type='number'
               value={sizeBytes}
@@ -233,11 +235,11 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
           </div>
 
           <div className='flex items-center gap-4'>
-            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>Mapping Type</Label>
+            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>{tr('Mapping Type')}</Label>
             <Select value={mappingType} onValueChange={(v) => setMappingType(v as S7CommBufferType)}>
               <SelectTrigger
                 withIndicator
-                placeholder='Select mapping type'
+                placeholder={tr('Select mapping type')}
                 className='flex h-[30px] flex-1 items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
               />
               <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -260,20 +262,20 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
           </div>
 
           <div className='flex items-center gap-4'>
-            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>Start Buffer</Label>
+            <Label className='w-32 text-xs text-neutral-950 dark:text-white'>{tr('Start Buffer')}</Label>
             <InputWithRef
               type='number'
               value={startBuffer}
               onChange={(e) => setStartBuffer(e.target.value)}
               min='0'
-              max='1023'
+              max='65535'
               className='h-[30px] w-32 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
             />
           </div>
 
           {isBoolType && (
             <div className='flex items-center gap-4'>
-              <Label className='w-32 text-xs text-neutral-950 dark:text-white'>Bit Addressing</Label>
+              <Label className='w-32 text-xs text-neutral-950 dark:text-white'>{tr('Bit Addressing')}</Label>
               <label className='relative inline-flex cursor-pointer items-center'>
                 <input
                   type='checkbox'
@@ -289,7 +291,7 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
                   )}
                 />
               </label>
-              <span className='text-xs text-neutral-500 dark:text-neutral-400'>Enable bit-level access</span>
+              <span className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Enable bit-level access')}</span>
             </div>
           )}
 
@@ -300,7 +302,7 @@ const DataBlockModal = ({ isOpen, onClose, onSave, existingDbNumbers, editingBlo
               onClick={onClose}
               className='rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               onClick={handleSave}
@@ -509,7 +511,7 @@ const S7CommServerEditor = () => {
     return (
       <div className='flex h-full w-full items-center justify-center'>
         <p className='text-neutral-500 dark:text-neutral-400'>
-          Configuration for {protocol} servers is not yet available.
+          {tr('Configuration for {{protocol}} servers is not yet available.', { protocol })}
         </p>
       </div>
     )
@@ -520,11 +522,15 @@ const S7CommServerEditor = () => {
   return (
     <div aria-label='Server content container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       <div className='mb-4'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>S7Comm Server: {serverName}</h2>
-        <p className='text-sm text-neutral-600 dark:text-neutral-400'>Protocol: Siemens S7Comm</p>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('S7Comm Server: {{serverName}}', { serverName })}
+        </h2>
+        <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('Protocol: Siemens S7Comm')}</p>
       </div>
 
       <div className='flex flex-1 flex-col gap-4 overflow-auto'>
+        <DuplicateProtocolNotice name={serverName} protocol={protocol} />
+
         <AccordionPrimitive.Root
           type='multiple'
           value={openSections}
@@ -534,13 +540,13 @@ const S7CommServerEditor = () => {
           {/* Server Configuration Section */}
           <AccordionItem value='server-config'>
             <AccordionTrigger>
-              <span className='text-neutral-950 dark:text-white'>Server Configuration</span>
+              <span className='text-neutral-950 dark:text-white'>{tr('Server Configuration')}</span>
             </AccordionTrigger>
             <AccordionContent>
               <div className='flex flex-col gap-4'>
                 <div className='flex items-center gap-4'>
                   <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
-                    Enable Server
+                    {tr('Enable Server')}
                   </Label>
                   <label className='relative inline-flex cursor-pointer items-center'>
                     <input
@@ -564,13 +570,13 @@ const S7CommServerEditor = () => {
 
                 <div className='flex items-center gap-4'>
                   <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
-                    Bind Address
+                    {tr('Bind Address')}
                   </Label>
                   <div className='w-64'>
                     <Select value={bindAddress} onValueChange={handleBindAddressChange}>
                       <SelectTrigger
                         withIndicator
-                        placeholder='Select network interface'
+                        placeholder={tr('Select network interface')}
                         className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                       />
                       <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -594,7 +600,9 @@ const S7CommServerEditor = () => {
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Port</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('Port')}
+                  </Label>
                   <div className='w-32'>
                     <InputWithRef
                       type='number'
@@ -607,11 +615,15 @@ const S7CommServerEditor = () => {
                       className={inputStyles}
                     />
                   </div>
-                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>Default: 102 (S7 standard)</span>
+                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                    {tr('Default: 102 (S7 standard)')}
+                  </span>
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Max Clients</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('Max Clients')}
+                  </Label>
                   <div className='w-32'>
                     <InputWithRef
                       type='number'
@@ -627,7 +639,9 @@ const S7CommServerEditor = () => {
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>PDU Size</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('PDU Size')}
+                  </Label>
                   <div className='w-32'>
                     <InputWithRef
                       type='number'
@@ -655,8 +669,9 @@ const S7CommServerEditor = () => {
             <AccordionContent>
               <div className='flex flex-col gap-3'>
                 <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-                  Configure S7 data blocks that map to OpenPLC buffer areas. Each DB can expose different IEC variable
-                  types to S7 clients.
+                  {tr(
+                    'Configure S7 data blocks that map to OpenPLC buffer areas. Each DB can expose different IEC variable types to S7 clients.',
+                  )}
                 </p>
 
                 <button
@@ -665,7 +680,7 @@ const S7CommServerEditor = () => {
                   className='flex w-fit items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark disabled:cursor-not-allowed disabled:opacity-50'
                 >
                   <PlusIcon className='h-4 w-4' />
-                  Add Data Block
+                  {tr('Add Data Block')}
                 </button>
 
                 {config?.dataBlocks && config.dataBlocks.length > 0 ? (
@@ -677,16 +692,16 @@ const S7CommServerEditor = () => {
                             DB
                           </th>
                           <th className='px-3 py-2 text-left text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-                            Description
+                            {tr('Description')}
                           </th>
                           <th className='px-3 py-2 text-left text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-                            Size
+                            {tr('Size')}
                           </th>
                           <th className='px-3 py-2 text-left text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-                            Type
+                            {tr('Type')}
                           </th>
                           <th className='px-3 py-2 text-right text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-                            Actions
+                            {tr('Actions')}
                           </th>
                         </tr>
                       </thead>
@@ -714,14 +729,14 @@ const S7CommServerEditor = () => {
                                   <button
                                     onClick={() => handleEditDataBlock(db as unknown as S7CommUIDataBlock)}
                                     className='rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
-                                    title='Edit'
+                                    title={tr('Edit')}
                                   >
                                     <Pencil1Icon className='h-4 w-4' />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteDataBlock(db.dbNumber)}
                                     className='rounded p-1 text-neutral-500 hover:bg-red-100 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-900/30 dark:hover:text-red-400'
-                                    title='Delete'
+                                    title={tr('Delete')}
                                   >
                                     <TrashIcon className='h-4 w-4' />
                                   </button>
@@ -734,7 +749,7 @@ const S7CommServerEditor = () => {
                   </div>
                 ) : (
                   <p className='mt-2 text-sm text-neutral-500 dark:text-neutral-400'>
-                    No data blocks configured. Add a data block to expose PLC data to S7 clients.
+                    {tr('No data blocks configured. Add a data block to expose PLC data to S7 clients.')}
                   </p>
                 )}
               </div>
@@ -744,16 +759,20 @@ const S7CommServerEditor = () => {
           {/* PLC Identity Section */}
           <AccordionItem value='plc-identity'>
             <AccordionTrigger>
-              <span className='text-neutral-950 dark:text-white'>PLC Identity</span>
+              <span className='text-neutral-950 dark:text-white'>{tr('PLC Identity')}</span>
             </AccordionTrigger>
             <AccordionContent>
               <div className='flex flex-col gap-4'>
                 <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-                  Configure the PLC identity returned in S7 SZL queries. These values help HMIs identify the PLC.
+                  {tr(
+                    'Configure the PLC identity returned in S7 SZL queries. These values help HMIs identify the PLC.',
+                  )}
                 </p>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>PLC Name</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('PLC Name')}
+                  </Label>
                   <InputWithRef
                     type='text'
                     value={plcName}
@@ -765,7 +784,9 @@ const S7CommServerEditor = () => {
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Module Type</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('Module Type')}
+                  </Label>
                   <InputWithRef
                     type='text'
                     value={moduleType}
@@ -778,7 +799,7 @@ const S7CommServerEditor = () => {
 
                 <div className='flex items-center gap-4'>
                   <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
-                    Serial Number
+                    {tr('Serial Number')}
                   </Label>
                   <InputWithRef
                     type='text'
@@ -793,7 +814,9 @@ const S7CommServerEditor = () => {
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Copyright</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('Copyright')}
+                  </Label>
                   <InputWithRef
                     type='text'
                     value={copyright}
@@ -805,7 +828,9 @@ const S7CommServerEditor = () => {
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Module Name</Label>
+                  <Label className='w-32 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('Module Name')}
+                  </Label>
                   <InputWithRef
                     type='text'
                     value={moduleName}
@@ -822,13 +847,13 @@ const S7CommServerEditor = () => {
           {/* Logging Section */}
           <AccordionItem value='logging'>
             <AccordionTrigger>
-              <span className='text-neutral-950 dark:text-white'>Logging</span>
+              <span className='text-neutral-950 dark:text-white'>{tr('Logging')}</span>
             </AccordionTrigger>
             <AccordionContent>
               <div className='flex flex-col gap-4'>
                 <div className='flex items-center gap-4'>
                   <Label className='w-40 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
-                    Log Connections
+                    {tr('Log Connections')}
                   </Label>
                   <label className='relative inline-flex cursor-pointer items-center'>
                     <input
@@ -845,12 +870,14 @@ const S7CommServerEditor = () => {
                       )}
                     />
                   </label>
-                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>Log client connect/disconnect</span>
+                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                    {tr('Log client connect/disconnect')}
+                  </span>
                 </div>
 
                 <div className='flex items-center gap-4'>
                   <Label className='w-40 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
-                    Log Data Access
+                    {tr('Log Data Access')}
                   </Label>
                   <label className='relative inline-flex cursor-pointer items-center'>
                     <input
@@ -868,12 +895,14 @@ const S7CommServerEditor = () => {
                     />
                   </label>
                   <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                    Log read/write operations (verbose)
+                    {tr('Log read/write operations (verbose)')}
                   </span>
                 </div>
 
                 <div className='flex items-center gap-4'>
-                  <Label className='w-40 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Log Errors</Label>
+                  <Label className='w-40 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                    {tr('Log Errors')}
+                  </Label>
                   <label className='relative inline-flex cursor-pointer items-center'>
                     <input
                       type='checkbox'
@@ -889,7 +918,9 @@ const S7CommServerEditor = () => {
                       )}
                     />
                   </label>
-                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>Log errors and warnings</span>
+                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                    {tr('Log errors and warnings')}
+                  </span>
                 </div>
               </div>
             </AccordionContent>

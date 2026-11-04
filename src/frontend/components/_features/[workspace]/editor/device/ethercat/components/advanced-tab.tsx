@@ -1,5 +1,6 @@
 import type { EtherCATMasterConfig } from '@root/backend/shared/types/PLC/open-plc'
 import { InputWithRef } from '@root/frontend/components/_atoms/input'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 
 type AdvancedTabProps = {
@@ -15,7 +16,9 @@ const AdvancedTab = ({ masterConfig, onUpdateMasterConfig }: AdvancedTabProps) =
     <div className='flex flex-col gap-6 overflow-auto pb-4'>
       {/* Enable Plugin */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>Enable Bus</h3>
+        <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
+          {tr('Enable Bus')}
+        </h3>
         <div className='flex items-center gap-4'>
           <label className='relative inline-flex cursor-pointer items-center'>
             <input
@@ -41,7 +44,7 @@ const AdvancedTab = ({ masterConfig, onUpdateMasterConfig }: AdvancedTabProps) =
       {/* Cycle Time */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
         <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
-          Cycle Time (microseconds)
+          {tr('Cycle Time (microseconds)')}
         </h3>
         <div className='flex flex-col gap-1'>
           <InputWithRef
@@ -58,14 +61,16 @@ const AdvancedTab = ({ masterConfig, onUpdateMasterConfig }: AdvancedTabProps) =
             className={cn(inputClassName, 'max-w-[200px]')}
           />
           <span className='text-[10px] text-neutral-500 dark:text-neutral-500'>
-            EtherCAT bus cycle time in microseconds (100 - 100000)
+            {tr('EtherCAT bus cycle time in microseconds (100 - 100000)')}
           </span>
         </div>
       </div>
 
       {/* Task Priority */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-        <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>Task Priority</h3>
+        <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
+          {tr('Task Priority')}
+        </h3>
         <div className='flex flex-col gap-1'>
           <InputWithRef
             type='number'
@@ -81,7 +86,7 @@ const AdvancedTab = ({ masterConfig, onUpdateMasterConfig }: AdvancedTabProps) =
             className={cn(inputClassName, 'max-w-[200px]')}
           />
           <span className='text-[10px] text-neutral-500 dark:text-neutral-500'>
-            Priority of the EtherCAT cyclic task (1 - 31)
+            {tr('Priority of the EtherCAT cyclic task (1 - 31)')}
           </span>
         </div>
       </div>
@@ -89,7 +94,7 @@ const AdvancedTab = ({ masterConfig, onUpdateMasterConfig }: AdvancedTabProps) =
       {/* Watchdog Timeout */}
       <div className='rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900'>
         <h3 className='mb-3 text-xs font-semibold uppercase text-neutral-500 dark:text-neutral-400'>
-          Watchdog Timeout (cycles)
+          {tr('Watchdog Timeout (cycles)')}
         </h3>
         <div className='flex flex-col gap-1'>
           <InputWithRef
@@ -106,7 +111,7 @@ const AdvancedTab = ({ masterConfig, onUpdateMasterConfig }: AdvancedTabProps) =
             className={cn(inputClassName, 'max-w-[200px]')}
           />
           <span className='text-[10px] text-neutral-500 dark:text-neutral-500'>
-            Number of missed cycles before watchdog triggers (1 - 100)
+            {tr('Number of missed cycles before watchdog triggers (1 - 100)')}
           </span>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { OpcUaFieldConfig, OpcUaNodeConfig, OpcUaPermissions } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -136,7 +137,7 @@ const PermissionSelect = ({
   <Select value={value} onValueChange={(v) => onChange(v as PermissionLevel)}>
     <SelectTrigger
       withIndicator
-      placeholder='Select'
+      placeholder={tr('Select')}
       className={cn(
         'flex h-[24px] w-[70px] items-center justify-between gap-1 rounded border border-neutral-300 bg-white px-1 font-caption text-[10px] font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300',
         className,
@@ -364,7 +365,7 @@ export const VariableConfigModal = ({
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className={cn('h-auto max-h-[90vh]', isComplex ? 'w-[650px]' : 'w-[550px]')} onClose={onClose}>
+      <ModalContent className={cn('max-h-[90vh]', isComplex ? 'w-[650px]' : 'w-[550px]')} onClose={onClose}>
         <ModalHeader>
           <ModalTitle>{existingConfig ? 'Edit' : 'Configure'} OPC-UA Node</ModalTitle>
         </ModalHeader>
@@ -373,49 +374,49 @@ export const VariableConfigModal = ({
           {/* Variable Info */}
           <div className='rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900'>
             <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-              <span className='font-medium'>PLC Variable:</span> {variable.pouName}:{variable.variablePath}
+              <span className='font-medium'>{tr('PLC Variable:')}</span> {variable.pouName}:{variable.variablePath}
             </p>
             <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-              <span className='font-medium'>Type:</span> {variable.variableType || 'Unknown'}
+              <span className='font-medium'>{tr('Type:')}</span> {variable.variableType || 'Unknown'}
             </p>
           </div>
 
           {/* Node ID */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Node ID</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Node ID')}</Label>
             <InputWithRef
               type='text'
               value={nodeId}
               onChange={(e) => setNodeId(e.target.value)}
-              placeholder='e.g., PLC.Main.MotorSpeed'
+              placeholder={tr('e.g., PLC.Main.MotorSpeed')}
               maxLength={128}
               className={inputStyles}
             />
             <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-              Unique identifier in the OPC-UA address space
+              {tr('Unique identifier in the OPC-UA address space')}
             </span>
           </div>
 
           {/* Browse Name & Display Name */}
           <div className='grid grid-cols-2 gap-4'>
             <div className='flex flex-col gap-2'>
-              <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Browse Name</Label>
+              <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Browse Name')}</Label>
               <InputWithRef
                 type='text'
                 value={browseName}
                 onChange={(e) => setBrowseName(e.target.value)}
-                placeholder='e.g., MotorSpeed'
+                placeholder={tr('e.g., MotorSpeed')}
                 maxLength={64}
                 className={inputStyles}
               />
             </div>
             <div className='flex flex-col gap-2'>
-              <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Display Name</Label>
+              <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Display Name')}</Label>
               <InputWithRef
                 type='text'
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder='e.g., Motor Speed'
+                placeholder={tr('e.g., Motor Speed')}
                 maxLength={128}
                 className={inputStyles}
               />
@@ -424,11 +425,11 @@ export const VariableConfigModal = ({
 
           {/* Description */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Description</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Description')}</Label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder='Optional description for this node'
+              placeholder={tr('Optional description for this node')}
               rows={2}
               className={textareaStyles}
             />
@@ -436,16 +437,18 @@ export const VariableConfigModal = ({
 
           {/* Permissions */}
           <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>Access Permissions</h4>
+            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
+              {tr('Access Permissions')}
+            </h4>
 
             <div className='grid grid-cols-3 gap-4'>
               {/* Viewer Permission */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-700 dark:text-neutral-300'>Viewer</Label>
+                <Label className='text-xs text-neutral-700 dark:text-neutral-300'>{tr('Viewer')}</Label>
                 <Select value={viewerPerm} onValueChange={(v) => setViewerPerm(v as PermissionLevel)}>
                   <SelectTrigger
                     withIndicator
-                    placeholder='Select'
+                    placeholder={tr('Select')}
                     className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                   />
                   <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -457,7 +460,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Read Only
+                        {tr('Read Only')}
                       </span>
                     </SelectItem>
                     <SelectItem
@@ -468,7 +471,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Write Only
+                        {tr('Write Only')}
                       </span>
                     </SelectItem>
                     <SelectItem
@@ -479,7 +482,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Read/Write
+                        {tr('Read/Write')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -488,11 +491,11 @@ export const VariableConfigModal = ({
 
               {/* Operator Permission */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-700 dark:text-neutral-300'>Operator</Label>
+                <Label className='text-xs text-neutral-700 dark:text-neutral-300'>{tr('Operator')}</Label>
                 <Select value={operatorPerm} onValueChange={(v) => setOperatorPerm(v as PermissionLevel)}>
                   <SelectTrigger
                     withIndicator
-                    placeholder='Select'
+                    placeholder={tr('Select')}
                     className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                   />
                   <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -504,7 +507,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Read Only
+                        {tr('Read Only')}
                       </span>
                     </SelectItem>
                     <SelectItem
@@ -515,7 +518,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Write Only
+                        {tr('Write Only')}
                       </span>
                     </SelectItem>
                     <SelectItem
@@ -526,7 +529,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Read/Write
+                        {tr('Read/Write')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -535,11 +538,11 @@ export const VariableConfigModal = ({
 
               {/* Engineer Permission */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-700 dark:text-neutral-300'>Engineer</Label>
+                <Label className='text-xs text-neutral-700 dark:text-neutral-300'>{tr('Engineer')}</Label>
                 <Select value={engineerPerm} onValueChange={(v) => setEngineerPerm(v as PermissionLevel)}>
                   <SelectTrigger
                     withIndicator
-                    placeholder='Select'
+                    placeholder={tr('Select')}
                     className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                   />
                   <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -551,7 +554,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Read Only
+                        {tr('Read Only')}
                       </span>
                     </SelectItem>
                     <SelectItem
@@ -562,7 +565,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Write Only
+                        {tr('Write Only')}
                       </span>
                     </SelectItem>
                     <SelectItem
@@ -573,7 +576,7 @@ export const VariableConfigModal = ({
                       )}
                     >
                       <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                        Read/Write
+                        {tr('Read/Write')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -582,23 +585,25 @@ export const VariableConfigModal = ({
             </div>
 
             <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-              Configure access permissions for each user role
+              {tr('Configure access permissions for each user role')}
             </p>
           </div>
 
           {/* Array Info */}
           {isArray && variable?.arrayInfo && (
             <div className='rounded-lg border border-cyan-200 bg-cyan-50 p-3 dark:border-cyan-900 dark:bg-cyan-950'>
-              <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>Array Information</h4>
+              <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
+                {tr('Array Information')}
+              </h4>
               <div className='mt-2 grid grid-cols-2 gap-2'>
                 <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                  <span className='font-medium'>Dimensions:</span> [{variable.arrayInfo.dimensions.join(', ')}]
+                  <span className='font-medium'>{tr('Dimensions:')}</span> [{variable.arrayInfo.dimensions.join(', ')}]
                 </p>
                 <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                  <span className='font-medium'>Element Type:</span> {variable.arrayInfo.elementType}
+                  <span className='font-medium'>{tr('Element Type:')}</span> {variable.arrayInfo.elementType}
                 </p>
                 <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                  <span className='font-medium'>Total Elements:</span> {variable.arrayInfo.totalLength}
+                  <span className='font-medium'>{tr('Total Elements:')}</span> {variable.arrayInfo.totalLength}
                 </p>
               </div>
             </div>
@@ -608,14 +613,14 @@ export const VariableConfigModal = ({
           {isStructureOrFb && variable?.structureInfo && (
             <div className='rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900'>
               <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                Structure Information
+                {tr('Structure Information')}
               </h4>
               <div className='mt-2 grid grid-cols-2 gap-2'>
                 <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                  <span className='font-medium'>Type:</span> {variable.structureInfo.structTypeName}
+                  <span className='font-medium'>{tr('Type:')}</span> {variable.structureInfo.structTypeName}
                 </p>
                 <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                  <span className='font-medium'>Fields:</span> {variable.structureInfo.fieldCount}
+                  <span className='font-medium'>{tr('Fields:')}</span> {variable.structureInfo.fieldCount}
                 </p>
               </div>
             </div>
@@ -626,14 +631,14 @@ export const VariableConfigModal = ({
             <div className='flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <div className='flex items-center justify-between'>
                 <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                  Field Permissions ({fieldConfigs.length} fields)
+                  {tr('Field Permissions ({{length}} fields)', { length: fieldConfigs.length })}
                 </h4>
                 <button
                   type='button'
                   onClick={applyPermissionsToAllFields}
                   className='h-[24px] rounded border border-neutral-300 bg-white px-2 font-caption text-[10px] font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
                 >
-                  Apply Parent Permissions to All
+                  {tr('Apply Parent Permissions to All')}
                 </button>
               </div>
 
@@ -643,16 +648,16 @@ export const VariableConfigModal = ({
                   <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-800'>
                     <tr>
                       <th className='px-2 py-1.5 text-left font-medium text-neutral-700 dark:text-neutral-300'>
-                        Field
+                        {tr('Field')}
                       </th>
                       <th className='px-2 py-1.5 text-center font-medium text-neutral-700 dark:text-neutral-300'>
-                        Viewer
+                        {tr('Viewer')}
                       </th>
                       <th className='px-2 py-1.5 text-center font-medium text-neutral-700 dark:text-neutral-300'>
-                        Operator
+                        {tr('Operator')}
                       </th>
                       <th className='px-2 py-1.5 text-center font-medium text-neutral-700 dark:text-neutral-300'>
-                        Engineer
+                        {tr('Engineer')}
                       </th>
                     </tr>
                   </thead>
@@ -693,8 +698,9 @@ export const VariableConfigModal = ({
               </div>
 
               <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-                Configure individual permissions for each field. Use "Apply Parent Permissions" to set all fields to
-                match the parent variable.
+                {tr(
+                  'Configure individual permissions for each field. Use "Apply Parent Permissions" to set all fields to match the parent variable.',
+                )}
               </p>
             </div>
           )}
@@ -719,7 +725,7 @@ export const VariableConfigModal = ({
             onClick={onClose}
             className='h-[32px] rounded-md border border-neutral-300 bg-white px-4 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'

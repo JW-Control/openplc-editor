@@ -1,4 +1,5 @@
-import { useOpenPLCStore } from '@root/frontend/store'
+import { tr } from '@root/frontend/locales/tr'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { useState } from 'react'
 
 import { ContactNode } from '../../../../../../../_atoms/graphical-editor/ladder/contact'
@@ -14,15 +15,10 @@ type ContactElementProps = {
 }
 
 const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
+  const store = useOpenPLCStoreApi()
   const pouName = useBoundPou()
-  const {
-    ladderFlows,
-    project: {
-      data: { pous },
-    },
-    ladderFlowActions: { updateNode },
-    modalActions: { onOpenChange },
-  } = useOpenPLCStore()
+  const updateNode = useOpenPLCStore((state) => state.ladderFlowActions.updateNode)
+  const onOpenChange = useOpenPLCStore((state) => state.modalActions.onOpenChange)
 
   const [selectedModifier, setSelectedModifier] = useState<string | null>(node?.data.variant as string)
   const contactModifiers = Object.entries(DEFAULT_CONTACT_TYPES).map(([label, contact]) => ({
@@ -42,7 +38,8 @@ const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
   }
 
   const handleConfirmAlteration = () => {
-    const { rung } = getLadderPouVariablesRungNodeAndEdges(pouName, pous, ladderFlows, {
+    const { project, ladderFlows } = store.getState()
+    const { rung } = getLadderPouVariablesRungNodeAndEdges(pouName, project.data.pous, ladderFlows, {
       nodeId: node.id,
     })
     if (!rung) return
@@ -64,7 +61,7 @@ const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => onOpenChange('contact-ladder-element', open)}>
-      {/* <ModalTrigger>Open Contact</ModalTrigger> */}
+      {/* <ModalTrigger>{tr('Open Contact')}</ModalTrigger> */}
       <ModalContent
         onEscapeKeyDown={(event) => {
           event.preventDefault()
@@ -76,10 +73,12 @@ const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
         }}
         className='h-[400px] w-[468px] select-none flex-col justify-between px-8 py-4'
       >
-        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>Edit Contact Values</ModalTitle>
+        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>
+          {tr('Edit Contact Values')}
+        </ModalTitle>
         <div className='flex h-[260px] w-full gap-10'>
           <div className='relative h-full w-full text-base font-medium text-neutral-950'>
-            <span className='dark:text-neutral-300'>Modifier</span>
+            <span className='dark:text-neutral-300'>{tr('Modifier')}</span>
             <ul className='mt-4 flex flex-col gap-3 dark:text-neutral-300'>
               {contactModifiers.map((modifier, index) => (
                 <li
@@ -104,7 +103,7 @@ const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
           </div>
           <div className='flex h-full w-full flex-col gap-4'>
             <label htmlFor='block-preview' className='text-base font-medium text-neutral-950 dark:text-neutral-300'>
-              Preview
+              {tr('Preview')}
             </label>
             <div className='flex h-full w-full items-center justify-center rounded-lg border-[2px] border-brand-dark dark:border-neutral-850 dark:bg-neutral-900'>
               <div className='scale-150'>{selectedModifier && getModifierContact(selectedModifier)}</div>
@@ -116,14 +115,14 @@ const ContactElement = ({ isOpen, onClose, node }: ContactElementProps) => {
             className='h-full w-full items-center rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 hover:bg-neutral-300 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             onClick={handleCloseModal}
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             className='h-full w-full items-center rounded-lg bg-brand text-center font-medium text-white enabled:hover:bg-brand-medium-dark disabled:cursor-not-allowed disabled:opacity-50'
             disabled={!selectedModifier || selectedModifier === node?.data.variant}
             onClick={handleConfirmAlteration}
           >
-            Confirm
+            {tr('Confirm')}
           </button>
         </div>
       </ModalContent>

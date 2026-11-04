@@ -1,4 +1,5 @@
-import { ChangeEvent, ComponentPropsWithoutRef, useEffect, useState } from 'react'
+import { tr } from '@root/frontend/locales/tr'
+import { ChangeEvent, ComponentPropsWithoutRef, useEffect, useRef, useState } from 'react'
 
 import { baseTypeEnum } from '../../../../../middleware/shared/ports/plc-schemas'
 import type { PLCDataType } from '../../../../../middleware/shared/ports/types'
@@ -30,6 +31,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
       data: { dataTypes },
     },
     libraries: sliceLibraries,
+    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
   } = useOpenPLCStore()
 
   const { captureAndPush } = usePouSnapshot()
@@ -72,7 +74,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
   const ROWS_NOT_SELECTED = -1
 
   const [arrayTable, setArrayTable] = useState<{ selectedRow: number }>({ selectedRow: ROWS_NOT_SELECTED })
-  const [initialValueData, setInitialValueData] = useState<string>('')
+  const [initialValueData, setInitialValueData] = useState<string>(data.initialValue || '')
   const [baseType, setBaseType] = useState<string>(data.baseType.value)
 
   const [tableData, setTableData] = useState<PLCArrayDatatype['dimensions']>([])
@@ -81,10 +83,21 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
     setTableData(data.dimensions)
   }, [data.dimensions])
 
+  // One history entry per typing burst: armed on the first keystroke,
+  // rearmed on blur or when the store value changes under us (undo/redo).
+  const initialValueCaptured = useRef(false)
+  // `data` lags one render behind the store (the parent copies it via effect),
+  // so compare against our own last write to spot genuinely external changes.
+  const lastWrittenInitialValue = useRef(data.initialValue || '')
+
   useEffect(() => {
-    setInitialValueData(data.initialValue || '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    const storeValue = data.initialValue || ''
+    if (storeValue !== lastWrittenInitialValue.current) {
+      setInitialValueData(storeValue)
+      lastWrittenInitialValue.current = storeValue
+      initialValueCaptured.current = false
+    }
+  }, [data.initialValue])
 
   useEffect(() => {
     setBaseType(data.baseType.value)
@@ -92,97 +105,90 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
 
   const handleInitialValueChange = (e: ChangeEvent<HTMLInputElement>) => {
     setInitialValueData(e.target.value)
+    lastWrittenInitialValue.current = e.target.value
+    if (!initialValueCaptured.current) {
+      captureAndPush(editor.meta.name)
+      initialValueCaptured.current = true
+    }
     const updatedData = { ...data }
     updatedData.initialValue = e.target.value
     updateDatatype(data.name, updatedData as PLCArrayDatatype)
+    handleFileAndWorkspaceSavedState(editor.meta.name)
   }
 
   const handleSelect = (definition: string, value: string) => {
     setBaseType(value)
+    captureAndPush(editor.meta.name)
     updateDatatype(data.name, {
       ...data,
       baseType: { value, definition },
     } as PLCArrayDatatype)
+    handleFileAndWorkspaceSavedState(editor.meta.name)
   }
 
   // `updateDatatype` is a full replace — never pass a partial object,
   // or the rest of the datatype (`name`, `derivation`, `baseType`, …)
   // gets stripped and downstream selectors lose the entry.
   const writeDimensions = (newRows: PLCArrayDatatype['dimensions']) => {
-    updateDatatype(data.name, { ...data, dimensions: newRows })
+    const current = dataTypes.find((dt) => dt.name === data.name)
+    if (!current || current.derivation !== 'array') return
+    updateDatatype(data.name, { ...current, dimensions: newRows })
+    handleFileAndWorkspaceSavedState(editor.meta.name)
   }
 
+  // newRows is computed before any setState call — a store write nested inside setTableData's own updater risks a nested-update loop.
   const addNewRow = () => {
-    setTableData((prevRows) => {
-      const isFirst = prevRows.length === 0
-      const newRows = [...prevRows, { dimension: '' }]
+    captureAndPush(editor.meta.name)
 
-      if (isFirst) {
-        captureAndPush(editor.meta.name)
-      }
-
-      setArrayTable({ selectedRow: newRows.length - 1 })
-      writeDimensions(newRows)
-      return newRows
-    })
+    const newRows = [...tableData, { dimension: '' }]
+    setTableData(newRows)
+    setArrayTable({ selectedRow: newRows.length - 1 })
+    writeDimensions(newRows)
   }
 
   const removeRow = () => {
+    if (arrayTable.selectedRow < 0 || arrayTable.selectedRow >= tableData.length) return
     captureAndPush(editor.meta.name)
 
-    setTableData((prevRows) => {
-      if (arrayTable.selectedRow !== null) {
-        const newRows = prevRows.filter((_, index) => index !== arrayTable.selectedRow)
+    const newRows = tableData.filter((_, index) => index !== arrayTable.selectedRow)
+    const newFocusIndex = arrayTable.selectedRow === newRows.length ? newRows.length - 1 : arrayTable.selectedRow
 
-        const newFocusIndex = arrayTable.selectedRow === newRows.length ? newRows.length - 1 : arrayTable.selectedRow
-        setArrayTable({ selectedRow: newFocusIndex })
-
-        writeDimensions(newRows.map((row) => ({ dimension: row?.dimension })))
-        prevRows = newRows
-      }
-      return prevRows
-    })
+    setTableData(newRows)
+    setArrayTable({ selectedRow: newFocusIndex })
+    writeDimensions(newRows.map((row) => ({ dimension: row?.dimension })))
   }
 
   const moveRowUp = () => {
+    if (arrayTable.selectedRow <= 0 || arrayTable.selectedRow >= tableData.length) return
     captureAndPush(editor.meta.name)
 
-    setTableData((prevRows) => {
-      if (arrayTable.selectedRow !== null && arrayTable.selectedRow > 0) {
-        const newRows = [...prevRows]
-        const temp = newRows[arrayTable.selectedRow]
-        newRows[arrayTable.selectedRow] = newRows[arrayTable.selectedRow - 1]
-        newRows[arrayTable.selectedRow - 1] = temp
+    const newRows = [...tableData]
+    const temp = newRows[arrayTable.selectedRow]
+    newRows[arrayTable.selectedRow] = newRows[arrayTable.selectedRow - 1]
+    newRows[arrayTable.selectedRow - 1] = temp
+    const newFocusIndex = arrayTable.selectedRow - 1
 
-        const newFocusIndex = arrayTable.selectedRow - 1
-        setArrayTable({ selectedRow: newFocusIndex })
-
-        writeDimensions(newRows.map((row) => ({ dimension: row?.dimension })))
-        prevRows = newRows
-      }
-      return prevRows
-    })
+    setTableData(newRows)
+    setArrayTable({ selectedRow: newFocusIndex })
+    writeDimensions(newRows.map((row) => ({ dimension: row?.dimension })))
   }
 
   const moveRowDown = () => {
+    if (arrayTable.selectedRow <= ROWS_NOT_SELECTED || arrayTable.selectedRow >= tableData.length - 1) return
     captureAndPush(editor.meta.name)
 
-    setTableData((prevRows) => {
-      if (arrayTable.selectedRow !== null && arrayTable.selectedRow < prevRows.length - 1) {
-        const newRows = [...prevRows]
-        const temp = newRows[arrayTable.selectedRow]
-        newRows[arrayTable.selectedRow] = newRows[arrayTable.selectedRow + 1]
-        newRows[arrayTable.selectedRow + 1] = temp
+    const newRows = [...tableData]
+    const temp = newRows[arrayTable.selectedRow]
+    newRows[arrayTable.selectedRow] = newRows[arrayTable.selectedRow + 1]
+    newRows[arrayTable.selectedRow + 1] = temp
+    const newFocusIndex = arrayTable.selectedRow + 1
 
-        const newFocusIndex = arrayTable.selectedRow + 1
-        setArrayTable({ selectedRow: newFocusIndex })
-
-        writeDimensions(newRows.map((row) => ({ dimension: row?.dimension })))
-        prevRows = newRows
-      }
-      return prevRows
-    })
+    setTableData(newRows)
+    setArrayTable({ selectedRow: newFocusIndex })
+    writeDimensions(newRows.map((row) => ({ dimension: row?.dimension })))
   }
+
+  const hasValidRowSelection = arrayTable.selectedRow >= 0 && arrayTable.selectedRow < tableData.length
 
   return (
     <div aria-label='Array data type container' className='flex h-full w-full flex-col gap-4 bg-transparent' {...rest}>
@@ -190,7 +196,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
         <div aria-label='Array base type container' className='flex w-1/2 flex-col gap-3'>
           <div aria-label='Array base type content' className='flex h-fit w-full items-center justify-between'>
             <label className='cursor-default select-none pr-6 font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-              Base Type
+              {tr('Base Type')}
             </label>
 
             <TypeDropdownSelector
@@ -207,10 +213,13 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
             className='flex h-fit w-full items-center justify-end'
           >
             <label className='cursor-default select-none pr-6 font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100 '>
-              Initial Value:
+              {tr('Initial Value:')}
             </label>
             <InputWithRef
               onChange={handleInitialValueChange}
+              onBlur={() => {
+                initialValueCaptured.current = false
+              }}
               value={initialValueData}
               className='flex h-7 w-full max-w-44 items-center justify-between gap-2 rounded-lg border border-neutral-400 bg-white px-3 py-2 font-caption text-xs font-normal text-neutral-950 focus-within:border-brand focus:border-brand focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
             />
@@ -221,7 +230,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
       <div className='flex w-[600px] flex-col gap-3'>
         <div aria-label='Array data type table actions container' className='flex h-fit items-center justify-between'>
           <p className='cursor-default select-none font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-            Dimensions
+            {tr('Dimensions')}
           </p>
           <div
             aria-label='Data type table actions buttons container'
@@ -238,19 +247,19 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
                 {
                   ariaLabel: 'Remove table row button',
                   onClick: removeRow,
+                  disabled: !hasValidRowSelection,
                   icon: <MinusIcon className='stroke-[#0464FB]' />,
                 },
                 {
                   ariaLabel: 'Move table row up button',
                   onClick: moveRowUp,
-                  disabled: arrayTable.selectedRow === ROWS_NOT_SELECTED || arrayTable.selectedRow === 0,
+                  disabled: !hasValidRowSelection || arrayTable.selectedRow === 0,
                   icon: <StickArrowIcon direction='up' className='stroke-[#0464FB]' />,
                 },
                 {
                   ariaLabel: 'Move table row down button',
                   onClick: moveRowDown,
-                  disabled:
-                    arrayTable.selectedRow === ROWS_NOT_SELECTED || arrayTable.selectedRow === tableData.length - 1,
+                  disabled: !hasValidRowSelection || arrayTable.selectedRow === tableData.length - 1,
                   icon: <StickArrowIcon direction='down' className='stroke-[#0464FB]' />,
                 },
               ]}

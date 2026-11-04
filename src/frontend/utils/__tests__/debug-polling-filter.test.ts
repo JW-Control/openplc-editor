@@ -202,6 +202,29 @@ describe('buildActiveIndexSet', () => {
       const { activeIndexes } = buildActiveIndexSet(state, allLeaves, null)
       expect(activeIndexes).toEqual([])
     })
+
+    it('polls a program VAR_EXTERNAL watch by its canonical global key', () => {
+      const pou = makePou('Main', 'program', [makeVariable('SHARED', 'external', true)])
+      // The debug tree exposes the shared global under Config0:SHARED.
+      const allLeaves = new Map([[42, [{ compositeKey: 'Config0:SHARED', type: 'INT' }]]])
+      const state = makeState({ pous: [pou] })
+
+      const { activeIndexes } = buildActiveIndexSet(state, allLeaves, null)
+      expect(activeIndexes).toEqual([42])
+    })
+
+    it('polls an FB VAR_EXTERNAL watch even with no instance selected (globals are instance-independent)', () => {
+      const fbPou = makePou('MyFB', 'function-block', [
+        makeVariable('SHARED', 'external', true),
+        makeVariable('OUT', 'output', true),
+      ])
+      const allLeaves = new Map([[7, [{ compositeKey: 'Config0:SHARED', type: 'INT' }]]])
+      const state = makeState({ pous: [fbPou] })
+
+      // OUT (local) is skipped for want of an instance; the external still polls.
+      const { activeIndexes } = buildActiveIndexSet(state, allLeaves, null)
+      expect(activeIndexes).toEqual([7])
+    })
   })
 
   describe('forced variables', () => {
@@ -755,6 +778,40 @@ describe('buildActiveIndexSet', () => {
       const { activeIndexes } = buildActiveIndexSet(state, allLeaves, null)
       expect(activeIndexes).toContain(1)
       expect(activeIndexes).toContain(2)
+    })
+
+    it('polls the edge trigger output of rising and falling contacts, not only their variable', () => {
+      const pou = makePou('Main', 'program', [], 'ld')
+      const indexMap = new Map([
+        ['Main:LED', 1],
+        ['Main:_TMP_R_TRIG42.Q', 2],
+        ['Main:_TMP_F_TRIG43.Q', 3],
+        ['Main:_TMP_R_TRIG44.Q', 4],
+      ])
+      const ldFlow = {
+        name: 'Main',
+        rungs: [
+          {
+            nodes: [
+              { type: 'contact', data: { variant: 'risingEdge', numericId: '42', variable: { name: 'LED' } } },
+              { type: 'contact', data: { variant: 'fallingEdge', numericId: '43', variable: { name: 'LED' } } },
+              { type: 'coil', data: { variant: 'risingEdge', numericId: '44', variable: { name: 'LED' } } },
+            ],
+          },
+        ],
+      }
+      const state = makeState({
+        pous: [pou],
+        editorName: 'Main',
+        editorLanguage: 'ld',
+        debugVariableIndexes: indexMap,
+        ladderFlows: [ldFlow],
+      })
+      const allLeaves = new Map<number, { compositeKey: string; type: string }[]>()
+
+      const { activeIndexes } = buildActiveIndexSet(state, allLeaves, null)
+      expect(activeIndexes).toEqual(expect.arrayContaining([1, 2, 3]))
+      expect(activeIndexes).not.toContain(4)
     })
 
     it('includes LD variable-type nodes', () => {

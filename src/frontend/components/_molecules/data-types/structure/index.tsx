@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import type { PLCStructureVariable } from '../../../../../middleware/shared/ports/types'
@@ -11,30 +12,40 @@ import TableActions from '../../../_atoms/table-actions'
 import { toast } from '../../../_features/[app]/toast/use-toast'
 import { StructureTable } from './table'
 
-const StructureDataType = () => {
+type StructureDataTypeProps = {
+  dataTypeName: string
+}
+
+const StructureDataType = ({ dataTypeName }: StructureDataTypeProps) => {
   const ROWS_NOT_SELECTED = -1
   const {
     editor,
+    editors,
 
     project: {
       data: { dataTypes },
     },
-    editorActions: { updateModelStructure },
+    editorActions: { updateModelStructureForName },
     projectActions: { updateDatatype, rearrangeStructureVariables },
+    sharedWorkspaceActions: { handleFileAndWorkspaceSavedState },
   } = useOpenPLCStore()
 
   const { captureAndPush } = usePouSnapshot()
 
   const [tableData, setTableData] = useState<PLCStructureVariable[]>([])
 
-  const [editorStructure, setEditorStructure] = useState<StructureTableType>({
-    selectedRow: ROWS_NOT_SELECTED.toString(),
-    description: '',
-  })
+  // Every open data type is mounted at once, so the view state comes from
+  // this type's own model — never from the active `editor`.
+  const model = editor.meta.name === dataTypeName ? editor : editors.find((e) => e.meta.name === dataTypeName)
+  const modelStructure = model?.type === 'plc-datatype' ? model.structure : undefined
+  const editorStructure: Extract<StructureTableType, { display: 'table' }> =
+    modelStructure?.display === 'table'
+      ? modelStructure
+      : { display: 'table', selectedRow: ROWS_NOT_SELECTED.toString(), description: '' }
 
   useEffect(() => {
     const foundDataType = dataTypes.find(
-      (dataType) => dataType?.derivation === 'structure' && dataType.name === editor.meta.name,
+      (dataType) => dataType?.derivation === 'structure' && dataType.name === dataTypeName,
     )
 
     if (foundDataType && 'variable' in foundDataType) {
@@ -42,18 +53,10 @@ const StructureDataType = () => {
     } else {
       return
     }
-  }, [editor, dataTypes])
-
-  useEffect(() => {
-    const foundDataType = dataTypes.find((dataType) => dataType?.derivation === 'structure')
-    if (editor.type === 'plc-datatype' && foundDataType && 'variable' in foundDataType) {
-      const { description, selectedRow } = editor.structure
-      setEditorStructure({ description: description, selectedRow: selectedRow })
-    }
-  }, [editor])
+  }, [dataTypeName, dataTypes])
 
   const handleRowClick = (row: HTMLTableRowElement) => {
-    updateModelStructure({
+    updateModelStructureForName(dataTypeName, {
       selectedRow: parseInt(row.id),
     })
   }
@@ -62,13 +65,14 @@ const StructureDataType = () => {
   // the store and spread it before writing so we don't strip any
   // field the structure schema may carry beyond `variable`.
   const writeVariables = (newVariables: PLCStructureVariable[]) => {
-    const current = dataTypes.find((dt) => dt.name === editor.meta.name)
+    const current = dataTypes.find((dt) => dt.name === dataTypeName)
     if (!current || current.derivation !== 'structure') return
-    updateDatatype(editor.meta.name, { ...current, variable: newVariables })
+    updateDatatype(dataTypeName, { ...current, variable: newVariables })
+    handleFileAndWorkspaceSavedState(dataTypeName)
   }
 
   const handleCreateStructureVariable = () => {
-    captureAndPush(editor.meta.name)
+    captureAndPush(dataTypeName)
 
     const structureVariables = tableData.filter((variable) => variable.name || variable.type)
     const selectedRow = parseInt(editorStructure.selectedRow)
@@ -94,8 +98,8 @@ const StructureDataType = () => {
 
     if (structureVariables.some((variable) => variable.name === '')) {
       toast({
-        title: 'Invalid name',
-        description: 'Name cannot be empty',
+        title: tr('Invalid name'),
+        description: tr('Name cannot be empty'),
         variant: 'fail',
       })
       return
@@ -115,7 +119,7 @@ const StructureDataType = () => {
           initialValue: { simpleValue: { value: '' } },
         },
       ])
-      updateModelStructure({
+      updateModelStructureForName(dataTypeName, {
         selectedRow: structureVariables.length,
       })
       return
@@ -129,7 +133,7 @@ const StructureDataType = () => {
 
     if (selectedRow === ROWS_NOT_SELECTED) {
       writeVariables([...structureVariables, newVariable])
-      updateModelStructure({
+      updateModelStructureForName(dataTypeName, {
         selectedRow: structureVariables.length,
       })
     } else {
@@ -138,14 +142,14 @@ const StructureDataType = () => {
         newVariable,
         ...structureVariables.slice(selectedRow + 1),
       ])
-      updateModelStructure({
+      updateModelStructureForName(dataTypeName, {
         selectedRow: selectedRow + 1,
       })
     }
   }
 
   const handleDeleteStructureVariable = () => {
-    captureAndPush(editor.meta.name)
+    captureAndPush(dataTypeName)
 
     const structureVariables = tableData.filter((variable) => variable.name || variable.type)
     const selectedRow = parseInt(editorStructure.selectedRow)
@@ -165,20 +169,21 @@ const StructureDataType = () => {
       newSelectedRow = ROWS_NOT_SELECTED
     }
 
-    updateModelStructure({
+    updateModelStructureForName(dataTypeName, {
       selectedRow: newSelectedRow,
     })
   }
 
   const handleRearrangeStructureVariables = (index: number, row?: number) => {
-    captureAndPush(editor.meta.name)
+    captureAndPush(dataTypeName)
 
     rearrangeStructureVariables({
-      associatedDataType: editor.meta.name,
+      associatedDataType: dataTypeName,
       rowId: row ?? parseInt(editorStructure.selectedRow),
       newIndex: (row ?? parseInt(editorStructure.selectedRow)) + index,
     })
-    updateModelStructure({
+    handleFileAndWorkspaceSavedState(dataTypeName)
+    updateModelStructureForName(dataTypeName, {
       selectedRow: parseInt(editorStructure.selectedRow) + index,
     })
   }
@@ -190,7 +195,7 @@ const StructureDataType = () => {
     >
       <div aria-label='Data type content actions container' className='flex h-8 w-full'>
         <div aria-label='Variables editor table actions container' className='flex h-full w-full justify-between'>
-          <span className='select-none'>Structure</span>
+          <span className='select-none'>{tr('Structure')}</span>
           <div
             aria-label='Variables editor table actions container'
             className='flex h-full w-28 items-center justify-evenly *:rounded-md *:p-1'
@@ -234,6 +239,7 @@ const StructureDataType = () => {
       </div>
       <div className='flex h-full w-full flex-1 flex-col overflow-hidden'>
         <StructureTable
+          dataTypeName={dataTypeName}
           tableData={tableData}
           selectedRow={parseInt(editorStructure.selectedRow)}
           handleRowClick={handleRowClick}

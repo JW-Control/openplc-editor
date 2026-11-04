@@ -9,6 +9,7 @@ import {
   PLCServerSchema,
 } from '@root/backend/shared/types/PLC/open-plc'
 import { getDefaultSchemaValues } from '@root/backend/shared/utils/default-zod-schema-values'
+import { migrateLegacyBaremetalModbus } from '@root/backend/shared/utils/migrate-legacy-baremetal-modbus'
 import {
   migrateProjectToNameTypeSystem,
   needsMigration,
@@ -604,6 +605,38 @@ export async function readProjectFiles(basePath: string): Promise<IProjectServic
     devicePinMapping: projectFiles['devices/pin-mapping.json'] as DevicePin[],
     servers: serverFiles,
     remoteDevices: remoteDeviceFiles,
+  }
+
+  // JWPLC Edition: a pre-4.3 baremetal Modbus setup becomes a project server.
+  if (returnData.deviceConfiguration) {
+    const modbusMigration = migrateLegacyBaremetalModbus(returnData.deviceConfiguration, serverFiles)
+    if (modbusMigration.migrated) {
+      returnData.deviceConfiguration = modbusMigration.deviceConfiguration
+      returnData.servers = modbusMigration.servers
+      try {
+        const configurationPath = join(basePath, 'devices', 'configuration.json')
+        const backupPath = join(basePath, 'devices', 'configuration.pre-4.3.backup.json')
+        if (!fileOrDirectoryExists(backupPath)) {
+          await promises.writeFile(
+            backupPath,
+            JSON.stringify(projectFiles['devices/configuration.json'], null, 2),
+            'utf-8',
+          )
+        }
+        await promises.writeFile(configurationPath, JSON.stringify(returnData.deviceConfiguration, null, 2), 'utf-8')
+        if (modbusMigration.createdServer) {
+          await promises.mkdir(serversDir, { recursive: true })
+          await promises.writeFile(
+            join(serversDir, `${modbusMigration.createdServer.name}.json`),
+            JSON.stringify(modbusMigration.createdServer, null, 2),
+            'utf-8',
+          )
+        }
+      } catch (error) {
+        // The project still opens migrated in memory; the next save writes it.
+        console.error('Failed to save the migrated Modbus configuration:', error)
+      }
+    }
   }
 
   // Check if project needs migration from ID-based to name+type-based system

@@ -1,5 +1,4 @@
 import type { DevicePin, PinType } from '../../../../middleware/shared/ports/types'
-
 import { createNewAddress, getHighestPinAddress } from './validation/pins'
 
 type BoardPinDefaults = {

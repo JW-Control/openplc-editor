@@ -7,6 +7,7 @@
  * Shared by the history page, the merge page, and the source-control diff tab.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import { Background, ReactFlow, ReactFlowProvider } from '@xyflow/react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -90,11 +91,11 @@ function VariableDiffSection({ entries, collapsible = false }: { entries: VarDif
           className='flex w-full items-center gap-1 bg-neutral-100/50 px-2 py-0.5 text-[9px] text-neutral-400 transition-colors hover:bg-neutral-200/50 dark:bg-neutral-800/50 dark:text-neutral-500 dark:hover:bg-neutral-700/50'
         >
           {open ? <ChevronDown className='h-3 w-3' /> : <ChevronRight className='h-3 w-3' />}
-          Variables ({entries.length})
+          {tr('Variables ({{length}})', { length: entries.length })}
         </button>
       ) : (
         <div className='bg-neutral-100/50 px-2 py-0.5 text-[9px] text-neutral-400 dark:bg-neutral-800/50 dark:text-neutral-500'>
-          Variables
+          {tr('Variables')}
         </div>
       )}
       {open && (
@@ -262,7 +263,9 @@ export function GraphicalDiffViewer({
   if (!diffResult) {
     return (
       <div className='flex h-full items-center justify-center'>
-        <p className='text-sm text-neutral-400 dark:text-neutral-500'>Could not parse graphical data for diff view</p>
+        <p className='text-sm text-neutral-400 dark:text-neutral-500'>
+          {tr('Could not parse graphical data for diff view')}
+        </p>
       </div>
     )
   }
@@ -292,7 +295,7 @@ export function GraphicalDiffViewer({
 
         {changedIndexes.length === 0 && variableDiff.length === 0 && (
           <div className='flex items-center justify-center py-8'>
-            <p className='text-xs text-neutral-400 dark:text-neutral-500'>No graphical changes detected</p>
+            <p className='text-xs text-neutral-400 dark:text-neutral-500'>{tr('No graphical changes detected')}</p>
           </div>
         )}
 
@@ -326,7 +329,7 @@ export function GraphicalDiffViewer({
                       </>
                     ) : (
                       <div className='flex items-center justify-center bg-green-500/5 py-4'>
-                        <p className='text-[10px] text-green-500'>New rung</p>
+                        <p className='text-[10px] text-green-500'>{tr('New rung')}</p>
                       </div>
                     ))}
                   {current ? (
@@ -348,7 +351,7 @@ export function GraphicalDiffViewer({
                     </>
                   ) : (
                     <div className='flex items-center justify-center bg-red-500/5 py-4'>
-                      <p className='text-[10px] text-red-500'>Rung removed</p>
+                      <p className='text-[10px] text-red-500'>{tr('Rung removed')}</p>
                     </div>
                   )}
                 </>
@@ -367,7 +370,7 @@ export function GraphicalDiffViewer({
                       />
                     ) : (
                       <div className='flex min-w-0 flex-1 items-center justify-center bg-green-500/5'>
-                        <p className='text-[10px] text-green-500'>New diagram</p>
+                        <p className='text-[10px] text-green-500'>{tr('New diagram')}</p>
                       </div>
                     ))}
                   {showOriginalSide && <div className='w-px shrink-0 bg-neutral-200 dark:bg-neutral-700' />}
@@ -383,7 +386,7 @@ export function GraphicalDiffViewer({
                     />
                   ) : (
                     <div className='flex min-w-0 flex-1 items-center justify-center bg-red-500/5'>
-                      <p className='text-[10px] text-red-500'>Diagram removed</p>
+                      <p className='text-[10px] text-red-500'>{tr('Diagram removed')}</p>
                     </div>
                   )}
                 </div>

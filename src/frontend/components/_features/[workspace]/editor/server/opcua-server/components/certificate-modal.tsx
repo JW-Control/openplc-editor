@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { OpcUaTrustedCertificate } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -164,31 +165,33 @@ export const CertificateModal = ({ isOpen, onClose, onSave, existingCertificateI
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className='h-auto max-h-[90vh] w-[550px]' onClose={onClose}>
+      <ModalContent className='max-h-[90vh] w-[550px]' onClose={onClose}>
         <ModalHeader>
-          <ModalTitle>Add Trusted Client Certificate</ModalTitle>
+          <ModalTitle>{tr('Add Trusted Client Certificate')}</ModalTitle>
         </ModalHeader>
 
         <div className='flex flex-1 flex-col gap-4 overflow-y-auto'>
           {/* Certificate ID */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Certificate ID</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>{tr('Certificate ID')}</Label>
             <InputWithRef
               type='text'
               value={certificateId}
               onChange={(e) => setCertificateId(e.target.value)}
-              placeholder='e.g., engineer_client'
+              placeholder={tr('e.g., engineer_client')}
               maxLength={64}
               className={inputStyles}
             />
             <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-              Unique identifier used to reference this certificate in user configuration
+              {tr('Unique identifier used to reference this certificate in user configuration')}
             </span>
           </div>
 
           {/* PEM Content */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Certificate (PEM format)</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>
+              {tr('Certificate (PEM format)')}
+            </Label>
             <textarea
               value={pemContent}
               onChange={(e) => setPemContent(e.target.value)}
@@ -203,7 +206,7 @@ MIIEpDCCAowCCQC7...
               onClick={handleBrowseFile}
               className='h-[32px] w-fit rounded-md border border-neutral-300 bg-white px-4 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
             >
-              Browse File...
+              {tr('Browse File...')}
             </button>
           </div>
 
@@ -211,14 +214,14 @@ MIIEpDCCAowCCQC7...
           {certificateInfo && (
             <div className='flex flex-col gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                Certificate Details
+                {tr('Certificate Details')}
               </h4>
               <div className='space-y-1 text-xs text-neutral-600 dark:text-neutral-400'>
                 <p>
-                  <span className='font-medium'>Fingerprint:</span> {certificateInfo.fingerprint}
+                  <span className='font-medium'>{tr('Fingerprint:')}</span> {certificateInfo.fingerprint}
                 </p>
                 <p className='text-neutral-500'>
-                  Note: Full certificate details (subject, validity dates) will be parsed by the runtime.
+                  {tr('Note: Full certificate details (subject, validity dates) will be parsed by the runtime.')}
                 </p>
               </div>
             </div>
@@ -244,7 +247,7 @@ MIIEpDCCAowCCQC7...
             onClick={onClose}
             className='h-[32px] rounded-md border border-neutral-300 bg-white px-4 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'
@@ -255,7 +258,7 @@ MIIEpDCCAowCCQC7...
               !isValid && 'cursor-not-allowed opacity-50',
             )}
           >
-            Add Certificate
+            {tr('Add Certificate')}
           </button>
         </ModalFooter>
       </ModalContent>

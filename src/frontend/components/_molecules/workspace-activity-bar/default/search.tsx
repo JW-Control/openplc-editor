@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { SearchIcon } from '../../../../assets/icons/interface/Search'
 import { useIsNinetiesTheme } from '../../../../hooks/use-nineties-theme'
 import { useOpenPLCStore } from '../../../../store'
@@ -33,7 +35,9 @@ export const SearchButton = () => {
         <ActivityBarButton aria-label='Search'>{isNineties ? <RetroSearch /> : <SearchIcon />}</ActivityBarButton>
       </ModalTrigger>
       <ModalContent className='h-[424px] w-[668px] select-none flex-col justify-between px-8 py-4'>
-        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>Search in Project</ModalTitle>
+        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>
+          {tr('Search in Project')}
+        </ModalTitle>
         <SearchInProject onClose={handleModalClose} />
       </ModalContent>
     </Modal>

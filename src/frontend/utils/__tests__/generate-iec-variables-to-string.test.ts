@@ -1,5 +1,10 @@
 import type { PLCVariable } from '../../../middleware/shared/ports/types'
-import { generateIecVariablesToString, getIecVariableLineMap } from '../generate-iec-variables-to-string'
+import { parseIecStringToVariables } from '../generate-iec-string-to-variables'
+import {
+  generateIecVariablesToString,
+  getIecVariableLineMap,
+  getIecVariableLineMapFromText,
+} from '../generate-iec-variables-to-string'
 
 const makeVariable = (overrides: Partial<PLCVariable> & Pick<PLCVariable, 'name'>): PLCVariable => ({
   name: overrides.name,
@@ -11,7 +16,7 @@ const makeVariable = (overrides: Partial<PLCVariable> & Pick<PLCVariable, 'name'
   debug: overrides.debug ?? false,
 })
 
-// Format matches xml2st's PouProgramGenerator output:
+// Format matches the legacy PouProgramGenerator output:
 //   * VAR / END_VAR keywords are indented by 2 spaces
 //   * variable declaration lines by 4 spaces
 //   * consecutive var-class blocks have no blank line between them
@@ -150,8 +155,8 @@ describe('generateIecVariablesToString', () => {
     expect(result.split('VAR_INPUT').length).toBe(2) // one occurrence = 2 parts
   })
 
-  it('emits consecutive var-class blocks with no blank line between them (xml2st parity)', () => {
-    // xml2st walks `self.Interface` and emits each var-class block
+  it('emits consecutive var-class blocks with no blank line between them (legacy parity)', () => {
+    // the legacy generator walks `self.Interface` and emits each var-class block
     // back-to-back, immediately closing one END_VAR before opening the
     // next header.  The vars-text editor needs to mirror that exactly
     // so a manual edit of the text view doesn't get re-formatted into
@@ -211,5 +216,65 @@ describe('getIecVariableLineMap', () => {
   it('uses column 5 (4-space indent + 1-indexed Monaco) for every variable name', () => {
     const map = getIecVariableLineMap([makeVariable({ name: 'OnlyOne', class: 'input' })])
     expect(map.get('OnlyOne')?.column).toBe(5)
+  })
+
+  // The variables table and the code view are two views of the same data, so
+  // text -> variables -> text has to be byte-stable. Multi-dimensional array
+  // types are the interesting case: the parser splits the bounds into
+  // `dimensions` but keeps the full type string in `type.value`, which is what
+  // this serializer emits.
+  it('round-trips inline multi-dimensional array declarations unchanged', () => {
+    const input = [
+      '  VAR',
+      '    m : ARRAY[0..1, 0..2] OF INT := [[1,2,3],[4,5,6]];',
+      '    c : ARRAY[0..1, 0..1, 0..1] OF INT := [1,2,3,4,5,6,7,8];',
+      '    g : ARRAY[0..1, 0..1] OF Point;',
+      '  END_VAR',
+    ].join('\n')
+
+    const vars = parseIecStringToVariables(input)
+    expect(vars).toHaveLength(3)
+
+    const out = generateIecVariablesToString(vars)
+    expect(out).toBe(input)
+    expect(parseIecStringToVariables(out)).toEqual(vars)
+  })
+})
+
+describe('getIecVariableLineMapFromText', () => {
+  // The code view shows the user's own text now (DOPE-650), so a map computed
+  // from the canonical serialisation is off by whatever the user's formatting
+  // adds — and Go-to-Definition in the Python editor lands on the wrong line.
+  const variables = [
+    makeVariable({ name: 'speed' }),
+    makeVariable({ name: 'enabled', type: { definition: 'base-type', value: 'BOOL' } }),
+  ]
+
+  it('points at the declaration as the user wrote it, comments and all', () => {
+    const text = [
+      '  VAR',
+      '    (* how fast the conveyor runs *)',
+      '',
+      '    speed : INT;',
+      '        enabled : BOOL;',
+      '  END_VAR',
+    ].join('\n')
+
+    const map = getIecVariableLineMapFromText(text, variables)
+    expect(map.get('speed')).toEqual({ line: 4, column: 5 })
+    expect(map.get('enabled')).toEqual({ line: 5, column: 9 })
+  })
+
+  it('does not follow the model order when the text orders them differently', () => {
+    const text = ['  VAR', '    enabled : BOOL;', '    speed : INT;', '  END_VAR'].join('\n')
+
+    const map = getIecVariableLineMapFromText(text, variables)
+    expect(map.get('enabled')?.line).toBe(2)
+    expect(map.get('speed')?.line).toBe(3)
+  })
+
+  it('falls back to the canonical walk when the text does not parse', () => {
+    const map = getIecVariableLineMapFromText('  VAR\n    speed : ;\n  END_VAR', variables)
+    expect(map).toEqual(getIecVariableLineMap(variables))
   })
 })

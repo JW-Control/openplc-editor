@@ -1,5 +1,6 @@
 import ViewIcon from '@root/frontend/assets/icons/interface/View'
 import ViewHiddenIcon from '@root/frontend/assets/icons/interface/ViewHidden'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { OpcUaTrustedCertificate, OpcUaUser } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -27,50 +28,16 @@ const inputStyles =
   'h-[30px] w-full rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = [
-  { value: 'viewer', label: 'Viewer', description: 'Read-only access to all variables' },
-  { value: 'operator', label: 'Operator', description: 'Read/Write based on per-variable permission settings' },
-  { value: 'engineer', label: 'Engineer', description: 'Full administrative access' },
+  { value: 'viewer', label: tr('Viewer'), description: tr('Read-only access to all variables') },
+  { value: 'operator', label: tr('Operator'), description: tr('Read/Write based on per-variable permission settings') },
+  { value: 'engineer', label: tr('Engineer'), description: tr('Full administrative access') },
 ]
 
-// PBKDF2 configuration - matches OpenPLC Runtime's expected format
-// Using PBKDF2 instead of bcrypt for cross-platform compatibility (MSYS2/Windows)
-const PBKDF2_ITERATIONS = 600000 // OWASP recommendation for SHA-256
-const PBKDF2_SALT_LENGTH = 16
-const PBKDF2_HASH_LENGTH = 32 // SHA-256 output length
-
-/**
- * Hash a password using PBKDF2-HMAC-SHA256.
- * Format: pbkdf2:sha256:iterations$base64_salt$base64_hash
- * This format is compatible with OpenPLC Runtime on all platforms.
- */
-const hashPassword = async (password: string): Promise<string> => {
-  // Generate random salt
-  const salt = crypto.getRandomValues(new Uint8Array(PBKDF2_SALT_LENGTH))
-
-  // Import password as key material
-  const passwordKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, [
-    'deriveBits',
-  ])
-
-  // Derive hash using PBKDF2
-  const hashBuffer = await crypto.subtle.deriveBits(
-    {
-      name: 'PBKDF2',
-      salt: salt,
-      iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256',
-    },
-    passwordKey,
-    PBKDF2_HASH_LENGTH * 8, // bits
-  )
-
-  // Convert to base64
-  const saltB64 = btoa(String.fromCharCode(...salt))
-  const hashB64 = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)))
-
-  // Return in format expected by OpenPLC Runtime
-  return `pbkdf2:sha256:${PBKDF2_ITERATIONS}$${saltB64}$${hashB64}`
-}
+// No hashing here, deliberately: how a credential is stored is a property of the
+// target device, and this dialog has no idea what the target is. The password is
+// stored as typed and the build derives whatever the selected target declares
+// via `capabilities.opcua.passwordScheme`. See
+// backend/shared/compile/opcua-credentials.ts.
 
 export const UserModal = ({
   isOpen,
@@ -146,12 +113,20 @@ export const UserModal = ({
 
   const passwordError = useMemo<string | null>(() => {
     if (authType !== 'password') return null
-    // Editing path: an empty password means "keep existing" — not an error.
-    if (isEditing && !password) return null
+    // Editing path: an empty password means "keep existing" — but only when
+    // there IS one to keep. Editing a CERTIFICATE user and switching it to
+    // Password left the exemption standing over a user that had no password and
+    // no hash, and that state is not inert: `deriveOpcUaCredential` returns null
+    // for it, `generate-opcua-header` filters the user out on `password_hash`,
+    // and if it was the last password user `OPCUA_ANONYMOUS_ROLE` flips to
+    // engineer — so a blank field silently traded every credential on the server
+    // for anonymous write access.
+    const hasStoredCredential = Boolean(existingUser?.password) || Boolean(existingUser?.passwordHash)
+    if (isEditing && !password && hasStoredCredential) return null
     if (!password) return 'Password is required'
     if (password.length < 4) return 'Password must be at least 4 characters'
     return null
-  }, [authType, password, isEditing])
+  }, [authType, password, isEditing, existingUser])
 
   const certificateError = useMemo<string | null>(() => {
     if (authType !== 'certificate') return null
@@ -185,20 +160,25 @@ export const UserModal = ({
   const handleSave = useCallback(async () => {
     if (!isValid) return
 
-    let passwordHash: string | null = null
+    let plainPassword: string | null = null
+    let legacyHash: string | null = null
 
     if (authType === 'password' && password) {
-      passwordHash = await hashPassword(password)
-    } else if (authType === 'password' && isEditing && existingUser?.passwordHash) {
-      // Keep existing password hash if not changing
-      passwordHash = existingUser.passwordHash
+      plainPassword = password
+    } else if (authType === 'password' && isEditing) {
+      // Editing without retyping the password: carry forward whichever form
+      // the project already holds. A legacy hash stays a legacy hash — it
+      // cannot be turned back into a password for another target's scheme.
+      plainPassword = existingUser?.password ?? null
+      legacyHash = existingUser?.passwordHash ?? null
     }
 
     const user: OpcUaUser = {
       id: existingUser?.id ?? uuidv4(),
       type: authType,
       username: authType === 'password' ? username.trim() : null,
-      passwordHash: authType === 'password' ? passwordHash : null,
+      password: authType === 'password' ? plainPassword : null,
+      passwordHash: authType === 'password' ? legacyHash : null,
       certificateId: authType === 'certificate' ? certificateId : null,
       role,
     }
@@ -209,7 +189,7 @@ export const UserModal = ({
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className='h-auto max-h-[90vh] w-[500px]' onClose={onClose}>
+      <ModalContent className='max-h-[90vh] w-[500px]' onClose={onClose}>
         <ModalHeader>
           <ModalTitle>{isEditing ? 'Edit User' : 'Add User'}</ModalTitle>
         </ModalHeader>
@@ -217,11 +197,13 @@ export const UserModal = ({
         <div className='flex flex-1 flex-col gap-4 overflow-y-auto'>
           {/* Authentication Type */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Authentication Type</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>
+              {tr('Authentication Type')}
+            </Label>
             <Select value={authType} onValueChange={(v) => setAuthType(v as AuthType)}>
               <SelectTrigger
                 withIndicator
-                placeholder='Select type'
+                placeholder={tr('Select type')}
                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
               />
               <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -233,7 +215,7 @@ export const UserModal = ({
                   )}
                 >
                   <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                    Password
+                    {tr('Password')}
                   </span>
                 </SelectItem>
                 <SelectItem
@@ -244,7 +226,7 @@ export const UserModal = ({
                   )}
                 >
                   <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                    Certificate
+                    {tr('Certificate')}
                   </span>
                 </SelectItem>
               </SelectContent>
@@ -255,17 +237,17 @@ export const UserModal = ({
           {authType === 'password' && (
             <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                Password Authentication
+                {tr('Password Authentication')}
               </h4>
 
               {/* Username */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-950 dark:text-white'>Username</Label>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Username')}</Label>
                 <InputWithRef
                   type='text'
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder='e.g., operator1'
+                  placeholder={tr('e.g., operator1')}
                   maxLength={64}
                   className={inputStyles}
                 />
@@ -319,7 +301,7 @@ export const UserModal = ({
 
               {/* Confirm Password */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-950 dark:text-white'>Confirm Password</Label>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Confirm Password')}</Label>
                 <InputWithRef
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
@@ -328,7 +310,9 @@ export const UserModal = ({
                   className={inputStyles}
                 />
                 {passwordsMismatchVisible && (
-                  <span className='font-caption text-cp-xs font-normal text-red-500'>Passwords do not match</span>
+                  <span className='font-caption text-cp-xs font-normal text-red-500'>
+                    {tr('Passwords do not match')}
+                  </span>
                 )}
               </div>
             </div>
@@ -338,20 +322,20 @@ export const UserModal = ({
           {authType === 'certificate' && (
             <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                Certificate Authentication
+                {tr('Certificate Authentication')}
               </h4>
 
               {availableCertificates.length === 0 ? (
                 <p className='text-xs text-neutral-700 dark:text-neutral-300'>
-                  No trusted certificates available. Add certificates in the Certificates tab first.
+                  {tr('No trusted certificates available. Add certificates in the Certificates tab first.')}
                 </p>
               ) : (
                 <div className='flex flex-col gap-2'>
-                  <Label className='text-xs text-neutral-950 dark:text-white'>Client Certificate</Label>
+                  <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Client Certificate')}</Label>
                   <Select value={certificateId ?? ''} onValueChange={(v) => setCertificateId(v || null)}>
                     <SelectTrigger
                       withIndicator
-                      placeholder='Select certificate'
+                      placeholder={tr('Select certificate')}
                       className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                     />
                     <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -372,7 +356,7 @@ export const UserModal = ({
                     </SelectContent>
                   </Select>
                   <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                    Select from trusted certificates configured in the Certificates tab
+                    {tr('Select from trusted certificates configured in the Certificates tab')}
                   </span>
                   {certificateError && (
                     <span className='font-caption text-cp-xs font-normal text-red-500'>{certificateError}</span>
@@ -384,14 +368,14 @@ export const UserModal = ({
 
           {/* User Role Section */}
           <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>User Role</h4>
+            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>{tr('User Role')}</h4>
 
             <div className='flex flex-col gap-2'>
-              <Label className='text-xs text-neutral-950 dark:text-white'>Role</Label>
+              <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Role')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
                 <SelectTrigger
                   withIndicator
-                  placeholder='Select role'
+                  placeholder={tr('Select role')}
                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -438,7 +422,7 @@ export const UserModal = ({
             onClick={onClose}
             className='h-[32px] rounded-md border border-neutral-300 bg-white px-4 font-caption !text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'

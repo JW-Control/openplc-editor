@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Edge, Node, ReactFlowInstance, XYPosition } from '@xyflow/react'
 import { RefObject, useCallback, useEffect } from 'react'
 
@@ -44,7 +45,7 @@ export const useFBDClipboard = ({
 }) => {
   const pouName = useBoundPou()
   const isActive = useIsGraphicalEditorActive()
-  const { fbdFlowActions } = useOpenPLCStore()
+  const fbdFlowActions = useOpenPLCStore((state) => state.fbdFlowActions)
 
   // True when the clipboard event originated from a DOM node inside
   // this FBD instance's viewport.  Used to scope **copy** and **cut**
@@ -82,8 +83,8 @@ export const useFBDClipboard = ({
       if (!isInsideThisFbd(event)) return
       if (!rung.selectedNodes.length) {
         toast({
-          title: 'Nothing to copy',
-          description: 'No nodes selected to copy.',
+          title: tr('Nothing to copy'),
+          description: tr('No nodes selected to copy.'),
           variant: 'fail',
         })
         return
@@ -91,8 +92,8 @@ export const useFBDClipboard = ({
 
       setDataToClipboard(event)
       toast({
-        title: 'Copied to clipboard',
-        description: `FBD data copied to clipboard`,
+        title: tr('Copied to clipboard'),
+        description: tr('FBD data copied to clipboard'),
         variant: 'default',
       })
     },
@@ -108,8 +109,8 @@ export const useFBDClipboard = ({
       if (!isInsideThisFbd(event)) return
       if (!rung.selectedNodes.length) {
         toast({
-          title: 'Nothing to cut',
-          description: 'No nodes selected to cut.',
+          title: tr('Nothing to cut'),
+          description: tr('No nodes selected to cut.'),
           variant: 'fail',
         })
         return
@@ -121,8 +122,8 @@ export const useFBDClipboard = ({
       )
       handleDeleteNodes(rung.selectedNodes, selectedEdges)
       toast({
-        title: 'Cut to clipboard',
-        description: `FBD data cut to clipboard`,
+        title: tr('Cut to clipboard'),
+        description: tr('FBD data cut to clipboard'),
         variant: 'default',
       })
     },
@@ -162,16 +163,16 @@ export const useFBDClipboard = ({
       } catch (e) {
         console.error(e)
         toast({
-          title: 'Internal error',
-          description: 'Could not parse clipboard data.',
+          title: tr('Internal error'),
+          description: tr('Could not parse clipboard data.'),
           variant: 'fail',
         })
         return
       }
       if (!parsedData || parsedData.language !== 'fbd') {
         toast({
-          title: 'Invalid clipboard data',
-          description: 'The clipboard data is not valid for FBD.',
+          title: tr('Invalid clipboard data'),
+          description: tr('The clipboard data is not valid for FBD.'),
           variant: 'fail',
         })
         return
@@ -214,8 +215,8 @@ export const useFBDClipboard = ({
       })
 
       toast({
-        title: 'Pasted from clipboard',
-        description: `FBD data pasted from clipboard`,
+        title: tr('Pasted from clipboard'),
+        description: tr('FBD data pasted from clipboard'),
         variant: 'default',
       })
     },

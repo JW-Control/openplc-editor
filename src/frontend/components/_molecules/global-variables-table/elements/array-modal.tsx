@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { baseTypeEnum } from '../../../../../middleware/shared/ports'
@@ -146,8 +147,8 @@ export const GlobalArrayModal = ({
     const dimensionToSave = dimensions.filter((value) => value !== '')
     if (dimensionToSave.length === 0) {
       toast({
-        title: 'Invalid array',
-        description: 'Array must have at least one not empty dimension',
+        title: tr('Invalid array'),
+        description: tr('Array must have at least one not empty dimension'),
         variant: 'fail',
       })
       return

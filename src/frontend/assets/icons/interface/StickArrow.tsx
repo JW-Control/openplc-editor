@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -30,7 +31,7 @@ export const StickArrowIcon = (props: IStickArrowIconProps) => {
       className={cn(`${sizeClasses[size]} ${directionClasses[direction]}`, className)}
       {...res}
     >
-      <title>Stick Arrow Icon</title>
+      <title>{tr('Stick Arrow Icon')}</title>
       <path
         d='M22.1667 13.9999H5.8333M22.1667 13.9999L15.3611 6.9999M22.1667 13.9999L15.3611 20.9999'
         stroke='inherit'

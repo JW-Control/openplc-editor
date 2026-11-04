@@ -1,4 +1,5 @@
 import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
 import { ReactNode, useEffect, useState } from 'react'
 
 import { ArrowIcon } from '../../../assets/icons/interface/Arrow'
@@ -6,16 +7,25 @@ import { MagnifierIcon } from '../../../assets/icons/interface/Magnifier'
 import { useOpenPLCStore } from '../../../store'
 import { InputWithRef } from '../../_atoms/input'
 
+/** The two orderings the control offers; also the label shown on the trigger. */
+export type ProjectOrder = 'Recent' | 'Name'
+
 interface ProjectFilterBarProps {
   setSearchFilterValue: (searchNameFilterValue: string) => void
+  /**
+   * Lifted for the same reason the search value is: this bar sits above both
+   * project lists, but it used to order only the local one — it sorted the
+   * store's `recent` array in place, which the cloud section does not read.
+   */
+  setOrderBy?: (order: ProjectOrder) => void
 }
 
-const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValue }): ReactNode => {
+const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValue, setOrderBy }): ReactNode => {
   const {
     workspace: { recent },
     workspaceActions: { setRecent },
   } = useOpenPLCStore()
-  const [projectFilter, setProjectFilter] = useState('Recent')
+  const [projectFilter, setProjectFilter] = useState<ProjectOrder>('Recent')
   useEffect(() => {
     let sortedProjects = []
 
@@ -34,10 +44,16 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
     setRecent(sortedProjects)
   }, [projectFilter])
 
+  // Separate effect: the sort above rewrites the store, and folding the two
+  // together would make the cloud list depend on the local one being present.
+  useEffect(() => {
+    setOrderBy?.(projectFilter)
+  }, [projectFilter, setOrderBy])
+
   return (
     <div
       id='project-filter-bar'
-      className='relative mb-4 flex w-full items-center justify-between gap-4 pr-10 xl:pr-10 3xl:pr-10 4xl:pr-0'
+      className='relative mb-4 flex w-full shrink-0 items-center justify-between gap-4 pr-10 xl:pr-10 3xl:pr-10 4xl:pr-0'
     >
       <div
         id='project-filter-dropdown-container'
@@ -45,7 +61,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
       >
         <div id='project-filter-dropdown-label'>
           <span className='cursor-default whitespace-nowrap font-caption text-base font-normal text-neutral-700 dark:text-neutral-500'>
-            Order by
+            {tr('Order by')}
           </span>
         </div>
         <PrimitiveDropdown.Root>
@@ -84,7 +100,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
               }}
               className='select-none bg-white outline-none hover:cursor-pointer hover:bg-neutral-50 aria-selected:bg-neutral-100 dark:bg-neutral-900 hover:dark:bg-neutral-700 dark:aria-selected:bg-neutral-800'
             >
-              <span>Recent</span>
+              <span>{tr('Recent')}</span>
             </PrimitiveDropdown.Item>
             <PrimitiveDropdown.Item
               id='project-filter-dropdown-item-name'
@@ -94,7 +110,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
               }}
               className='select-none bg-white outline-none hover:cursor-pointer hover:bg-neutral-50 aria-selected:bg-neutral-100 dark:bg-neutral-900 hover:dark:bg-neutral-700 dark:aria-selected:bg-neutral-800'
             >
-              <span>Name</span>
+              <span>{tr('Name')}</span>
             </PrimitiveDropdown.Item>
           </PrimitiveDropdown.Content>
         </PrimitiveDropdown.Root>
@@ -109,7 +125,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
         <InputWithRef
           id='project-filter-search-input'
           type='text'
-          placeholder='Search for a project'
+          placeholder={tr('Search for a project')}
           className='h-full w-full bg-inherit text-black outline-none placeholder:select-none placeholder:font-caption placeholder:font-normal dark:text-white'
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchFilterValue(e.target.value)}
         />

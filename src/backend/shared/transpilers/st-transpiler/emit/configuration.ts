@@ -32,6 +32,11 @@ export function generateConfigurations(project: TranspileProject): ProgramChunk[
 
   const out: ProgramChunk[] = []
 
+  // Tasks emit in ascending-priority order (stable), matching the old
+  // editor XML generator's `[...tasks].sort((a,b)=>a.priority-b.priority)`.
+  // Instance (PROGRAM) lines are grouped by this same task order below.
+  const sortedTasks = [...project.configuration.tasks].sort((a, b) => a.priority - b.priority)
+
   out.push(['\nCONFIGURATION ', []])
   out.push([CONFIG_NAME, [configTagname, 'name']])
   out.push(['\n', []])
@@ -57,7 +62,7 @@ export function generateConfigurations(project: TranspileProject): ProgramChunk[
   // current shape.
 
   // Tasks.
-  project.configuration.tasks.forEach((task, taskNumber) => {
+  sortedTasks.forEach((task, taskNumber) => {
     out.push(['    TASK ', []])
     out.push([task.name, [resourceTagname, 'task', taskNumber, 'name']])
     out.push(['(', []])
@@ -90,7 +95,7 @@ export function generateConfigurations(project: TranspileProject): ProgramChunk[
   // iteration order, then instance order within each task), then the
   // task-less instances directly under the resource.
   let instanceNumber = 0
-  for (const task of project.configuration.tasks) {
+  for (const task of sortedTasks) {
     for (const instance of project.configuration.instances) {
       if (instance.task !== task.name) continue
       out.push(['    PROGRAM ', []])
@@ -131,17 +136,61 @@ function emitGlobalVarList(
   if (variables.length === 0) return
 
   const variableType = 'var_local'
-  const range: [number, number] = [0, variables.length]
 
-  out.push([`${indent}VAR_GLOBAL`, []])
-  // CONSTANT / RETAIN / NON_RETAIN modifiers come from the
-  // <globalVars> wrapper in the DOM path; the IR doesn't surface
-  // per-list modifiers today (only the bare variable list).
-  void range
-  void tagname
-  out.push(['\n', []])
-
+  // One block per qualifier, because IEC puts CONSTANT / RETAIN on the var
+  // BLOCK and not on the declaration. A single unqualified `VAR_GLOBAL` used to
+  // be emitted here for every configuration global, which silently dropped the
+  // qualifier: a global the user marked RETAIN in the variables table compiled
+  // as a plain one and was not retained at all. The POU emitter has always
+  // grouped this way (`computeInterface`); this is the same rule applied to
+  // configuration-scope globals.
+  //
+  // Grouped in first-appearance order so the unqualified block — the common
+  // case — stays exactly where it was, and a project with no flags produces
+  // byte-identical output to before.
+  const groups: Array<{ flag: TranspileVariable['flag']; entries: Array<[TranspileVariable, number]> }> = []
   variables.forEach((variable, idx) => {
+    const flag = variable.flag
+    let group = groups.find((candidate) => candidate.flag === flag)
+    if (!group) {
+      group = { flag, entries: [] }
+      groups.push(group)
+    }
+    group.entries.push([variable, idx])
+  })
+
+  void tagname
+
+  for (const group of groups) {
+    out.push([`${indent}VAR_GLOBAL${flagKeyword(group.flag)}`, []])
+    out.push(['\n', []])
+    emitGlobalVarEntries(out, group.entries, tagname, variableType, _varIndent, project)
+    out.push([`${indent}END_VAR\n`, []])
+  }
+}
+
+/** Qualifier suffix for a var block. Mirrors `flagKeyword` in pou-textual.ts. */
+function flagKeyword(flag: TranspileVariable['flag']): string {
+  return flag === 'constant' ? ' CONSTANT' : flag === 'retain' ? ' RETAIN' : ''
+}
+
+/**
+ * The declarations inside one VAR_GLOBAL block.
+ *
+ * `idx` is the variable's index in the ORIGINAL list, not its position within
+ * the group: the chunk tags are what map a compiler diagnostic back to a row in
+ * the variables table, and renumbering them per group would point every error
+ * after the first qualified block at the wrong variable.
+ */
+function emitGlobalVarEntries(
+  out: ProgramChunk[],
+  entries: Array<[TranspileVariable, number]>,
+  tagname: string,
+  variableType: string,
+  _varIndent: string,
+  project: TranspileProject,
+): void {
+  entries.forEach(([variable, idx]) => {
     out.push([_varIndent, []])
     out.push([variable.name, [tagname, variableType, idx, 'name']])
     out.push([' ', []])
@@ -165,6 +214,4 @@ function emitGlobalVarList(
     }
     out.push([';\n', []])
   })
-
-  out.push([`${indent}END_VAR\n`, []])
 }

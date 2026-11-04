@@ -1,9 +1,13 @@
 import * as MenuPrimitive from '@radix-ui/react-menubar'
 import { useEffect, useState } from 'react'
 
-import { useTheme } from '../../../../../middleware/shared/providers'
+import { useCapabilities, useSystem, useTheme, useWindow } from '../../../../../middleware/shared/providers'
 import { i18n } from '../../../../locales/i18n'
-import { useOpenPLCStore } from '../../../../store'
+import { nextUiLanguage, UI_LANGUAGE_NAMES, writeStoredUiLanguage } from '../../../../locales/language'
+import { currentUiLanguage, tr } from '../../../../locales/tr'
+import { DIAGNOSTICS_TAB_NAME, openDiagnosticsTab } from '../../../../services/io-diagnostics/open-tab'
+import { requestAppRefresh } from '../../../../services/refresh-app'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
 import { MenuClasses } from '../constants'
 
 interface FullscreenElement extends HTMLElement {
@@ -16,12 +20,17 @@ type ThemeChoice = 'light' | 'dark' | 'nineties'
 // Cycle order for the Display ▸ Theme menu: Light ↔ Dark. The JWPLC Edition
 // has no 90's skin; a stored one is switched to light on start.
 const THEME_ORDER: readonly ThemeChoice[] = ['light', 'dark']
-const THEME_LABEL: Record<ThemeChoice, string> = { light: 'light', dark: 'dark', nineties: 'light' }
+const themeLabel = (choice: ThemeChoice): string => (choice === 'dark' ? tr('Dark') : tr('Light'))
 
 export const DisplayMenu = () => {
   const {
+    workspace: { editingState },
     workspaceActions: { setSystemConfigs, toggleCollapse },
+    modalActions: { openModal },
   } = useOpenPLCStore()
+  const store = useOpenPLCStoreApi()
+  const capabilities = useCapabilities()
+  const windowPort = useWindow()
 
   const { TRIGGER, CONTENT, ITEM, ACCELERATOR, SEPARATOR } = MenuClasses
 
@@ -54,6 +63,15 @@ export const DisplayMenu = () => {
     }
   }
 
+  // The whole UI reads the language once at load, so a change reloads the window.
+  const systemPort = useSystem()
+  const nextLanguage = nextUiLanguage(currentUiLanguage())
+  const switchLanguage = () => {
+    writeStoredUiLanguage(nextLanguage)
+    systemPort.setUiLanguage?.(nextLanguage)
+    window.location.reload()
+  }
+
   const switchPerspective = () => {
     toggleCollapse()
   }
@@ -63,7 +81,7 @@ export const DisplayMenu = () => {
       <MenuPrimitive.Trigger className={TRIGGER}>{i18n.t('menu:display.label')}</MenuPrimitive.Trigger>
       <MenuPrimitive.Portal>
         <MenuPrimitive.Content sideOffset={16} className={CONTENT}>
-          <MenuPrimitive.Item className={ITEM} onClick={() => window.location.reload()}>
+          <MenuPrimitive.Item className={ITEM} onClick={() => requestAppRefresh(editingState, openModal, windowPort)}>
             <span>{i18n.t('menu:display.submenu.refresh')}</span>
             <span className={ACCELERATOR}>{'Ctrl + R'}</span>
           </MenuPrimitive.Item>
@@ -73,11 +91,9 @@ export const DisplayMenu = () => {
           <MenuPrimitive.Separator className={SEPARATOR} />
           <MenuPrimitive.Item className={ITEM} disabled>
             <span>{i18n.t('menu:display.submenu.zoomIn')}</span>
-            <span className={ACCELERATOR}>{'Ctrl + +'}</span>
           </MenuPrimitive.Item>
           <MenuPrimitive.Item className={ITEM} disabled>
             <span>{i18n.t('menu:display.submenu.zoomOut')}</span>
-            <span className={ACCELERATOR}>{'Ctrl + -'}</span>
           </MenuPrimitive.Item>
           <MenuPrimitive.Item className={ITEM} onClick={switchPerspective}>
             <span>{i18n.t('menu:display.submenu.switchPerspective')}</span>
@@ -86,7 +102,6 @@ export const DisplayMenu = () => {
           <MenuPrimitive.Separator className={SEPARATOR} />
           <MenuPrimitive.Item className={ITEM} disabled>
             <span>{i18n.t('menu:display.submenu.resetPerspective')}</span>
-            <span className={ACCELERATOR}>{'Shift + F12'}</span>
           </MenuPrimitive.Item>
           <MenuPrimitive.Item
             className={ITEM}
@@ -106,16 +121,28 @@ export const DisplayMenu = () => {
           </MenuPrimitive.Item>
           <MenuPrimitive.Item className={ITEM} disabled>
             <span>{i18n.t('menu:display.submenu.sortAlpha')}</span>
-            <span className={ACCELERATOR}>{'F10'}</span>
           </MenuPrimitive.Item>
           <div onClick={cycleTheme}>
             <MenuPrimitive.Item className={ITEM}>
               <span>{i18n.t('menu:display.submenu.theme')}</span>
               <span className={ACCELERATOR}>
-                {THEME_LABEL[THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length] ?? 'light']}
+                {themeLabel(THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length] ?? 'light')}
               </span>
             </MenuPrimitive.Item>
           </div>
+          <MenuPrimitive.Item className={ITEM} onClick={switchLanguage}>
+            <span>{tr('Language')}</span>
+            <span className={ACCELERATOR}>{UI_LANGUAGE_NAMES[nextLanguage]}</span>
+          </MenuPrimitive.Item>
+          {capabilities.isDevMode && (
+            <>
+              <MenuPrimitive.Separator className={SEPARATOR} />
+              <MenuPrimitive.Item className={ITEM} onClick={() => openDiagnosticsTab(store)}>
+                <span>{DIAGNOSTICS_TAB_NAME}</span>
+                <span className={ACCELERATOR}>{'dev'}</span>
+              </MenuPrimitive.Item>
+            </>
+          )}
         </MenuPrimitive.Content>
       </MenuPrimitive.Portal>
     </MenuPrimitive.Menu>

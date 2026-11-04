@@ -18,6 +18,16 @@ const StoreSchema = z.object({
       y: z.number(),
     }),
   }),
+  // Absent key is the signed-out state. `refreshToken` is a base64 `safeStorage` ciphertext, never the raw token.
+  edge_session: z
+    .object({
+      refreshToken: z.string(),
+    })
+    .optional(),
+  // The update check when the editor opens (DOPE-486). Manual "Check for Updates" works either way.
+  auto_update_check: z.boolean(),
+  // UI language chosen in Display > Language ('es' | 'en'); absent means the default.
+  language: z.string().optional(),
 })
 
 export { StoreSchema, ThemeSchema }

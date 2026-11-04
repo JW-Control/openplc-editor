@@ -9,6 +9,7 @@ import { ArrayIcon } from '../../../assets/icons/project/Array'
 import { CppIcon } from '../../../assets/icons/project/Cpp'
 import { EnumIcon } from '../../../assets/icons/project/Enum'
 import { FBDIcon } from '../../../assets/icons/project/FBD'
+import { GlobalVariableListIcon } from '../../../assets/icons/project/GlobalVariableList'
 import { ILIcon } from '../../../assets/icons/project/IL'
 import { LDIcon } from '../../../assets/icons/project/LD'
 import { LibraryIcon } from '../../../assets/icons/project/Library'
@@ -21,6 +22,7 @@ import { ServerIcon } from '../../../assets/icons/project/Server'
 import { SFCIcon } from '../../../assets/icons/project/SFC'
 import { STIcon } from '../../../assets/icons/project/ST'
 import { StructureIcon } from '../../../assets/icons/project/Structure'
+import { UsersIcon } from '../../../assets/icons/project/Users'
 import { useOpenPLCStore } from '../../../store'
 import type { TabsProps } from '../../../store/slices/tabs'
 import { cn } from '../../../utils/cn'
@@ -44,6 +46,7 @@ const TabIcons: Record<string, React.ReactNode> = {
   cpp: <CppIcon className='h-4 w-4 flex-shrink-0' />,
   enumerated: <EnumIcon className='h-4 w-4 flex-shrink-0' />,
   structure: <StructureIcon className='h-4 w-4 flex-shrink-0' />,
+  'global-variable-list': <GlobalVariableListIcon className='h-4 w-4 flex-shrink-0' />,
   array: <ArrayIcon className='h-4 w-4 flex-shrink-0' />,
   resource: <ResourceIcon className='h-4 w-4 flex-shrink-0' />,
   configuration: <ConfigIcon className='h-4 w-4 flex-shrink-0' />,
@@ -57,6 +60,12 @@ const TabIcons: Record<string, React.ReactNode> = {
   'ethercat-device': <DeviceTransferIcon className='h-4 w-4 flex-shrink-0' />,
   'library-manager': <LibraryIcon className='h-4 w-4 flex-shrink-0' />,
   'library-manifest': <LibraryManifestIcon className='h-4 w-4 flex-shrink-0' />,
+  'user-management': <UsersIcon className='h-4 w-4 flex-shrink-0' />,
+  'persistent-storage': <ConfigIcon className='h-4 w-4 flex-shrink-0' />,
+  // Same icon as the tree node for this screen, so the tab and the tree
+  // agree. Without an entry here the tab rendered with no icon at all,
+  // which every other device tab has.
+  'runtime-status': <ConfigIcon className='h-4 w-4 flex-shrink-0' />,
   'diff-viewer': <GitCompare className='h-4 w-4 flex-shrink-0 text-[#0464FB]' />,
 }
 
@@ -78,9 +87,11 @@ const Tab = (props: ITabProps) => {
     | 'array'
     | 'enumerated'
     | 'structure'
+    | 'global-variable-list'
     | 'configuration'
     | 'pin-mapping'
     | 'orchestrators'
+    | 'runtime-status'
     | 'remote-device'
     | 'server'
     | 'vendor-screen'
@@ -89,6 +100,8 @@ const Tab = (props: ITabProps) => {
     | 'ethercat-device'
     | 'library-manager'
     | 'library-manifest'
+    | 'user-management'
+    | 'persistent-storage'
     | 'diff-viewer' = 'il'
 
   if (fileDerivation?.type === 'data-type' || fileDerivation?.type === 'device') {
@@ -100,6 +113,9 @@ const Tab = (props: ITabProps) => {
     fileDerivation?.type === 'function-block'
   ) {
     languageOrDerivation = fileDerivation?.language
+  }
+  if (fileDerivation?.type === 'global-variable-list') {
+    languageOrDerivation = 'global-variable-list'
   }
   if (fileDerivation?.type === 'resource') {
     languageOrDerivation = 'resource'
@@ -127,6 +143,12 @@ const Tab = (props: ITabProps) => {
   }
   if (fileDerivation?.type === 'library-manifest') {
     languageOrDerivation = 'library-manifest'
+  }
+  if (fileDerivation?.type === 'user-management') {
+    languageOrDerivation = 'user-management'
+  }
+  if (fileDerivation?.type === 'persistent-storage') {
+    languageOrDerivation = 'persistent-storage'
   }
   if (fileDerivation?.type === 'diff-viewer') {
     languageOrDerivation = 'diff-viewer'

@@ -1,6 +1,7 @@
-import type { PLCDataType, PLCPou } from '../../../middleware/shared/ports/types'
-import { openPLCStoreBase } from '../../store'
+import type { PLCDataType, PLCPou, PLCVariable } from '../../../middleware/shared/ports/types'
+import { createTestStore } from '../../store/testing'
 import {
+  findFunctionBlockExternalVariables,
   findFunctionBlockVariables,
   findLeafVariables,
   findStructureVariables,
@@ -17,7 +18,7 @@ import {
  *  runtime loads.  Helpers used to read this directly from the store;
  *  the refactor passes it through as an explicit param so utils don't
  *  cross the store boundary (arch validator forbids utils → store). */
-const SYSTEM_LIBS = openPLCStoreBase.getState().libraries.system
+const SYSTEM_LIBS = createTestStore().getState().libraries.system
 
 // ---------------------------------------------------------------------------
 // normalizeTypeString
@@ -202,6 +203,52 @@ describe('findFunctionBlockVariables', () => {
     expect(names).toEqual(['IN', 'OUT', 'STATE'])
     expect(names).not.toContain('TMP')
     expect(names).not.toContain('EXT_REF')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// findFunctionBlockExternalVariables
+// ---------------------------------------------------------------------------
+
+describe('findFunctionBlockExternalVariables', () => {
+  const makeVar = (name: string, cls: PLCVariable['class']): PLCVariable => ({
+    name,
+    class: cls,
+    type: { definition: 'base-type', value: 'INT' },
+    location: '',
+    documentation: '',
+  })
+
+  const fbWith = (vars: PLCVariable[]): PLCPou => ({
+    name: 'MyFB',
+    pouType: 'function-block',
+    interface: { variables: vars },
+    body: { language: 'st', value: '' },
+  })
+
+  it('returns only the VAR_EXTERNAL members of a user FB', () => {
+    const fb = fbWith([
+      makeVar('IN', 'input'),
+      makeVar('G1', 'external'),
+      makeVar('S', 'local'),
+      makeVar('G2', 'external'),
+    ])
+    const names = findFunctionBlockExternalVariables('MyFB', [fb]).map((v) => v.name)
+    expect(names).toEqual(['G1', 'G2'])
+  })
+
+  it('returns [] for a user FB with no externals', () => {
+    const fb = fbWith([makeVar('IN', 'input'), makeVar('S', 'local')])
+    expect(findFunctionBlockExternalVariables('MyFB', [fb])).toEqual([])
+  })
+
+  it('returns [] for an unknown FB type', () => {
+    expect(findFunctionBlockExternalVariables('NoSuchFB', [])).toEqual([])
+  })
+
+  it('returns [] for a library FB (black box — not searched in project POUs)', () => {
+    // SR is a system-library FB; its externals are not project-visible.
+    expect(findFunctionBlockExternalVariables('SR', [])).toEqual([])
   })
 })
 

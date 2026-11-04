@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef, createRef } from 'react'
 
 import { MagnifierIcon } from '../../../assets/icons/interface/Magnifier'
@@ -17,7 +18,7 @@ const Search = (props: ISearchProps) => {
         ref={inputRef}
         id='start-search'
         type='text'
-        placeholder='Search a project'
+        placeholder={tr('Search a project')}
       />
     </form>
   )

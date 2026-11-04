@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Archive, ChevronDown, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -65,7 +66,7 @@ export function StashSection({ projectId }: StashSectionProps) {
         sharedWorkspaceActions.handleOpenProjectResponse(result.data)
       }
     } catch {
-      toast({ title: 'Failed to reload project', variant: 'fail' })
+      toast({ title: tr('Failed to reload project'), variant: 'fail' })
     }
 
     if (versionControl) {
@@ -83,7 +84,7 @@ export function StashSection({ projectId }: StashSectionProps) {
     if (!versionControl || busyRef) return
     // No write permission ⇒ skip the doomed backend write and warn.
     if (!canEdit) {
-      notifyNoWritePermission('modify stashes in')
+      notifyNoWritePermission(tr('modify stashes in'))
       return
     }
     setBusyRef(stash.hash)
@@ -96,8 +97,8 @@ export function StashSection({ projectId }: StashSectionProps) {
     } catch (error) {
       if (error instanceof StashConflictError) {
         toast({
-          title: 'Stash could not be applied cleanly',
-          description: 'Conflicting changes prevent applying this stash. The stash was kept.',
+          title: tr('Stash could not be applied cleanly'),
+          description: tr('Conflicting changes prevent applying this stash. The stash was kept.'),
           variant: 'fail',
         })
       } else {
@@ -112,7 +113,7 @@ export function StashSection({ projectId }: StashSectionProps) {
     if (!versionControl || !dropTarget) return
     // No write permission ⇒ skip the doomed backend write and warn.
     if (!canEdit) {
-      notifyNoWritePermission('modify stashes in')
+      notifyNoWritePermission(tr('modify stashes in'))
       return
     }
     setIsDropping(true)
@@ -120,10 +121,10 @@ export function StashSection({ projectId }: StashSectionProps) {
       await versionControl.dropStash(projectId, dropTarget.hash)
       setDropTarget(null)
       await fetchStashes()
-      toast({ title: 'Stash dropped', variant: 'default' })
+      toast({ title: tr('Stash dropped'), variant: 'default' })
     } catch {
       setDropTarget(null)
-      toast({ title: 'Failed to drop stash', variant: 'fail' })
+      toast({ title: tr('Failed to drop stash'), variant: 'fail' })
     } finally {
       setIsDropping(false)
     }
@@ -150,7 +151,7 @@ export function StashSection({ projectId }: StashSectionProps) {
       <div className='min-h-0 flex-1 overflow-y-auto'>
         {stashes.length === 0 ? (
           <p className='px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400'>
-            Stash pending changes from the Changes tab to save them for later.
+            {tr('Stash pending changes from the Changes tab to save them for later.')}
           </p>
         ) : (
           <ul className='py-1'>
@@ -178,7 +179,7 @@ export function StashSection({ projectId }: StashSectionProps) {
                     <button
                       onClick={() => void handleApplyOrPop(stash, false)}
                       disabled={isBusy || busyRef !== null}
-                      title='Apply this stash and keep it on the stack'
+                      title={tr('Apply this stash and keep it on the stack')}
                       className='cursor-pointer rounded-md bg-neutral-100 px-2 py-1 text-[11px] font-medium text-neutral-700 transition-colors hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-blue-900/30 dark:hover:text-blue-400'
                     >
                       {isBusy ? '...' : 'Apply'}
@@ -186,16 +187,16 @@ export function StashSection({ projectId }: StashSectionProps) {
                     <button
                       onClick={() => void handleApplyOrPop(stash, true)}
                       disabled={isBusy || busyRef !== null}
-                      title='Apply this stash and remove it from the stack'
+                      title={tr('Apply this stash and remove it from the stack')}
                       className='flex cursor-pointer items-center gap-1 rounded-md bg-blue-500 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50'
                     >
                       <ChevronDown className='h-3 w-3' />
-                      Pop
+                      {tr('Pop')}
                     </button>
                     <button
                       onClick={() => setDropTarget(stash)}
                       disabled={busyRef !== null}
-                      title='Delete this stash without applying'
+                      title={tr('Delete this stash without applying')}
                       className='ml-auto cursor-pointer rounded-md p-1 text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/30 dark:hover:text-red-400'
                     >
                       <Trash2 className='h-3.5 w-3.5' />

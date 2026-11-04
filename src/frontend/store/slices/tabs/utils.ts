@@ -57,7 +57,7 @@ const CreateEditorModelObject = (
     return {
       type: 'plc-datatype',
       meta: { name, derivation },
-      structure: { selectedRow: '-1', description: '' },
+      structure: { display: 'table', selectedRow: '-1', description: '' },
     }
   }
 
@@ -82,7 +82,7 @@ const CreateResourceEditor = (name = 'Resource'): EditorModel => ({
 
 const CreateDeviceEditor = (
   name = 'device',
-  derivation: 'configuration' | 'pin-mapping' | 'orchestrators',
+  derivation: 'configuration' | 'pin-mapping' | 'orchestrators' | 'runtime-status',
 ): EditorModel => {
   if (!derivation) throw new Error('Invalid derivation value')
   return {
@@ -102,6 +102,16 @@ const CreateRemoteDeviceEditor = (
 const CreateEtherCATDeviceEditor = (name: string, busName: string, deviceId: string): EditorModel => ({
   type: 'plc-ethercat-device',
   meta: { name, busName, deviceId },
+})
+
+const CreateEtherCATModuleEditor = (
+  name: string,
+  busName: string,
+  deviceId: string,
+  moduleId: string,
+): EditorModel => ({
+  type: 'plc-ethercat-module',
+  meta: { name, busName, deviceId, moduleId },
 })
 
 const CreateServerEditor = (
@@ -125,6 +135,11 @@ const CreateHmiDesignerEditor = (name = HMI_DESIGNER_TAB_NAME): EditorModel => (
   meta: { name },
 })
 
+const CreateDiagnosticsEditor = (name = 'I/O Image Diagnostics'): EditorModel => ({
+  type: 'plc-diagnostics',
+  meta: { name },
+})
+
 const CreatePackageManagerEditor = (name = 'Package Manager'): EditorModel => ({
   type: 'plc-package-manager',
   meta: { name },
@@ -132,6 +147,16 @@ const CreatePackageManagerEditor = (name = 'Package Manager'): EditorModel => ({
 
 const CreateLibraryManagerEditor = (name = 'Library Manager'): EditorModel => ({
   type: 'plc-library-manager',
+  meta: { name },
+})
+
+const CreateUserManagementEditor = (name = 'User Management'): EditorModel => ({
+  type: 'plc-user-management',
+  meta: { name },
+})
+
+const CreatePersistentStorageEditor = (name = 'Persistent Storage'): EditorModel => ({
+  type: 'plc-persistent-storage',
   meta: { name },
 })
 
@@ -156,6 +181,25 @@ const CreateDiffViewerEditor = (name: string, filePath: string): EditorModel => 
   meta: { name, filePath },
 })
 
+/**
+ * A Global Variable List opens on its members, as a table — the same view a POU's
+ * variables and the resource globals open on, and the one most edits want.
+ *
+ * The declaration view is the other half, and it is where `structure.code` becomes the
+ * list's draft buffer so a save landing mid-edit can fold it in
+ * (`reconcileGlobalVariableListText`). That buffer is undefined in table mode, which is
+ * correct rather than a gap: a table edit commits to the project as it happens, so there
+ * is no unsaved text for a save to fold, and both `reconcileGlobalVariableListText` and
+ * `regenerateGlobalVariableListText` return early unless the display is `'code'`. The
+ * editor moves the model to `'code'` itself when a list arrives with a declaration that
+ * could not be parsed, so that buffer exists whenever there is text only it can hold.
+ */
+const CreateGlobalVariableListEditor = (name: string): EditorModel => ({
+  type: 'plc-global-variable-list',
+  meta: { name },
+  structure: { display: 'table', selectedRow: '-1', description: '' },
+})
+
 const CreateEditorObjectFromTab = (tab: TabsProps): EditorModel => {
   const { elementType, name } = tab
   switch (elementType.type) {
@@ -167,6 +211,8 @@ const CreateEditorObjectFromTab = (tab: TabsProps): EditorModel => {
       return CreateEditorModelObject(name, elementType.language, 'function-block')
     case 'data-type':
       return CreateEditorModelObject(name, null, null, elementType.derivation)
+    case 'global-variable-list':
+      return CreateGlobalVariableListEditor(name)
     case 'resource':
       return CreateResourceEditor(name)
     case 'device':
@@ -175,18 +221,26 @@ const CreateEditorObjectFromTab = (tab: TabsProps): EditorModel => {
       return CreateRemoteDeviceEditor(name, elementType.protocol)
     case 'ethercat-device':
       return CreateEtherCATDeviceEditor(name, elementType.busName, elementType.deviceId)
+    case 'ethercat-module':
+      return CreateEtherCATModuleEditor(name, elementType.busName, elementType.deviceId, elementType.moduleId)
     case 'server':
       return CreateServerEditor(name, elementType.protocol)
     case 'vendor-screen':
       return CreateVendorScreenEditor(name, elementType.screenName)
     case 'hmi-designer':
       return CreateHmiDesignerEditor(name)
+    case 'diagnostics':
+      return CreateDiagnosticsEditor(name)
     case 'package-manager':
       return CreatePackageManagerEditor(name)
     case 'library-manager':
       return CreateLibraryManagerEditor(name)
     case 'library-manifest':
       return CreateLibraryManifestEditor(name)
+    case 'user-management':
+      return CreateUserManagementEditor(name)
+    case 'persistent-storage':
+      return CreatePersistentStorageEditor(name)
     case 'diff-viewer':
       return CreateDiffViewerEditor(name, elementType.filePath)
   }
@@ -194,19 +248,24 @@ const CreateEditorObjectFromTab = (tab: TabsProps): EditorModel => {
 
 export {
   CreateDeviceEditor,
+  CreateDiagnosticsEditor,
   CreateDiffViewerEditor,
   CreateEditorModelObject,
   CreateEditorObjectFromTab,
   CreateEtherCATDeviceEditor,
+  CreateEtherCATModuleEditor,
+  CreateGlobalVariableListEditor,
   CreateHmiDesignerEditor,
   CreateLibraryManagerEditor,
   CreateLibraryManifestEditor,
   CreatePackageManagerEditor,
+  CreatePersistentStorageEditor,
   CreatePLCGraphicalObject,
   CreatePLCTextualObject,
   CreateRemoteDeviceEditor,
   CreateResourceEditor,
   CreateServerEditor,
+  CreateUserManagementEditor,
   CreateVendorScreenEditor,
   HMI_DESIGNER_TAB_NAME,
   LIBRARY_MANIFEST_TAB_NAME,

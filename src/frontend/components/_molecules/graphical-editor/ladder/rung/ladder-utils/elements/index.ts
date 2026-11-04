@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { RungLadderState } from '@root/frontend/store/slices'
 import { toast } from '@root/frontend/utils/toast'
 import type { Edge, Node } from '@xyflow/react'
@@ -32,7 +33,8 @@ const BRANCH_BLOCKED_IN_PARALLEL =
   'Cannot add to a handle branch on a block that is in parallel with other elements. Remove the parallel siblings first.'
 const PARALLEL_BLOCKED_WITH_BRANCH =
   'Cannot put a block with handle branches in parallel with other elements. Remove the handle branch contacts first.'
-const blockedToast = (reason: string) => toast({ variant: 'warn', title: 'Action not supported', description: reason })
+const blockedToast = (reason: string) =>
+  toast({ variant: 'warn', title: tr('Action not supported'), description: reason })
 
 export const addNewElement = <T>(
   rung: RungLadderState,
@@ -208,6 +210,10 @@ export const addNewElement = <T>(
 export const removeElement = (
   rung: RungLadderState,
   element: Node,
+  /** Fallback identity source for the variable-node rebuild — pass the
+   *  pre-strip node set when `rung.nodes` had its variable nodes removed
+   *  earlier in the pipeline (see updateVariableBlockPosition). */
+  previousNodes?: Node[],
 ): { nodes: Node[]; edges: Edge[]; handleBranches?: HandleBranch[] } => {
   let newNodes: Node[]
   let newEdges: Edge[]
@@ -317,6 +323,7 @@ export const removeElement = (
       ...(handleBranches && { handleBranches }),
     },
     rung.defaultBounds as [number, number],
+    previousNodes,
   )
   newNodes = updatedDiagramNodes
   newEdges = updatedDiagramEdges

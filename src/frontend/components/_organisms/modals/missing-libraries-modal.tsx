@@ -9,6 +9,7 @@
  * DebuggerMessageModal).  No parallel components.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { CreateLibraryManagerEditor } from '@root/frontend/store/slices/tabs/utils'
 
@@ -52,10 +53,10 @@ const MissingLibrariesModal = () => {
         onOpenChange('missing-libraries', open)
       }}
     >
-      <ModalContent className='flex h-auto max-h-[80vh] w-[480px] select-none flex-col gap-4 p-6'>
+      <ModalContent className='flex h-fit max-h-[80vh] w-[480px] select-none flex-col gap-4 overflow-y-auto p-6'>
         <div className='flex flex-col items-center gap-3'>
           <WarningIcon size='lg' className='h-12 w-12' />
-          <ModalTitle className='text-xl font-semibold'>Missing libraries</ModalTitle>
+          <ModalTitle className='text-xl font-semibold'>{tr('Missing libraries')}</ModalTitle>
         </div>
 
         <p className='text-center text-sm text-neutral-700 dark:text-neutral-300'>
@@ -82,23 +83,23 @@ const MissingLibrariesModal = () => {
             onClick={handleOpenManager}
             className='w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
           >
-            Open Library Manager
+            {tr('Open Library Manager')}
           </button>
           <button
             type='button'
             disabled
             onClick={handleSearchInternet}
-            title='Coming soon — online library search is not yet available.'
+            title={tr('Coming soon — online library search is not yet available.')}
             className='w-full cursor-not-allowed rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 opacity-60 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            Search the internet…
+            {tr('Search the internet…')}
           </button>
           <button
             type='button'
             onClick={() => closeModal()}
             className='w-full rounded-md px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-900'
           >
-            Dismiss
+            {tr('Dismiss')}
           </button>
         </div>
       </ModalContent>

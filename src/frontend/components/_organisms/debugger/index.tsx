@@ -1,4 +1,5 @@
 import * as Select from '@radix-ui/react-select'
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowIcon } from '../../../assets/icons/interface/Arrow'
@@ -17,7 +18,9 @@ type Point = { t: number; y: number }
 type SeriesEntry = { points: Point[]; isBool: boolean; compositeKey: string }
 
 const MAX_BUFFER_SECONDS = 600 // Keep 10 minutes of data regardless of displayed range
-const DEBUGGER_RENDER_INTERVAL_MS = 100
+const SAMPLE_INTERVAL_MS = 100
+// ApexCharts rebuilds the entire SVG per update, so repaint slower than we sample.
+const RENDER_INTERVAL_MS = 200
 
 const Debugger = ({ graphList }: DebuggerData) => {
   const [isPaused, setIsPaused] = useState(false)
@@ -32,6 +35,9 @@ const Debugger = ({ graphList }: DebuggerData) => {
   const debugDataStale = useOpenPLCStore(useCallback((s) => s.workspace.debugDataStale, []))
   const debugBoolValues = useDebugBoolValuesMap()
   const debugNonBoolValues = useDebugNonBoolValuesMap()
+
+  const valuesRef = useRef({ bool: debugBoolValues, nonBool: debugNonBoolValues })
+  valuesRef.current = { bool: debugBoolValues, nonBool: debugNonBoolValues }
 
   // Track elapsed time with a 1-second interval
   useEffect(() => {
@@ -63,108 +69,67 @@ const Debugger = ({ graphList }: DebuggerData) => {
     }
   }, [graphList])
 
+  // The poller only writes to the store when a value changes, so sample on a clock or steady values freeze the trend.
   useEffect(() => {
     if (isPaused || graphList.length === 0) return
-    const now = Date.now()
-    // Set start time on first data
-    if (startTimeRef.current === null) {
-      startTimeRef.current = now
-    }
-    const set = historiesRef.current
-    for (const [, entry] of set) {
-      const raw = entry.compositeKey
-        ? (debugBoolValues.get(entry.compositeKey) ?? debugNonBoolValues.get(entry.compositeKey))
-        : undefined
-      if (raw === undefined) continue
-      let y: number | null = null
-      const rawStr = String(raw).toUpperCase()
-      if (rawStr === 'TRUE') {
-        y = 1
-        entry.isBool = true
-      } else if (rawStr === 'FALSE') {
-        y = 0
-        entry.isBool = true
-      } else {
-        const n = Number(raw)
-        y = Number.isNaN(n) ? null : n
+    const sample = () => {
+      const now = Date.now()
+      // Set start time on first data
+      if (startTimeRef.current === null) {
+        startTimeRef.current = now
       }
-      if (y !== null) {
-        entry.points.push({ t: now, y })
-        // Trim based on max buffer, not displayed range
-        const bufferCutoff = now - MAX_BUFFER_SECONDS * 1000
-        const validStartIndex = entry.points.findIndex((p) => p.t >= bufferCutoff)
-        if (validStartIndex === -1) {
-          entry.points.length = 0
-        } else if (validStartIndex > 0) {
-          entry.points.splice(0, validStartIndex)
+      const set = historiesRef.current
+      for (const [, entry] of set) {
+        const raw = entry.compositeKey
+          ? (valuesRef.current.bool.get(entry.compositeKey) ?? valuesRef.current.nonBool.get(entry.compositeKey))
+          : undefined
+        if (raw === undefined) continue
+        let y: number | null = null
+        const rawStr = String(raw).toUpperCase()
+        if (rawStr === 'TRUE') {
+          y = 1
+          entry.isBool = true
+        } else if (rawStr === 'FALSE') {
+          y = 0
+          entry.isBool = true
+        } else {
+          const n = Number(raw)
+          y = Number.isNaN(n) ? null : n
+        }
+        if (y !== null) {
+          entry.points.push({ t: now, y })
+          // Trim based on max buffer, not displayed range
+          const bufferCutoff = now - MAX_BUFFER_SECONDS * 1000
+          const validStartIndex = entry.points.findIndex((p) => p.t >= bufferCutoff)
+          if (validStartIndex === -1) {
+            entry.points.length = 0
+          } else if (validStartIndex > 0) {
+            entry.points.splice(0, validStartIndex)
+          }
         }
       }
     }
+    sample()
     setRenderTrigger((prev) => prev + 1)
-  }, [debugBoolValues, debugNonBoolValues, isPaused, graphList])
-
-  useEffect(() => {
-    if (isPaused || graphList.length === 0) return
-
-    const timer = window.setInterval(() => {
-      setRenderTrigger((value) => value + 1)
-    }, DEBUGGER_RENDER_INTERVAL_MS)
-
-    return () => window.clearInterval(timer)
+    const sampler = setInterval(sample, SAMPLE_INTERVAL_MS)
+    const painter = setInterval(() => setRenderTrigger((prev) => prev + 1), RENDER_INTERVAL_MS)
+    return () => {
+      clearInterval(sampler)
+      clearInterval(painter)
+    }
   }, [isPaused, graphList])
 
   const renderSeries = useMemo(() => {
     const now = Date.now()
     const startTime = startTimeRef.current ?? now
     const cutoff = now - range * 1000
-
     return {
       now,
       startTime,
       series: graphList.map((compositeKey) => {
         const entry = historiesRef.current.get(compositeKey)
-
-        if (!entry || entry.points.length === 0) {
-          return { name: compositeKey, points: [], isBool: entry?.isBool ?? false }
-        }
-
-        const allPoints = entry.points
-        const visiblePoints = allPoints.filter((p) => p.t >= cutoff)
-
-        let lastBeforeCutoff: Point | undefined
-
-        for (let i = allPoints.length - 1; i >= 0; i--) {
-          if (allPoints[i].t < cutoff) {
-            lastBeforeCutoff = allPoints[i]
-            break
-          }
-        }
-
-        let points = visiblePoints
-
-        if (lastBeforeCutoff && (points.length === 0 || points[0].t > cutoff)) {
-          points = [
-            {
-              t: cutoff,
-              y: lastBeforeCutoff.y,
-            },
-            ...points,
-          ]
-        }
-
-        const lastPoint = points[points.length - 1]
-
-        if (lastPoint && now > lastPoint.t) {
-          points = [
-            ...points,
-            {
-              t: now,
-              y: lastPoint.y,
-            },
-          ]
-        }
-
-        return { name: compositeKey, points, isBool: entry.isBool }
+        const points = entry ? entry.points.filter((p) => p.t >= cutoff) : []
+        return { name: compositeKey, points, isBool: entry?.isBool ?? false }
       }),
     }
   }, [graphList, range, renderTrigger])
@@ -175,7 +140,7 @@ const Debugger = ({ graphList }: DebuggerData) => {
         <div className='header relative flex justify-between'>
           <div className='flex '>
             <span className='flex h-7 select-none items-center justify-center rounded-md bg-inherit  p-2 text-cp-sm font-medium text-neutral-1000 outline-none  dark:text-white'>
-              Range
+              {tr('Range')}
             </span>
             <div className='relative z-[999999] flex gap-2'>
               <Select.Root onValueChange={(value) => setRange(Number(value))}>
@@ -257,7 +222,7 @@ const Debugger = ({ graphList }: DebuggerData) => {
           <p className='font-normal'>
             {debugTick}
             {debugDataStale && (
-              <span className='ml-2 text-amber-500' title='No data received for >2s'>
+              <span className='ml-2 text-amber-500' title={tr('No data received for >2s')}>
                 (stale)
               </span>
             )}

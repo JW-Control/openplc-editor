@@ -1,17 +1,25 @@
 import * as MenuPrimitive from '@radix-ui/react-menubar'
-import { useEffect } from 'react'
+import { tr } from '@root/frontend/locales/tr'
+import { useEffect, useState } from 'react'
 
-import { useCapabilities, useProject } from '../../../../../middleware/shared/providers'
+import { useAppUpdate, useCapabilities, useProject } from '../../../../../middleware/shared/providers'
 import { useHandleRemoveTab } from '../../../../hooks/use-remove-tab'
 import { i18n } from '../../../../locales/i18n'
+import { executeExportPlcopen } from '../../../../services/export-actions'
 import { executeSaveActiveFile, executeSaveProject } from '../../../../services/save-actions'
-import { useOpenPLCStore } from '../../../../store'
+import { executeSaveProjectAs } from '../../../../services/save-project-as'
+import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../../store'
+import { canExportPdf } from '../../../../utils/print-availability'
 import { MenuClasses } from '../constants'
 
 export const FileMenu = () => {
+  const store = useOpenPLCStoreApi()
   const projectPort = useProject()
   const capabilities = useCapabilities()
+  const appUpdate = useAppUpdate()
+  const [autoCheck, setAutoCheck] = useState(false)
   const {
+    project,
     editor: activeEditor,
     workspace: { editingState },
     readme: { savedContent: readmeSavedContent },
@@ -30,19 +38,42 @@ export const FileMenu = () => {
     setSelectedTab(activeEditor.meta.name)
   }, [activeEditor])
 
+  useEffect(() => {
+    if (!appUpdate) return
+    let active = true
+    appUpdate
+      .isAutoCheckEnabled()
+      .then((enabled) => active && setAutoCheck(enabled))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [appUpdate])
+
+  const handleToggleAutoCheck = (checked: boolean) => {
+    setAutoCheck(checked)
+    appUpdate?.setAutoCheck(checked)
+  }
+
   const { TRIGGER, CONTENT, ITEM, ACCELERATOR, SEPARATOR } = MenuClasses
 
   const isSaving = editingState === 'save-request'
 
   const handleSave = () => {
     if (activeEditor.meta.name && !isSaving) {
-      void executeSaveActiveFile(projectPort, capabilities)
+      void executeSaveActiveFile(store, projectPort, capabilities)
     }
   }
 
   const handleSaveProject = () => {
     if (!isSaving) {
-      void executeSaveProject(projectPort, capabilities)
+      void executeSaveProject(store, projectPort, capabilities)
+    }
+  }
+
+  const handleSaveProjectAs = () => {
+    if (!isSaving) {
+      void executeSaveProjectAs(store, projectPort, capabilities)
     }
   }
 
@@ -52,6 +83,20 @@ export const FileMenu = () => {
 
   const handleCloseProject = () => {
     closeProject()
+  }
+
+  // Reachable whether or not a device is connected: the modal owns the
+  // connection handling, including the case where retrieving means
+  // disconnecting from the device currently in use.
+  const handleRetrieveProject = () => {
+    openModal('retrieve-project', null)
+  }
+
+  const canPrint = canExportPdf(project.data.pous)
+
+  const handlePrint = () => {
+    if (!canPrint) return
+    openModal('export-pdf', null)
   }
 
   return (
@@ -67,10 +112,14 @@ export const FileMenu = () => {
             <span>{i18n.t('menu:file.submenu.saveProject')}</span>
             <span className={ACCELERATOR}>{'Ctrl + Shift + S'}</span>
           </MenuPrimitive.Item>
+          <MenuPrimitive.Item className={ITEM} onClick={handleSaveProjectAs} disabled={isSaving}>
+            <span>{i18n.t('menu:file.submenu.saveAs')}</span>
+          </MenuPrimitive.Item>
           <MenuPrimitive.Item className={ITEM} onClick={handleCloseTab}>
             <span>{i18n.t('menu:file.submenu.closeTab')}</span>
             <span className={ACCELERATOR}>{'Ctrl + W'}</span>
           </MenuPrimitive.Item>
+          <MenuPrimitive.Separator className={SEPARATOR} />
           <MenuPrimitive.Item className={ITEM} onClick={handleCloseProject}>
             <span>{i18n.t('menu:file.submenu.closeProject')}</span>
             <span className={ACCELERATOR}>{'Ctrl + Shift + W'}</span>
@@ -83,32 +132,56 @@ export const FileMenu = () => {
               </MenuPrimitive.Item>
             </>
           )}
-          {capabilities.hasProjectExport && (
+          {(capabilities.hasProjectExport || capabilities.hasProjectImport) && (
             <>
               <MenuPrimitive.Separator className={SEPARATOR} />
-              <MenuPrimitive.Item className={ITEM} disabled>
-                <span>{i18n.t('menu:file.submenu.exportToPLCOpenXml')}</span>
-              </MenuPrimitive.Item>
+              {capabilities.hasProjectExport && (
+                <MenuPrimitive.Item className={ITEM} onClick={() => void executeExportPlcopen(store, projectPort)}>
+                  <span>{i18n.t('menu:file.submenu.exportToPLCOpenXml')}</span>
+                </MenuPrimitive.Item>
+              )}
+              {capabilities.hasProjectImport && (
+                <MenuPrimitive.Item className={ITEM} onClick={() => openModal('confirm-plcopen-import')}>
+                  <span>{i18n.t('menu:file.submenu.importFromPLCOpenXml')}</span>
+                </MenuPrimitive.Item>
+              )}
             </>
           )}
+          {/* Its own group, after the export items: retrieving is not a save, a
+              close, or an export, and sitting inside any of those groups reads
+              as a variant of them. */}
           <MenuPrimitive.Separator className={SEPARATOR} />
-          <MenuPrimitive.Item className={ITEM} disabled>
+          <MenuPrimitive.Item className={ITEM} data-testid='menu-retrieve-project' onClick={handleRetrieveProject}>
+            <span>{i18n.t('menu:file.submenu.retrieveProject')}</span>
+          </MenuPrimitive.Item>
+          <MenuPrimitive.Separator className={SEPARATOR} />
+          <MenuPrimitive.Item className={ITEM} onClick={() => openModal('page-setup', null)}>
             <span>{i18n.t('menu:file.submenu.pageSetup')}</span>
             <span className={ACCELERATOR}>{'Ctrl + Alt + P'}</span>
           </MenuPrimitive.Item>
-          <MenuPrimitive.Item className={ITEM} disabled>
+          <MenuPrimitive.Item className={ITEM} onClick={handlePrint} disabled={!canPrint}>
             <span>{i18n.t('menu:file.submenu.preview')}</span>
             <span className={ACCELERATOR}>{'Ctrl + Shift + P'}</span>
           </MenuPrimitive.Item>
-          <MenuPrimitive.Item className={ITEM} disabled>
+          <MenuPrimitive.Item className={ITEM} onClick={handlePrint} disabled={!canPrint}>
             <span>{i18n.t('menu:file.submenu.print')}</span>
             <span className={ACCELERATOR}>{'Ctrl + P'}</span>
           </MenuPrimitive.Item>
           <MenuPrimitive.Separator className={SEPARATOR} />
-          <MenuPrimitive.Item className={ITEM} disabled>
+          <MenuPrimitive.Item className={ITEM} disabled={!appUpdate} onClick={() => appUpdate?.checkNow()}>
             <span>{i18n.t('menu:file.submenu.updates')}</span>
-            <span className={ACCELERATOR}>{'Ctrl + U'}</span>
           </MenuPrimitive.Item>
+          {appUpdate && (
+            <MenuPrimitive.CheckboxItem
+              className={ITEM}
+              checked={autoCheck}
+              onCheckedChange={handleToggleAutoCheck}
+              onSelect={(event) => event.preventDefault()}
+            >
+              <span>{tr('Check for Updates Automatically')}</span>
+              <MenuPrimitive.ItemIndicator className={ACCELERATOR}>✓</MenuPrimitive.ItemIndicator>
+            </MenuPrimitive.CheckboxItem>
+          )}
         </MenuPrimitive.Content>
       </MenuPrimitive.Portal>
     </MenuPrimitive.Menu>

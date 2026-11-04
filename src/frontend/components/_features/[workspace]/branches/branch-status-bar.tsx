@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from 'react'
+import { tr } from '@root/frontend/locales/tr'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { Branch } from '../../../../../middleware/shared/ports/version-control-port'
 import { SwitchBranchCarryConflictError } from '../../../../../middleware/shared/ports/version-control-port'
-import { useNavigation, useVersionControl } from '../../../../../middleware/shared/providers'
+import { useCapabilities, useNavigation, useVersionControl } from '../../../../../middleware/shared/providers'
 import { useActiveBranch } from '../../../../hooks/use-active-branch'
 import { useOpenPLCStore } from '../../../../store'
 import { toast } from '../../../../utils/toast'
@@ -18,6 +19,7 @@ type BranchStatusBarProps = {
 
 export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarProps) {
   const versionControl = useVersionControl()
+  const caps = useCapabilities()
   const navigation = useNavigation()
   const checkIfAllFilesAreSaved = useOpenPLCStore((s) => s.fileActions.checkIfAllFilesAreSaved)
   const pendingChangesCount = useOpenPLCStore((s) => s.versionControl.pendingChangesCount)
@@ -31,6 +33,37 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
   const [pendingBranchSwitch, setPendingBranchSwitch] = useState<Branch | null>(null)
   const [carryCheckState, setCarryCheckState] = useState<CarryCheckState>('loading')
   const [conflictedFiles, setConflictedFiles] = useState<string[]>([])
+
+  // Falls back to the default branch if the remembered active branch (client state in
+  // localStorage) no longer exists, since a stale name would otherwise be sent straight
+  // into listCommits({ branch }).
+  useEffect(() => {
+    if (!versionControl || !projectId) {
+      return
+    }
+
+    let alive = true
+
+    versionControl
+      .listBranches(projectId)
+      .then(({ branches }) => {
+        // An empty list means the request failed, not that every branch is gone.
+        if (!alive || branches.length === 0 || branches.some((branch) => branch.name === activeBranchName)) {
+          return
+        }
+
+        const fallback = branches.find((branch) => branch.isDefault) ?? branches[0]
+
+        setActiveBranch(fallback.name)
+      })
+      .catch(() => {
+        // Offline or denied. The remembered name is all there is, so it stays.
+      })
+
+    return () => {
+      alive = false
+    }
+  }, [projectId, versionControl, activeBranchName, setActiveBranch])
 
   const doSwitch = useCallback(
     async (branch: Branch, strategy: 'discard' | 'carry' = 'discard') => {
@@ -56,28 +89,20 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
       if (branch.name === activeBranchName) return
       if (!versionControl) return
 
-      // Block the switch when the editor has unsaved (not-yet-persisted) edits.
-      // The switch reloads the project from the server (handleBranchSwitch ->
-      // openProjectByPath), which would silently wipe in-memory editor state.
-      // `getChanges` below only sees server-side working-tree changes and can't
-      // detect these, so we guard here and let the user decide what to do with
-      // them (save via Ctrl+S, or discard) rather than persisting on their
-      // behalf — they may not want to keep these edits.
+      // Block on unsaved in-editor edits: switching reloads the project from the server
+      // and would silently wipe them, and getChanges below can't see them either.
       if (!checkIfAllFilesAreSaved()) {
         toast({
-          title: 'Unsaved changes',
-          description: 'Save or discard your changes before switching branches.',
+          title: tr('Unsaved changes'),
+          description: tr('Save or discard your changes before switching branches.'),
           variant: 'warn',
         })
         setShowSwitcher(false)
         return
       }
 
-      // Warn before switching if there are uncommitted changes. The store's
-      // pendingChangesCount (the same signal the source-control panel shows) is
-      // the primary trigger: the live getChanges round-trip is best-effort and
-      // the backend returns an empty list on any error, so relying on it alone
-      // would let us switch silently over pending work the user can see.
+      // pendingChangesCount is the primary signal; getChanges is best-effort and returns
+      // an empty list on error, so relying on it alone could miss pending work.
       let hasUncommittedChanges = pendingChangesCount > 0
       try {
         const { changes } = await versionControl.getChanges(projectId, activeBranchName)
@@ -93,8 +118,7 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
         setConflictedFiles([])
         setShowUnsavedWarning(true)
 
-        // Fire the pre-check in parallel so the modal opens immediately
-        // and updates as soon as the dry-run lands.
+        // Runs in parallel so the modal opens immediately and updates once the dry-run lands.
         void versionControl
           .previewSwitchCarry(projectId, branch.name)
           .then((result) => {
@@ -136,8 +160,7 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
       setPendingBranchSwitch(null)
       return
     }
-    // Race: the preview said "ok" but the apply hit a conflict (or another
-    // error happened). Surface conflicts in the still-open modal.
+    // Race: preview said "ok" but the apply hit a conflict; surface it in the open modal.
     if (result.conflictedFiles.length > 0) {
       setCarryCheckState('conflict')
       setConflictedFiles(result.conflictedFiles)
@@ -159,9 +182,7 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
 
   const handleMerge = useCallback(
     (branch: Branch) => {
-      // Source is the clicked branch; default target to the active branch
-      // (if different). When source == active, omit `target` entirely so the
-      // merge page can apply its own default rather than receiving `target=`.
+      // Omit `target` entirely when source == active so the merge page applies its own default.
       navigation.navigate('/merge', {
         project_id: projectId,
         source: branch.name,
@@ -195,7 +216,7 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
           ref={branchButtonRef}
           onClick={() => setShowSwitcher(true)}
           className='flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs text-white transition-colors hover:bg-brand-medium-dark dark:text-neutral-400 dark:hover:bg-neutral-900'
-          title='Switch branch'
+          title={tr('Switch branch')}
         >
           <svg className='h-3.5 w-3.5' viewBox='0 0 16 16' fill='currentColor'>
             <path d='M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z' />
@@ -212,7 +233,7 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
         onClose={() => setShowSwitcher(false)}
         onSelect={handleSelect}
         onDelete={handleDelete}
-        onMerge={handleMerge}
+        onMerge={caps.hasBranchMerge ? handleMerge : undefined}
       />
 
       <DeleteBranchModal

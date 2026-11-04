@@ -1,25 +1,26 @@
 /**
- * Frontend Project File Parser
- *
- * Parses raw project file contents (strings) into the structured data
- * that handleOpenProjectResponse expects. This is the single source of
- * truth for project parsing — both Electron and web use this.
- *
- * The backend only reads raw files from disk; all parsing happens here.
+ * Parses raw project file contents into the structured data `handleOpenProjectResponse`
+ * expects — the single source of truth for project parsing on both Electron and web.
  */
 
+import { parseDataTypeFromText } from '../../../frontend/utils/PLC/data-type-declarations'
 import {
   detectLanguageFromExtension,
-  findLastEndVarIndex,
+  extractDocumentation,
+  extractVariablesSection,
+  isGraphicalBodyShape,
+  matchPouHeader,
   parseGraphicalPouFromString,
   parseHybridPouFromString,
   parseTextualPouFromString,
+  POU_END_KEYWORDS,
 } from '../../../frontend/utils/PLC/pou-text-parser'
 import type { RawProjectFile } from '../../../middleware/shared/ports/project-port'
 import type {
   DeviceConfiguration,
   DevicePin,
   PLCDataType,
+  PLCGlobalVariableList,
   PLCInstance,
   PLCPou,
   PLCRemoteDevice,
@@ -30,12 +31,28 @@ import type {
 import { deviceConfigurationSchema, pinMappingFileSchema } from '../types/PLC/devices'
 import { PLCProjectSchema, PLCRemoteDeviceSchema, PLCServerSchema } from '../types/PLC/open-plc'
 import { getDefaultSchemaValues } from './default-zod-schema-values'
+import { migrateLegacyBaremetalModbus } from './migrate-legacy-baremetal-modbus'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 type FallbackPou = PLCPou & { variablesText?: string }
+
+/**
+ * Thrown when a POU's body is unrecoverable (unparsable JSON), not merely malformed variable
+ * declarations: an empty substitute body would look like a legitimately empty diagram and let
+ * the next save overwrite the real one.
+ */
+export class UnrecoverablePouError extends Error {
+  constructor(
+    message: string,
+    readonly relativePath: string,
+  ) {
+    super(message)
+    this.name = 'UnrecoverablePouError'
+  }
+}
 
 export interface ParsedProjectData {
   meta: {
@@ -45,6 +62,7 @@ export interface ParsedProjectData {
   }
   projectData: {
     dataTypes: PLCDataType[]
+    globalVariableLists: PLCGlobalVariableList[]
     pous: (PLCPou & { variablesText?: string })[]
     configurations: {
       resource: {
@@ -55,30 +73,29 @@ export interface ParsedProjectData {
     }
     servers?: PLCServer[]
     remoteDevices?: PLCRemoteDevice[]
-    /** Per-project library enablement.  Defaults to `[]` for legacy
-     *  projects that don't carry the field on disk — bundled libs
-     *  are always-on regardless. */
+    /** Per-project library enablement; defaults to `[]` for legacy projects — bundled libs are
+     *  always-on regardless of this list. */
     libraries: { name: string; version: string }[]
-    /** Raw library manifest content (the bytes of `library.json` at
-     *  the project root).  Set for library projects only — same
-     *  shape POU bodies live in: text content held in the store,
-     *  serialised verbatim to its own file by the save pipeline,
-     *  not embedded in `project.json`.  Empty string when the file
-     *  was missing on disk (the manifest editor's load effect
-     *  seeds a template on first edit). */
+    /** Raw `library.json` bytes, library projects only. Empty string when the file is missing
+     *  on disk — the manifest editor seeds a template on first edit. */
     libraryManifest?: string
     debugVariables?: { global?: string[]; pous?: Record<string, string[]> }
   }
+  /** POUs that could not be parsed at all — non-empty means the project must NOT open with
+   *  content (see `UnrecoverablePouError`); distinct from recoverable `warnings`. */
+  fatalErrors?: string[]
   deviceConfiguration?: DeviceConfiguration
-  /** Pin mappings parsed from `devices/pin-mapping.json`. Forwarded
-   *  to the store's `setDeviceDefinitions`, which accepts BOTH:
-   *  - `DevicePin[]` (legacy flat array, pre-per-board-scoping) —
-   *    gets keyed under `deviceConfiguration.deviceBoard` on load.
-   *  - `Record<string, DevicePin[]>` (per-board dict, canonical) —
-   *    taken verbatim, one entry per target the user has touched. */
+  /** Pin mappings from `devices/pin-mapping.json`, forwarded to `setDeviceDefinitions`, which
+   *  accepts both the legacy flat `DevicePin[]` and the canonical per-board `Record<string, DevicePin[]>`. */
   devicePinMapping?: DevicePin[] | Record<string, DevicePin[]>
   /** Warnings collected during parsing (e.g. dropped files that failed validation). */
   warnings?: string[]
+  /** `datatypes/*.dt` files that failed to parse; preserved raw so the save flow can echo
+   *  them back verbatim instead of silently dropping them from disk. */
+  unparsedDataTypeFiles?: RawProjectFile[]
+  /** True when the project still carries its data types inline in `project.json` with no
+   *  `datatypes/*.dt` on disk; the save flow migrates the whole set at once (see `executeSaveFile`). */
+  dataTypesNeedMigration?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -111,14 +128,34 @@ function getLanguageFromExt(relativePath: string): string | null {
 
 /**
  * Extract the base filename without extension from a relative path.
+ *
+ * Splits on both `\` and `/`: the desktop reader builds relative paths with `path.join`,
+ * which emits backslashes on Windows.
  */
 function getBaseNameFromPath(relativePath: string): string {
   return (
     relativePath
-      .split('/')
+      .split(/[\\/]/)
       .pop()
       ?.replace(/\.\w+$/, '') ?? 'unknown'
   )
+}
+
+/** A plain IEC 61131-3 identifier — the only shape safe to use as a file name. */
+const iecIdentifierRegex = /^[A-Za-z_]\w*$/
+
+/**
+ * A `datatypes/*.dt` file wins for the type it declares, even an unparsed one; types left only
+ * in the legacy inline `project.json` list are appended, so a half-migrated project keeps all.
+ */
+function mergeDataTypes(
+  fromFiles: PLCDataType[],
+  fromProjectJson: PLCDataType[],
+  dataTypeFiles: RawProjectFile[],
+): PLCDataType[] {
+  if (dataTypeFiles.length === 0) return fromProjectJson
+  const ownedByAFile = new Set(dataTypeFiles.map((file) => getBaseNameFromPath(file.relativePath).toLowerCase()))
+  return [...fromFiles, ...fromProjectJson.filter((dt) => !ownedByAFile.has(dt.name.toLowerCase()))]
 }
 
 // ---------------------------------------------------------------------------
@@ -126,49 +163,28 @@ function getBaseNameFromPath(relativePath: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Create a POU from raw file content when normal parsing fails.
- * Preserves as much data as possible: documentation, raw variable text, body.
- *
- * This is a direct port of the old backend's createFallbackPou logic
- * (read-project.ts:190-315), adapted to return the flat port format.
+ * Recreates a POU from raw content when normal parsing fails, preserving documentation,
+ * raw variable text, and body as best-effort.
  */
 function createFallbackPou(content: string, language: string, pouType: string, pouName: string): FallbackPou {
-  // 1. Extract documentation from leading (* ... *) comment
-  const docMatch = content.match(/^\s*\(\*\s*(.*?)\s*\*\)\s*\n/s)
-  const documentation = docMatch ? docMatch[1].trim() : ''
-  const remainingContent = docMatch ? content.slice(docMatch[0].length) : content
+  // 1. Documentation, header and declarations, through the same helpers the
+  //    successful path uses. They were written out a second time here and had
+  //    already drifted: this copy sliced the declarations from the `VAR`
+  //    keyword rather than from the start of its line, so a POU that failed to
+  //    parse came back re-indented on the next save while the others did not.
+  const { documentation, remainingContent } = extractDocumentation(content)
 
-  // 2. Find POU declaration to determine where body starts
-  const pouTypeKeywords: Record<string, string> = {
-    program: 'PROGRAM',
-    function: 'FUNCTION',
-    'function-block': 'FUNCTION_BLOCK',
-  }
-  const typeKeyword = pouTypeKeywords[pouType]
-  const declarationRegex = new RegExp(`^\\s*(${typeKeyword})\\s+(\\w+)(?:\\s*:\\s*(\\w+))?`, 'i')
-  const declarationMatch = remainingContent.match(declarationRegex)
-  let bodyStartIndex = declarationMatch ? declarationMatch[0].length : 0
+  const header = matchPouHeader(remainingContent, pouType)
+  const section = extractVariablesSection(remainingContent, header ? header.text.length : 0, {
+    boundAtGraphicalBody: language === 'ld' || language === 'fbd',
+  })
+  // An empty block, not an empty string: this text is what the code view opens
+  // on, and it has to be something the user can add a declaration to.
+  const variablesText = section.text === '' ? 'VAR\nEND_VAR' : section.text
+  const bodyStartIndex = section.bodyStartIndex
 
-  // 3. Extract raw VAR blocks as variablesText
-  const varStartIndex = remainingContent.search(
-    /\b(VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_EXTERNAL|VAR_TEMP|VAR_GLOBAL|VAR)\b/i,
-  )
-  let variablesText = 'VAR\nEND_VAR'
-  if (varStartIndex !== -1) {
-    const lastEnd = findLastEndVarIndex(remainingContent, varStartIndex)
-    if (lastEnd !== -1) {
-      variablesText = remainingContent.slice(varStartIndex, lastEnd)
-      bodyStartIndex = lastEnd
-    }
-  }
-
-  // 4. Extract body content
-  const endKeywords: Record<string, string> = {
-    program: 'END_PROGRAM',
-    function: 'END_FUNCTION',
-    'function-block': 'END_FUNCTION_BLOCK',
-  }
-  const endKeyword = endKeywords[pouType]
+  // 2. Extract body content
+  const endKeyword = POU_END_KEYWORDS[pouType]
   let bodyValue: unknown
 
   if (language === 'ld' || language === 'fbd') {
@@ -180,8 +196,22 @@ function createFallbackPou(content: string, language: string, pouType: string, p
         : remainingContent.slice(bodyStartIndex).trim()
     try {
       bodyValue = JSON.parse(bodyContent)
-    } catch {
-      bodyValue = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
+      // Valid JSON isn't enough: an object of the wrong language's shape (or null) would pass
+      // `JSON.parse` and only fail later, deep in a consumer.
+      if (!isGraphicalBodyShape(bodyValue, language)) {
+        throw new SyntaxError(
+          `body is not a valid ${language.toUpperCase()} diagram (expected ${
+            language === 'ld'
+              ? 'an object with a "rungs" array'
+              : 'an object with a "rung" object holding a "nodes" array'
+          })`,
+        )
+      }
+    } catch (bodyErr) {
+      throw new UnrecoverablePouError(
+        bodyErr instanceof Error ? bodyErr.message : String(bodyErr),
+        `${pouName}${language === 'ld' ? '.ld' : '.fbd'}`,
+      )
     }
   } else if (language === 'st' || language === 'il' || language === 'python' || language === 'cpp') {
     const endRegex = new RegExp(`\\b${endKeyword}\\b`, 'i')
@@ -209,6 +239,12 @@ function createFallbackPou(content: string, language: string, pouType: string, p
     },
     documentation,
     variablesText,
+    // An explicit marker, because "has text and no variables" stopped meaning
+    // "did not parse" the moment every loaded POU started carrying its text.
+    // An empty POU has both, and was being forced into the code view on open
+    // (DOPE-650) — which is exactly the POU a user is most likely to have, now
+    // that an empty one compiles.
+    variablesTextUnparsed: true,
   }
 }
 
@@ -216,27 +252,11 @@ function createFallbackPou(content: string, language: string, pouType: string, p
 // POU file parsing
 // ---------------------------------------------------------------------------
 
+/** Parses a single POU file; returns null if unrecognized, falls back to `createFallbackPou` on parse failure. */
 /**
- * Parse a single POU file from its raw text content.
- * Returns null if the file format is not recognized.
- * On parse failure, falls back to createFallbackPou which preserves
- * documentation, raw variable text, and body content.
- */
-/**
- * Migrate legacy variables from the two-field (`location` + `alias`) model to
- * the single-field model, where `location` holds the binding itself — the
- * alias name for an alias-bound variable, a literal `%addr` for a manual one.
- *
- * Any object that carries BOTH a string `location` and a non-empty string
- * `alias` is a legacy alias-bound PLCVariable: its alias name is folded into
- * `location` and the `alias` field dropped. Objects with `alias` but no
- * `location` (producer channels: pins, VPP entries, Modbus points, EtherCAT
- * mappings) keep their alias untouched. Manual variables (empty alias) keep
- * their literal `location`.
- *
- * Generic, idempotent deep walk: projects already in the single-field form
- * (no `alias` on variables) pass through unchanged, so it is safe to run on
- * every load.
+ * Legacy two-field (`location` + `alias`) variables to the single-field model: an alias-bound
+ * variable's alias name is folded into `location`. Producer channels keep `alias` alone.
+ * Idempotent.
  */
 function foldLegacyVariableAliases(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(foldLegacyVariableAliases)
@@ -245,7 +265,7 @@ function foldLegacyVariableAliases(value: unknown): unknown {
     const isLegacyAliasBound = typeof obj.location === 'string' && typeof obj.alias === 'string' && obj.alias.length > 0
     const out: Record<string, unknown> = {}
     for (const [key, child] of Object.entries(obj)) {
-      if (isLegacyAliasBound && key === 'alias') continue // fold away
+      if (isLegacyAliasBound && key === 'alias') continue
       if (isLegacyAliasBound && key === 'location') {
         out.location = obj.alias as string
         continue
@@ -257,7 +277,11 @@ function foldLegacyVariableAliases(value: unknown): unknown {
   return value
 }
 
-function parsePouFile(file: RawProjectFile): (PLCPou & { variablesText?: string }) | null {
+function parsePouFile(
+  file: RawProjectFile,
+  warnings: string[],
+  fatalErrors: string[],
+): (PLCPou & { variablesText?: string }) | null {
   const ext = file.relativePath.split('.').pop()?.toLowerCase()
   /* istanbul ignore if -- defensive: parseProjectFiles upstream only forwards files whose
      extension matched the POU file glob; an extension-less file path can never reach here */
@@ -303,11 +327,29 @@ function parsePouFile(file: RawProjectFile): (PLCPou & { variablesText?: string 
     }
   } catch (err) {
     console.error(`[parseProjectFiles] Failed to parse POU: ${file.relativePath}`, err)
+    const pouName = getBaseNameFromPath(file.relativePath)
+    const reason =
+      err instanceof Error ? err.message : /* istanbul ignore next -- every parser throw site uses Error */ String(err)
+    // Surface the failure instead of silently loading with no variables; textual POUs still
+    // have their raw declarations in `variablesText` for the user to fix.
+    warnings.push(
+      language === 'st' || language === 'il'
+        ? `POU "${pouName}" (${file.relativePath}) could not be fully parsed: ${reason} Its variable declarations were preserved as raw text — open the POU's variables editor in code view, fix the declaration, and save.`
+        : `POU "${pouName}" (${file.relativePath}) could not be fully parsed and was loaded with partial data: ${reason}`,
+    )
     // Fallback: preserve as much data as possible
     try {
-      const pouName = getBaseNameFromPath(file.relativePath)
       return createFallbackPou(file.content, language, pouType, pouName)
     } catch (fallbackErr) {
+      // Unrecoverable body: replace the earlier "partial data" warning with a fatal error so the
+      // caller opens the project empty instead of over content that cannot be repaired.
+      if (fallbackErr instanceof UnrecoverablePouError) {
+        warnings.pop()
+        fatalErrors.push(
+          `POU "${pouName}" (${file.relativePath}) could not be parsed and the project was not opened: ${fallbackErr.message}`,
+        )
+        return null
+      }
       /* istanbul ignore next -- defensive: createFallbackPou itself is non-throwing for any
          (content, language, pouType, pouName) tuple producible by getLanguageFromExt */
       console.error(`[parseProjectFiles] Fallback also failed: ${file.relativePath}`, fallbackErr)
@@ -326,11 +368,7 @@ function parsePouFile(file: RawProjectFile): (PLCPou & { variablesText?: string 
 // POU deduplication
 // ---------------------------------------------------------------------------
 
-/**
- * Deduplicate POU files: when both a text-based file (.st, .il, etc.) and
- * a JSON file exist for the same POU name, the text-based file wins.
- * This matches the old backend's readDirectoryRecursive behavior.
- */
+/** When both a text-based file (.st, .il, …) and a JSON file exist for the same POU name, the text-based file wins. */
 function deduplicatePouFiles(pouFiles: RawProjectFile[]): RawProjectFile[] {
   const pouNameMap = new Map<string, { index: number; isTextBased: boolean }>()
   const result: RawProjectFile[] = []
@@ -362,15 +400,8 @@ function deduplicatePouFiles(pouFiles: RawProjectFile[]): RawProjectFile[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse raw project files into the structured data that handleOpenProjectResponse expects.
- *
- * @param projectPath - Absolute path to the project directory
- * @param projectJson - Raw content of project.json
- * @param deviceConfig - Raw content of devices/configuration.json
- * @param pinMapping - Raw content of devices/pin-mapping.json
  * @param pouFiles - Raw POU files (.st, .il, .ld, .fbd, .py, .cpp, .json)
- * @param serverFiles - Raw server config files from devices/servers/
- * @param remoteDeviceFiles - Raw remote device config files from devices/remote/
+ * @param dataTypeFiles - When present, wins over the legacy `project.json` `data.dataTypes` field
  */
 export function parseProjectFiles(
   projectPath: string,
@@ -381,10 +412,11 @@ export function parseProjectFiles(
   serverFiles: RawProjectFile[],
   remoteDeviceFiles: RawProjectFile[],
   libraryManifest: string = '',
+  dataTypeFiles: RawProjectFile[] = [],
 ): ParsedProjectData {
   const warnings: string[] = []
+  const fatalErrors: string[] = []
 
-  // Parse and Zod-validate project.json (matches old backend safeParseProjectFile behavior)
   let project: { meta?: { name?: string; type?: string }; data?: Record<string, unknown> }
   try {
     const raw = projectJson ? foldLegacyVariableAliases(JSON.parse(projectJson)) : null
@@ -398,6 +430,9 @@ export function parseProjectFiles(
         project = getDefaultSchemaValues(PLCProjectSchema) as typeof project
       }
     } else {
+      // Absent is not the same as valid: flag it rather than silently opening a default
+      // project indistinguishable from a real empty one.
+      warnings.push('project.json was missing or empty. The project was opened with default settings.')
       project = getDefaultSchemaValues(PLCProjectSchema) as typeof project
     }
   } catch {
@@ -433,12 +468,6 @@ export function parseProjectFiles(
     deviceConfiguration = getDefaultSchemaValues(deviceConfigurationSchema) as DeviceConfiguration
   }
 
-  // Parse and Zod-validate pin mapping. The on-disk schema is a union
-  // of `Record<string, DevicePin[]>` (canonical per-board dict) and
-  // `DevicePin[]` (legacy flat array). The store-side
-  // `setDeviceDefinitions` accepts both shapes; the legacy branch is
-  // keyed under whatever `configuration.deviceBoard` resolves to on
-  // first load and rewritten in the dict shape on next save.
   let devicePinMapping: DevicePin[] | Record<string, DevicePin[]> | undefined
   try {
     const raw = pinMapping ? (JSON.parse(pinMapping) as unknown) : null
@@ -465,7 +494,7 @@ export function parseProjectFiles(
   // Parse POU files
   const pous: (PLCPou & { variablesText?: string })[] = []
   for (const file of filteredPouFiles) {
-    const pou = parsePouFile(file)
+    const pou = parsePouFile(file, warnings, fatalErrors)
     if (pou) {
       // Ensure all POUs have a name (derive from filename if missing)
       if (!pou.name) {
@@ -475,7 +504,6 @@ export function parseProjectFiles(
     }
   }
 
-  // Parse server configs with Zod validation (matching old backend behavior)
   const servers: PLCServer[] = []
   for (const file of serverFiles) {
     try {
@@ -492,7 +520,6 @@ export function parseProjectFiles(
     }
   }
 
-  // Parse remote device configs with Zod validation (matching old backend behavior)
   const remoteDevices: PLCRemoteDevice[] = []
   for (const file of remoteDeviceFiles) {
     try {
@@ -509,6 +536,22 @@ export function parseProjectFiles(
     }
   }
 
+  // A name mismatch or parse failure preserves the raw file so save can write it back verbatim.
+  const dataTypesFromFiles: PLCDataType[] = []
+  const unparsedDataTypeFiles: RawProjectFile[] = []
+  for (const file of dataTypeFiles) {
+    const expectedName = getBaseNameFromPath(file.relativePath)
+    const result = parseDataTypeFromText(file.content, expectedName)
+    if (result.dataType) {
+      dataTypesFromFiles.push(result.dataType)
+    } else {
+      warnings.push(
+        `Data type file "${file.relativePath}" could not be parsed and was preserved as-is: ${result.error ?? 'unknown error'}`,
+      )
+      unparsedDataTypeFiles.push(file)
+    }
+  }
+
   // Extract project data fields
   const data = project.data ?? {}
   const configuration = (data.configuration ??
@@ -516,10 +559,6 @@ export function parseProjectFiles(
       resource: { tasks: [], instances: [], globalVariables: [] },
     }) as ParsedProjectData['projectData']['configurations']
 
-  // Ensure resource has all required fields.  In practice unreachable: the Zod schema rejects
-  // `{ resource: null }` and replaces the whole project with defaults upstream, so by the time we
-  // get here `configuration.resource` is always populated.  Kept as a defensive guard against
-  // future schema changes that loosen the constraint.
   /* istanbul ignore if -- defensive: PLCProjectSchema requires resource, so this is unreachable */
   if (!configuration.resource) {
     configuration.resource = { tasks: [], instances: [], globalVariables: [] }
@@ -533,30 +572,53 @@ export function parseProjectFiles(
   /* istanbul ignore next -- defensive guard, same rationale as above */
   if (!configuration.resource.globalVariables) configuration.resource.globalVariables = []
 
+  // `data.dataTypes[].name` becomes a path segment (`datatypes/<name>.dt`) on save; reject
+  // anything that isn't a plain IEC identifier here to block directory traversal via `..` or a separator.
+  const legacyDataTypes: PLCDataType[] = []
+  for (const dt of (data.dataTypes as PLCDataType[]) ?? []) {
+    if (iecIdentifierRegex.test(dt.name)) {
+      legacyDataTypes.push(dt)
+      continue
+    }
+    warnings.push(`Data type "${dt.name}" in project.json has an invalid name and was skipped.`)
+  }
+
+  let projectServers: PLCServer[] = servers.length > 0 ? servers : ((data.servers as PLCServer[]) ?? [])
+  // JWPLC Edition: a pre-4.3 baremetal Modbus setup becomes a project server; the next save persists it.
+  if (deviceConfiguration) {
+    const modbusMigration = migrateLegacyBaremetalModbus(deviceConfiguration, projectServers)
+    if (modbusMigration.migrated) {
+      deviceConfiguration = modbusMigration.deviceConfiguration
+      if (modbusMigration.createdServer) {
+        const created = PLCServerSchema.safeParse(modbusMigration.createdServer)
+        if (created.success) projectServers = [...projectServers, created.data]
+      }
+      warnings.push(
+        'The Modbus settings of this project were moved to the 4.3 layout (Servers, Serial, Network). Save the project to keep them.',
+      )
+    }
+  }
+
   return {
     meta,
     projectData: {
-      dataTypes: (data.dataTypes as PLCDataType[]) ?? [],
+      dataTypes: mergeDataTypes(dataTypesFromFiles, legacyDataTypes, dataTypeFiles),
+      // Assembled field-by-field: anything not named here is dropped on load regardless of
+      // how well the schema validates it.
+      globalVariableLists: (data.globalVariableLists as PLCGlobalVariableList[]) ?? [],
       pous,
       configurations: configuration,
-      servers: servers.length > 0 ? servers : ((data.servers as PLCServer[]) ?? []),
+      servers: projectServers,
       remoteDevices: remoteDevices.length > 0 ? remoteDevices : ((data.remoteDevices as PLCRemoteDevice[]) ?? []),
-      // Migration: legacy projects (no `libraries` field on disk)
-      // load with an empty list — bundled / canonical strucpp libs
-      // are always-on regardless, so the project compiles without
-      // needing an explicit enablement record.
       libraries: (data.libraries as ParsedProjectData['projectData']['libraries']) ?? [],
-      // Library projects own a `library.json` at the project root.
-      // The raw bytes are threaded through here from the disk read
-      // (same way the .st POU contents are) so the editor's store
-      // has the manifest content the manifest tab + the save flow
-      // both read.  Empty string when the file is missing on disk
-      // — the manifest editor seeds a template before first save.
       ...(metaType === 'plc-library' ? { libraryManifest } : {}),
       debugVariables: data.debugVariables as ParsedProjectData['projectData']['debugVariables'],
     },
     deviceConfiguration,
     devicePinMapping,
     warnings: warnings.length > 0 ? warnings : undefined,
+    fatalErrors: fatalErrors.length > 0 ? fatalErrors : undefined,
+    ...(unparsedDataTypeFiles.length > 0 ? { unparsedDataTypeFiles } : {}),
+    ...(dataTypeFiles.length === 0 && legacyDataTypes.length > 0 ? { dataTypesNeedMigration: true } : {}),
   }
 }

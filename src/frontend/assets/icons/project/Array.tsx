@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -22,7 +23,7 @@ export const ArrayIcon = (props: ArrayIconProps) => {
       className={cn(`${sizeClasses[size]}`, className)}
       {...res}
     >
-      <title>Array Icon</title>
+      <title>{tr('Array Icon')}</title>
       <path
         opacity='0.4'
         d='M3.49988 20.9997V6.99968C3.49988 4.42235 5.58922 2.33301 8.16655 2.33301L15.1665 2.33302L24.4999 11.6664V20.9997C24.4999 23.577 22.4105 25.6664 19.8332 25.6664H8.16654C5.58922 25.6664 3.49988 23.577 3.49988 20.9997Z'

@@ -126,6 +126,24 @@ describe('createEditorPackageAdapter', () => {
       expect(await adapter.getManifest('missing')).toBeNull()
     })
 
+    it('keeps the manifest usable when its stored compatibility floor is unreadable', async () => {
+      // Read path, not the install boundary (DOPE-448): a package installed
+      // before the floor format was checked must still render and still
+      // provide its boards. The floor is dropped with a log, not the manifest.
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      ;(window.bridge.getPackageManifest as jest.Mock).mockResolvedValue({
+        ...validManifest,
+        package: { ...validManifest.package, minEditorVersion: 'nightly' },
+      })
+
+      const result = await adapter.getManifest('acme-controller')
+
+      expect(result?.package.id).toBe('acme-controller')
+      expect(result?.package).not.toHaveProperty('minEditorVersion')
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('minEditorVersion'))
+      warnSpy.mockRestore()
+    })
+
     it('returns null when the bridge returns a malformed manifest (zod rejection)', async () => {
       // Suppress the validation warning the schema emits; we want to
       // assert the rejection, not the noise.
@@ -146,7 +164,13 @@ describe('createEditorPackageAdapter', () => {
         json: async () => catalog,
       })
       const result = await adapter.listRemoteCatalog()
-      expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/vpp-catalog\/v1\/catalog\.json$/))
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/vpp-catalog\/v1\/catalog\.json$/),
+        // The deadline matters as much as the URL: the startup prime behind the
+        // build's package-update notice must not leave a request open for the
+        // session, and the catalog browser must not spin forever.
+        { signal: expect.any(AbortSignal) },
+      )
       expect(result).toEqual(catalog)
     })
 
