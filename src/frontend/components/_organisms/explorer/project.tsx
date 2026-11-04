@@ -2,7 +2,7 @@ import { hasHmiDisplay, isHmiVendorScreen } from '@root/backend/shared/compile/j
 import { useEffect, useState } from 'react'
 
 import { projectCapabilities } from '../../../../middleware/shared/ports/types'
-import { useCapabilities, useDevice, useProject } from '../../../../middleware/shared/providers'
+import { useCapabilities, useProject } from '../../../../middleware/shared/providers'
 import { FolderIcon } from '../../../assets/icons/interface/Folder'
 import { useTargetCapabilities } from '../../../hooks/use-target-capabilities'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '../../../store'
@@ -16,7 +16,7 @@ import { isUserManagementCapableRuntime } from '../../../utils/device'
 import { isNativeScreenAvailable } from '../../../utils/native-screens'
 import { useToast } from '../../_features/[app]/toast/use-toast'
 import { CreatePLCElement } from '../../_features/[workspace]/create-element'
-import { openHmiDesigner } from '../../_features/[workspace]/editor/hmi-designer'
+import { openHmiDesignerTab } from '../../_features/[workspace]/editor/hmi-designer'
 import {
   ProjectTreeBranch,
   ProjectTreeExpandableLeaf,
@@ -46,7 +46,6 @@ function validateProjectName(value: string): string | null {
 
 const Project = () => {
   const capabilities = useCapabilities()
-  const device = useDevice()
   const store = useOpenPLCStoreApi()
   const projectPort = useProject()
   const { toast } = useToast()
@@ -539,11 +538,7 @@ const Project = () => {
               leafLang='hmiDesigner'
               leafType='hmi-designer'
               label={HMI_DESIGNER_TAB_NAME}
-              onClick={() => {
-                void openHmiDesigner(store, device).then((result) => {
-                  if (!result.ok) toast({ title: 'HMI Designer', description: result.error, variant: 'fail' })
-                })
-              }}
+              onClick={() => openHmiDesignerTab(store)}
             />
           )}
 
