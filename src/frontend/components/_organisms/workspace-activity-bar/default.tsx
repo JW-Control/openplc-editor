@@ -1,3 +1,4 @@
+import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { tr } from '@root/frontend/locales/tr'
 import { evaluatePreBuildPlcGate } from '@root/middleware/shared/utils/build-gate/pre-build-plc-gate'
@@ -51,6 +52,7 @@ import { type BuildOption, BuildOptionsPopover } from '../../_features/[workspac
 import { BuildLibraryButton } from '../../_molecules/workspace-activity-bar/default/build-library'
 import { ChatButton } from '../../_molecules/workspace-activity-bar/default/chat'
 import { DebuggerButton } from '../../_molecules/workspace-activity-bar/default/debugger'
+import { JwplcSimButton } from '../../_molecules/workspace-activity-bar/default/jwplc-sim'
 import { PlayButton } from '../../_molecules/workspace-activity-bar/default/play'
 import { SearchButton } from '../../_molecules/workspace-activity-bar/default/search'
 import { ZoomButton } from '../../_molecules/workspace-activity-bar/default/zoom'
@@ -127,6 +129,8 @@ export const DefaultWorkspaceActivityBar = ({ zoom }: DefaultWorkspaceActivityBa
 
   const currentBoardInfo = availableBoards.get(deviceDefinitions.configuration.deviceBoard)
   const isSimulatorBoard = resolveTargetCapabilities(currentBoardInfo).isInProcessSimulator
+  // JWPLC Sim simulates the JWPLC Basic, the board that declares the HMI display.
+  const offerJwplcSim = hasHmiDisplay(currentBoardInfo) && Boolean(device.openInJwplcSim)
 
   // The two CONNECT actions, both shared with the device Configuration screen so
   // the debugger's offer runs exactly what the Connect button runs.
@@ -1394,6 +1398,15 @@ export const DefaultWorkspaceActivityBar = ({ zoom }: DefaultWorkspaceActivityBa
   // JSX
   // ---------------------------------------------------------------------------
 
+  // JWPLC Sim compiles what is on disk, so the project is saved first.
+  const handleOpenInJwplcSim = async (): Promise<void> => {
+    if (!(await executeSave())) return
+    const result = await device.openInJwplcSim?.(store.getState().project.meta.path)
+    if (result && !result.ok && result.error) {
+      toast({ title: tr('JWPLC Sim'), description: result.error, variant: 'fail' })
+    }
+  }
+
   return (
     <>
       <TooltipSidebarWrapperButton tooltipContent='Search'>
@@ -1474,6 +1487,11 @@ export const DefaultWorkspaceActivityBar = ({ zoom }: DefaultWorkspaceActivityBa
               {(isSimulatorBoard ? simulatorRunning : plcStatus === 'RUNNING') ? <StopIcon /> : null}
             </PlayButton>
           </TooltipSidebarWrapperButton>
+          {offerJwplcSim && (
+            <TooltipSidebarWrapperButton tooltipContent={tr('Simulate in JWPLC Sim')}>
+              <JwplcSimButton onClick={() => void handleOpenInJwplcSim()} />
+            </TooltipSidebarWrapperButton>
+          )}
           {/* Enabled for the simulator too. It used to be disabled with a "Use
               Start to debug" tooltip, which made the button a dead end: the
               answer to "I want to debug" was a tooltip telling you to press a

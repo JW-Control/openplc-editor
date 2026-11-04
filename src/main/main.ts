@@ -34,6 +34,7 @@ import MenuBuilder from './menu'
 import { hmiDesignerHost } from './modules/hmi-designer'
 import MainProcessBridge from './modules/ipc/main'
 import { installBundledVpp } from './modules/jwplc-bundled-vpp'
+import { registerJwplcSim } from './modules/jwplc-sim'
 import { createQuitCoordinator } from './modules/lifecycle/quit-coordinator'
 import { store } from './modules/store'
 import { applyUiLanguage, readSavedUiLanguage } from './modules/ui-language'
@@ -412,6 +413,7 @@ const createMainWindow = async () => {
   mainIpcModule.setupMainIpcListener()
   // JWPLC HMI Designer window (Alpha14 F3). Registers its channels once.
   hmiDesignerHost.register(ipcMain)
+  registerJwplcSim(ipcMain)
 }
 
 // Disable GPU Acceleration for Windows 7;

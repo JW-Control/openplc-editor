@@ -17,6 +17,9 @@ export const store = new Store<TStoreType>({
     language: {
       type: 'string',
     },
+    jwplc_sim_path: {
+      type: 'string',
+    },
     window: {
       type: 'object',
       properties: {

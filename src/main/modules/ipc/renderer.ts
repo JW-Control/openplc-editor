@@ -25,6 +25,7 @@ import type {
   DeviceLicenseRequest,
   OpenHmiDesignerArgs,
   OpenHmiDesignerResult,
+  OpenInJwplcSimResult,
   PrepareHmiDesignerResult,
 } from '@root/middleware/shared/ports/device-port'
 import type { EdgeSignInOutcome, EdgeUserRead } from '@root/middleware/shared/ports/edge-account-port'
@@ -589,6 +590,9 @@ const rendererProcessBridge = {
   // ===================== UTILITY METHODS =====================
   getPreviewImage: (image: string, packagePath?: string): Promise<string> =>
     ipcRenderer.invoke('util:get-preview-image', image, packagePath),
+  openInJwplcSim: (projectPath: string): Promise<OpenInJwplcSimResult> =>
+    ipcRenderer.invoke('jwplc-sim:open', projectPath),
+
   // JWPLC HMI Designer tab (Alpha14 F3)
   prepareHmiDesigner: (args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult> =>
     ipcRenderer.invoke('hmi-designer:prepare', args),

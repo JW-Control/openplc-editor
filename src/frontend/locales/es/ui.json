@@ -1428,5 +1428,11 @@
   "{{name}} has been created": "Se creó {{name}}",
   "{{name}} is now on your account. The copy on this computer is unchanged.": "{{name}} ya está en tu cuenta. La copia en esta computadora no cambió.",
   "{{name}} is {{toFixed1}} MB. The maximum is {{value}} MB.": "{{name}} pesa {{toFixed1}} MB. El máximo es {{value}} MB.",
-  "{{summary}} The branches may have changed since you opened this page — please reload.": "{{summary}} Puede que las ramas hayan cambiado desde que abriste esta página; recarga."
+  "{{summary}} The branches may have changed since you opened this page — please reload.": "{{summary}} Puede que las ramas hayan cambiado desde que abriste esta página; recarga.",
+  "Simulate in JWPLC Sim": "Simular en JWPLC Sim",
+  "Locate JWPLC Sim": "Ubicar JWPLC Sim",
+  "JWPLC Sim was not found. Select its program, or download it from {{url}}": "No se encontró JWPLC Sim. Selecciona su programa o descárgalo de {{url}}",
+  "The project has no project.json on disk.": "El proyecto no tiene project.json en el disco.",
+  "JWPLC Sim could not be started: {{reason}}": "No se pudo iniciar JWPLC Sim: {{reason}}",
+  "JWPLC Sim": "JWPLC Sim"
 }
