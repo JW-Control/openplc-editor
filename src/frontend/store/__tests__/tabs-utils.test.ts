@@ -332,3 +332,22 @@ describe('tabs/utils', () => {
     })
   })
 })
+
+describe('CreateEditorObjectFromTab for the single-instance editors', () => {
+  const cases: Array<[TabsProps['elementType'], string]> = [
+    [{ type: 'hmi-designer' }, 'plc-hmi-designer'],
+    [{ type: 'diagnostics' }, 'plc-diagnostics'],
+    [{ type: 'package-manager' }, 'plc-package-manager'],
+    [{ type: 'library-manager' }, 'plc-library-manager'],
+    [{ type: 'library-manifest' }, 'plc-library-manifest'],
+    [{ type: 'user-management' }, 'plc-user-management'],
+    [{ type: 'persistent-storage' }, 'plc-persistent-storage'],
+    [{ type: 'ethercat-module', busName: 'bus', deviceId: 'd1', moduleId: 'm1' }, 'plc-ethercat-module'],
+  ]
+
+  it.each(cases)('opens %o as its own editor', (elementType, expectedType) => {
+    const model = CreateEditorObjectFromTab({ name: 'tab', elementType })
+    expect(model.type).toBe(expectedType)
+    expect(model.meta.name).toBe('tab')
+  })
+})
