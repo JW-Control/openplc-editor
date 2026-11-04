@@ -1,5 +1,6 @@
 import ViewIcon from '@root/frontend/assets/icons/interface/View'
 import ViewHiddenIcon from '@root/frontend/assets/icons/interface/ViewHidden'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { OpcUaTrustedCertificate, OpcUaUser } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -27,9 +28,9 @@ const inputStyles =
   'h-[30px] w-full rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = [
-  { value: 'viewer', label: 'Viewer', description: 'Read-only access to all variables' },
-  { value: 'operator', label: 'Operator', description: 'Read/Write based on per-variable permission settings' },
-  { value: 'engineer', label: 'Engineer', description: 'Full administrative access' },
+  { value: 'viewer', label: tr('Viewer'), description: tr('Read-only access to all variables') },
+  { value: 'operator', label: tr('Operator'), description: tr('Read/Write based on per-variable permission settings') },
+  { value: 'engineer', label: tr('Engineer'), description: tr('Full administrative access') },
 ]
 
 // No hashing here, deliberately: how a credential is stored is a property of the
@@ -196,11 +197,13 @@ export const UserModal = ({
         <div className='flex flex-1 flex-col gap-4 overflow-y-auto'>
           {/* Authentication Type */}
           <div className='flex flex-col gap-2'>
-            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>Authentication Type</Label>
+            <Label className='text-xs font-semibold text-neutral-950 dark:text-white'>
+              {tr('Authentication Type')}
+            </Label>
             <Select value={authType} onValueChange={(v) => setAuthType(v as AuthType)}>
               <SelectTrigger
                 withIndicator
-                placeholder='Select type'
+                placeholder={tr('Select type')}
                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
               />
               <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -212,7 +215,7 @@ export const UserModal = ({
                   )}
                 >
                   <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                    Password
+                    {tr('Password')}
                   </span>
                 </SelectItem>
                 <SelectItem
@@ -223,7 +226,7 @@ export const UserModal = ({
                   )}
                 >
                   <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                    Certificate
+                    {tr('Certificate')}
                   </span>
                 </SelectItem>
               </SelectContent>
@@ -234,17 +237,17 @@ export const UserModal = ({
           {authType === 'password' && (
             <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                Password Authentication
+                {tr('Password Authentication')}
               </h4>
 
               {/* Username */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-950 dark:text-white'>Username</Label>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Username')}</Label>
                 <InputWithRef
                   type='text'
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder='e.g., operator1'
+                  placeholder={tr('e.g., operator1')}
                   maxLength={64}
                   className={inputStyles}
                 />
@@ -298,7 +301,7 @@ export const UserModal = ({
 
               {/* Confirm Password */}
               <div className='flex flex-col gap-2'>
-                <Label className='text-xs text-neutral-950 dark:text-white'>Confirm Password</Label>
+                <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Confirm Password')}</Label>
                 <InputWithRef
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
@@ -307,7 +310,9 @@ export const UserModal = ({
                   className={inputStyles}
                 />
                 {passwordsMismatchVisible && (
-                  <span className='font-caption text-cp-xs font-normal text-red-500'>Passwords do not match</span>
+                  <span className='font-caption text-cp-xs font-normal text-red-500'>
+                    {tr('Passwords do not match')}
+                  </span>
                 )}
               </div>
             </div>
@@ -317,20 +322,20 @@ export const UserModal = ({
           {authType === 'certificate' && (
             <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
               <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>
-                Certificate Authentication
+                {tr('Certificate Authentication')}
               </h4>
 
               {availableCertificates.length === 0 ? (
                 <p className='text-xs text-neutral-700 dark:text-neutral-300'>
-                  No trusted certificates available. Add certificates in the Certificates tab first.
+                  {tr('No trusted certificates available. Add certificates in the Certificates tab first.')}
                 </p>
               ) : (
                 <div className='flex flex-col gap-2'>
-                  <Label className='text-xs text-neutral-950 dark:text-white'>Client Certificate</Label>
+                  <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Client Certificate')}</Label>
                   <Select value={certificateId ?? ''} onValueChange={(v) => setCertificateId(v || null)}>
                     <SelectTrigger
                       withIndicator
-                      placeholder='Select certificate'
+                      placeholder={tr('Select certificate')}
                       className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                     />
                     <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -351,7 +356,7 @@ export const UserModal = ({
                     </SelectContent>
                   </Select>
                   <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                    Select from trusted certificates configured in the Certificates tab
+                    {tr('Select from trusted certificates configured in the Certificates tab')}
                   </span>
                   {certificateError && (
                     <span className='font-caption text-cp-xs font-normal text-red-500'>{certificateError}</span>
@@ -363,14 +368,14 @@ export const UserModal = ({
 
           {/* User Role Section */}
           <div className='flex flex-col gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900'>
-            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>User Role</h4>
+            <h4 className='font-caption text-xs font-semibold text-neutral-950 dark:text-white'>{tr('User Role')}</h4>
 
             <div className='flex flex-col gap-2'>
-              <Label className='text-xs text-neutral-950 dark:text-white'>Role</Label>
+              <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Role')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
                 <SelectTrigger
                   withIndicator
-                  placeholder='Select role'
+                  placeholder={tr('Select role')}
                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption !text-xs font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -417,7 +422,7 @@ export const UserModal = ({
             onClick={onClose}
             className='h-[32px] rounded-md border border-neutral-300 bg-white px-4 font-caption !text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'

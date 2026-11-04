@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Children, ComponentPropsWithoutRef, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 
 import { ArrowIcon } from '../../../../../assets/icons/interface/Arrow'
@@ -73,12 +74,12 @@ type IProjectSearchTreeBranchProps = ComponentPropsWithoutRef<'li'> & {
 }
 
 const BranchSources = {
-  'data-type': { BranchIcon: DataTypeIcon, label: 'Data Types' },
-  function: { BranchIcon: FunctionIcon, label: 'Functions' },
-  'function-block': { BranchIcon: FunctionBlockIcon, label: 'Function Blocks' },
-  program: { BranchIcon: ProgramIcon, label: 'Programs' },
-  resource: { BranchIcon: ResourceIcon, label: 'Resource' },
-  device: { BranchIcon: DeviceIcon, label: 'Device' },
+  'data-type': { BranchIcon: DataTypeIcon, label: tr('Data Types') },
+  function: { BranchIcon: FunctionIcon, label: tr('Functions') },
+  'function-block': { BranchIcon: FunctionBlockIcon, label: tr('Function Blocks') },
+  program: { BranchIcon: ProgramIcon, label: tr('Programs') },
+  resource: { BranchIcon: ResourceIcon, label: tr('Resource') },
+  device: { BranchIcon: DeviceIcon, label: tr('Device') },
 }
 
 const ProjectSearchTreeBranch = ({ branchTarget, children, ...res }: IProjectSearchTreeBranchProps) => {
@@ -137,9 +138,9 @@ type IProjectSearchTreeNestedBranchProps = ComponentPropsWithoutRef<'li'> & {
 }
 
 const NestedBranchSources = {
-  array: { BranchIcon: ArrayIcon, label: 'Arrays' },
-  enumerated: { BranchIcon: EnumIcon, label: 'Enums' },
-  structure: { BranchIcon: StructureIcon, label: 'Structures' },
+  array: { BranchIcon: ArrayIcon, label: tr('Arrays') },
+  enumerated: { BranchIcon: EnumIcon, label: tr('Enums') },
+  structure: { BranchIcon: StructureIcon, label: tr('Structures') },
 }
 
 const ProjectSearchTreeNestedBranch = ({

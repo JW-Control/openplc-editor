@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useMemo, useState } from 'react'
 import Markdown from 'react-markdown'
 
@@ -221,7 +222,7 @@ const AssistantBubble = ({ turn, language, onInsertAtCursor, onRegenerate }: Ass
             )}
           </ActionButton>
           {onRegenerate && (
-            <ActionButton title='Regenerate' onClick={onRegenerate}>
+            <ActionButton title={tr('Regenerate')} onClick={onRegenerate}>
               <svg
                 width='13'
                 height='13'
@@ -237,7 +238,11 @@ const AssistantBubble = ({ turn, language, onInsertAtCursor, onRegenerate }: Ass
             </ActionButton>
           )}
           <div className='flex-1' />
-          <ActionButton title='Good response' active={ratingTarget.rating === 'up'} onClick={() => handleRate('up')}>
+          <ActionButton
+            title={tr('Good response')}
+            active={ratingTarget.rating === 'up'}
+            onClick={() => handleRate('up')}
+          >
             <svg
               width='13'
               height='13'
@@ -251,7 +256,11 @@ const AssistantBubble = ({ turn, language, onInsertAtCursor, onRegenerate }: Ass
               <path d='M7 10v10H4V10h3Zm0 0 5-7c1.5 0 2.5 1 2.5 2.5V9h4.5c1.1 0 1.9 1 1.7 2l-1.3 7c-.2 1-1 1.7-2 1.7H7' />
             </svg>
           </ActionButton>
-          <ActionButton title='Bad response' active={ratingTarget.rating === 'down'} onClick={() => handleRate('down')}>
+          <ActionButton
+            title={tr('Bad response')}
+            active={ratingTarget.rating === 'down'}
+            onClick={() => handleRate('down')}
+          >
             <svg
               width='13'
               height='13'

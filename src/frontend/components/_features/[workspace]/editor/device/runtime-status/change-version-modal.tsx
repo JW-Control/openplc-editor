@@ -13,6 +13,7 @@
 
 import * as Select from '@radix-ui/react-select'
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { useRuntime } from '@root/middleware/shared/providers/platform-context'
 import {
@@ -182,7 +183,7 @@ const ChangeVersionModal = ({ open, onOpenChange, currentVersion, onFinished }: 
   const startUpdate = useCallback(async () => {
     const target = version.trim()
     if (!target) {
-      setError('Enter the version to install.')
+      setError(tr('Enter the version to install.'))
       return
     }
 
@@ -285,17 +286,18 @@ const ChangeVersionModal = ({ open, onOpenChange, currentVersion, onFinished }: 
     <Modal open={open} onOpenChange={busy ? () => undefined : onOpenChange}>
       <ModalContent className='h-fit w-[520px]'>
         <ModalHeader>
-          <ModalTitle>Change Runtime Version</ModalTitle>
+          <ModalTitle>{tr('Change Runtime Version')}</ModalTitle>
         </ModalHeader>
 
         <div className='flex flex-col gap-4'>
           <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-            The device downloads the version you choose and restarts its runtime. Installing an older version is
-            supported.
+            {tr(
+              'The device downloads the version you choose and restarts its runtime. Installing an older version is supported.',
+            )}
           </p>
 
           <div className='flex flex-col gap-1'>
-            <span className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Version</span>
+            <span className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>{tr('Version')}</span>
 
             {versions !== null ? (
               <Select.Root disabled={busy} onValueChange={setVersion} value={version}>
@@ -356,7 +358,7 @@ const ChangeVersionModal = ({ open, onOpenChange, currentVersion, onFinished }: 
                   }}
                   type='button'
                 >
-                  Retry
+                  {tr('Retry')}
                 </button>
               </span>
             )}
@@ -402,8 +404,9 @@ const ChangeVersionModal = ({ open, onOpenChange, currentVersion, onFinished }: 
 
           {inFlight && (
             <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-              The device continues on its own if you close the editor. On a slow connection this can take several
-              minutes.
+              {tr(
+                'The device continues on its own if you close the editor. On a slow connection this can take several minutes.',
+              )}
             </p>
           )}
         </div>

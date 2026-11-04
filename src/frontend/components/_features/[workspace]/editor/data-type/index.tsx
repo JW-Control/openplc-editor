@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef, useEffect, useState } from 'react'
 
 import type { PLCDataType } from '../../../../../../middleware/shared/ports/types'
@@ -79,7 +80,7 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
             htmlFor='data-type-name'
             className='text-start font-caption text-xs font-medium text-neutral-950 dark:text-white'
           >
-            Name:
+            {tr('Name:')}
           </label>
           <div
             aria-label='Data type name input container'

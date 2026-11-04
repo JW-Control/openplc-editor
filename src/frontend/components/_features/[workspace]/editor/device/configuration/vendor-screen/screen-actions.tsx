@@ -5,6 +5,7 @@ import {
   type VppScreenAction,
 } from '@root/backend/shared/utils/vpp/screen-actions'
 import { Modal, ModalContent, ModalTitle } from '@root/frontend/components/_molecules/modal'
+import { tr } from '@root/frontend/locales/tr'
 import { useRuntime } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -207,14 +208,14 @@ function VppScreenActions({
               }}
               className='w-full rounded-lg bg-brand px-4 py-2 text-center text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Continue
+              {tr('Continue')}
             </button>
             <button
               type='button'
               onClick={() => setPendingConfirm(null)}
               className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </ModalContent>

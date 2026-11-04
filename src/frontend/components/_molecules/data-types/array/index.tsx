@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ChangeEvent, ComponentPropsWithoutRef, useEffect, useRef, useState } from 'react'
 
 import { baseTypeEnum } from '../../../../../middleware/shared/ports/plc-schemas'
@@ -195,7 +196,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
         <div aria-label='Array base type container' className='flex w-1/2 flex-col gap-3'>
           <div aria-label='Array base type content' className='flex h-fit w-full items-center justify-between'>
             <label className='cursor-default select-none pr-6 font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-              Base Type
+              {tr('Base Type')}
             </label>
 
             <TypeDropdownSelector
@@ -212,7 +213,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
             className='flex h-fit w-full items-center justify-end'
           >
             <label className='cursor-default select-none pr-6 font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100 '>
-              Initial Value:
+              {tr('Initial Value:')}
             </label>
             <InputWithRef
               onChange={handleInitialValueChange}
@@ -229,7 +230,7 @@ const ArrayDataType = ({ data, ...rest }: ArrayDatatypeProps) => {
       <div className='flex w-[600px] flex-col gap-3'>
         <div aria-label='Array data type table actions container' className='flex h-fit items-center justify-between'>
           <p className='cursor-default select-none font-caption text-xs font-medium text-neutral-1000 dark:text-neutral-100'>
-            Dimensions
+            {tr('Dimensions')}
           </p>
           <div
             aria-label='Data type table actions buttons container'

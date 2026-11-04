@@ -68,9 +68,9 @@ const BAUD_RATE_OPTIONS = [
 ]
 
 const PARITY_OPTIONS = [
-  { value: 'N', label: 'None' },
-  { value: 'E', label: 'Even' },
-  { value: 'O', label: 'Odd' },
+  { value: 'N', label: tr('None') },
+  { value: 'E', label: tr('Even') },
+  { value: 'O', label: tr('Odd') },
 ]
 
 const STOP_BITS_OPTIONS = [

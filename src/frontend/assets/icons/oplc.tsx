@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentProps } from 'react'
 
 import { cn } from '../../utils/cn'
@@ -15,7 +16,7 @@ export const OpenPLCIcon = (props: IOpenPLCIconProps) => {
       className={cn('h-6 w-6', className)}
       {...rest}
     >
-      <title id='openplc-logo-title'>OpenPLC Logo</title>
+      <title id='openplc-logo-title'>{tr('OpenPLC Logo')}</title>
       <path
         d='M4.74903 3.42857L2.14285 6L4.74903 8.57143L5.32239 7.99417L3.73219 6.44024C3.61547 6.32618 3.45921 6.26239 3.29656 6.26239H2.87258V5.73761H3.29656C3.45921 5.73761 3.61547 5.67381 3.73219 5.55976L5.32239 4.00583L4.74903 3.42857Z'
         fill='white'

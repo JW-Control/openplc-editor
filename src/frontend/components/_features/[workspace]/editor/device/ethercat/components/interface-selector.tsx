@@ -1,5 +1,6 @@
 import { GenericComboboxCell } from '@root/frontend/components/_atoms/generic-table-inputs/generic-combobox-cell'
 import { Label } from '@root/frontend/components/_atoms/label'
+import { tr } from '@root/frontend/locales/tr'
 import type { NetworkInterface } from '@root/middleware/shared/ports/ethercat-types'
 import { useMemo } from 'react'
 
@@ -50,7 +51,7 @@ const InterfaceSelector = ({
 
   return (
     <div className='flex flex-col gap-1'>
-      <Label className='text-xs text-neutral-950 dark:text-white'>Network Interface</Label>
+      <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Network Interface')}</Label>
       <GenericComboboxCell
         value={selectedInterface}
         onValueChange={onSelectInterface}
@@ -62,7 +63,7 @@ const InterfaceSelector = ({
         showChevron
         triggerClassName={FIELD_TRIGGER_CLASS}
         placeholder='eth0'
-        customValueLabel='Use custom interface'
+        customValueLabel={tr('Use custom interface')}
         emptyMessage={isLoading ? 'Loading interfaces...' : 'No interfaces available. Type a custom value.'}
       />
       {error && <p className='text-xs text-red-500 dark:text-red-400'>{error}</p>}

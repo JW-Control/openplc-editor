@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { tr } from '@root/frontend/locales/tr'
 import { Eye, EyeOff, Mail } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -195,7 +196,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
         <p className='text-center text-sm text-neutral-500 dark:text-neutral-400'>{copy.subtitle}</p>
         {/* States these are Edge credentials: two logins exist in this app, this one and the PLC runtime's. */}
         <p className='mb-5 text-center text-xs text-neutral-500 dark:text-neutral-400'>
-          Use the same login as Autonomy Edge.
+          {tr('Use the same login as Autonomy Edge.')}
         </p>
 
         <form
@@ -206,7 +207,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
         >
           <div className='flex flex-col gap-1'>
             <label htmlFor='edge-signin-email' className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>
-              Email address
+              {tr('Email address')}
             </label>
             <div className='relative'>
               <Mail className='pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400' />
@@ -214,7 +215,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
                 id='edge-signin-email'
                 type='email'
                 autoComplete='email'
-                placeholder='Enter your email'
+                placeholder={tr('Enter your email')}
                 className={`${FIELD_CLASSES} pl-9`}
                 {...register('email')}
               />
@@ -227,14 +228,14 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
               htmlFor='edge-signin-password'
               className='text-sm font-medium text-neutral-900 dark:text-neutral-100'
             >
-              Password
+              {tr('Password')}
             </label>
             <div className='relative'>
               <input
                 id='edge-signin-password'
                 type={showPassword ? 'text' : 'password'}
                 autoComplete='current-password'
-                placeholder='Enter your password'
+                placeholder={tr('Enter your password')}
                 className={`${FIELD_CLASSES} pl-3`}
                 {...register('password')}
               />
@@ -251,7 +252,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
               <span className='text-xs text-red-600'>{errors.password.message}</span>
             ) : (
               <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                Your password must be at least 8 characters long
+                {tr('Your password must be at least 8 characters long')}
               </span>
             )}
           </div>
@@ -265,7 +266,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
               rel='noreferrer'
               className='cursor-pointer text-sm text-brand underline-offset-4 hover:underline'
             >
-              Forgot your password?
+              {tr('Forgot your password?')}
             </a>
           </div>
 
@@ -319,7 +320,7 @@ const EdgeSignInModal = ({ open, onOpenChange, onSignedIn, account, reason = 'si
             rel='noreferrer'
             className='cursor-pointer text-brand underline-offset-4 hover:underline'
           >
-            Sign up
+            {tr('Sign up')}
           </a>
         </p>
       </ModalContent>

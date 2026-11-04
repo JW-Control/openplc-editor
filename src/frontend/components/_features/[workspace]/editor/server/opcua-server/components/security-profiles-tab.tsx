@@ -1,4 +1,5 @@
 import { Pencil1Icon, PlusIcon, TrashIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import type { OpcUaSecurityProfile, OpcUaServerConfig } from '@root/middleware/shared/ports/types'
@@ -88,7 +89,7 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
       {/* Header and description */}
       <div className='flex flex-col gap-2'>
         <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-          Configure which security profiles clients can use to connect. At least one profile must be enabled.
+          {tr('Configure which security profiles clients can use to connect. At least one profile must be enabled.')}
         </p>
       </div>
 
@@ -96,7 +97,7 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
       {!hasEnabledProfile && (
         <div className='rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900'>
           <p className='text-xs text-neutral-700 dark:text-neutral-300'>
-            Warning: At least one security profile must be enabled for clients to connect.
+            {tr('Warning: At least one security profile must be enabled for clients to connect.')}
           </p>
         </div>
       )}
@@ -108,7 +109,7 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
         className='flex w-fit items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
       >
         <PlusIcon className='h-4 w-4' />
-        Add Security Profile
+        {tr('Add Security Profile')}
       </button>
 
       {/* Security Profiles Table */}
@@ -118,18 +119,22 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
             <thead className='bg-neutral-100 dark:bg-neutral-900'>
               <tr>
                 <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                  Enabled
+                  {tr('Enabled')}
                 </th>
-                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Name</th>
                 <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                  Policy
+                  {tr('Name')}
                 </th>
-                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Mode</th>
                 <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                  Authentication
+                  {tr('Policy')}
+                </th>
+                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                  {tr('Mode')}
+                </th>
+                <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                  {tr('Authentication')}
                 </th>
                 <th className='px-3 py-2 text-right text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                  Actions
+                  {tr('Actions')}
                 </th>
               </tr>
             </thead>
@@ -171,7 +176,7 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
                           type='button'
                           onClick={() => handleEditProfile(profile)}
                           className='rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
-                          title='Edit'
+                          title={tr('Edit')}
                         >
                           <Pencil1Icon className='h-4 w-4' />
                         </button>
@@ -183,7 +188,7 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
                             'rounded p-1 text-neutral-500 hover:bg-red-100 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-900/30 dark:hover:text-red-400',
                             config.securityProfiles.length <= 1 && 'cursor-not-allowed opacity-50',
                           )}
-                          title='Delete'
+                          title={tr('Delete')}
                         >
                           <TrashIcon className='h-4 w-4' />
                         </button>
@@ -197,15 +202,16 @@ export const SecurityProfilesTab = ({ config, serverName, onConfigChange }: Secu
         </div>
       ) : (
         <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-          No security profiles configured. Add a profile to allow clients to connect.
+          {tr('No security profiles configured. Add a profile to allow clients to connect.')}
         </p>
       )}
 
       {/* Note about certificates */}
       <div className='mt-2 border-t border-neutral-200 pt-4 dark:border-neutral-800'>
         <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-          Note: Security profiles with Certificate authentication require trusted client certificates to be configured
-          in the Certificates tab.
+          {tr(
+            'Note: Security profiles with Certificate authentication require trusted client certificates to be configured in the Certificates tab.',
+          )}
         </p>
       </div>
 

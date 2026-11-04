@@ -1,4 +1,5 @@
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { SDOConfigurationEntry } from '@root/middleware/shared/ports/esi-types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -247,7 +248,7 @@ const SdoParametersTable = ({ sdoConfigurations, onUpdateSdoConfigurations }: Sd
       <div className='flex flex-wrap items-center gap-3'>
         <input
           type='text'
-          placeholder='Search parameters...'
+          placeholder={tr('Search parameters...')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className='h-[30px] rounded-md border border-neutral-300 bg-white px-2 text-xs text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
@@ -261,20 +262,20 @@ const SdoParametersTable = ({ sdoConfigurations, onUpdateSdoConfigurations }: Sd
             'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
-          Reset All to Defaults
+          {tr('Reset All to Defaults')}
         </button>
         <div className='flex items-center gap-1'>
           <button
             onClick={handleExpandAll}
             className='h-[30px] rounded-md border border-neutral-300 px-2 text-xs text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800'
           >
-            Expand All
+            {tr('Expand All')}
           </button>
           <button
             onClick={handleCollapseAll}
             className='h-[30px] rounded-md border border-neutral-300 px-2 text-xs text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800'
           >
-            Collapse All
+            {tr('Collapse All')}
           </button>
         </div>
         <span className='text-xs text-neutral-500 dark:text-neutral-400'>
@@ -290,22 +291,22 @@ const SdoParametersTable = ({ sdoConfigurations, onUpdateSdoConfigurations }: Sd
             <tr>
               <th className='w-[6%] px-2 py-2'></th>
               <th className='w-[14%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Sub
+                {tr('Sub')}
               </th>
               <th className='w-[26%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Name
+                {tr('Name')}
               </th>
               <th className='w-[12%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Type
+                {tr('Type')}
               </th>
               <th className='w-[8%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Bits
+                {tr('Bits')}
               </th>
               <th className='w-[14%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Default
+                {tr('Default')}
               </th>
               <th className='w-[20%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Value
+                {tr('Value')}
               </th>
             </tr>
           </thead>

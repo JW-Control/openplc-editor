@@ -104,18 +104,18 @@ type ProjectTreeBranchProps = ComponentPropsWithoutRef<'li'> & {
 }
 
 const BranchSources = {
-  'data-type': { BranchIcon: DataTypeIcon, label: 'Data Types' },
+  'data-type': { BranchIcon: DataTypeIcon, label: tr('Data Types') },
   // CODESYS groups Global Variable Lists under their own tree node; the lists inside are
   // named by the user (`GVL` by default), which is also the name their members are
   // qualified with in code.
-  'global-variable-list': { BranchIcon: GlobalVariableListIcon, label: 'Global Variables' },
-  function: { BranchIcon: FunctionIcon, label: 'Functions' },
-  'function-block': { BranchIcon: FunctionBlockIcon, label: 'Function Blocks' },
-  program: { BranchIcon: ProgramIcon, label: 'Programs' },
-  resource: { BranchIcon: ResourceIcon, label: 'Resource' },
-  device: { BranchIcon: DeviceIcon, label: 'Device' },
-  server: { BranchIcon: ServerIcon, label: 'Servers' },
-  'remote-device': { BranchIcon: RemoteDeviceIcon, label: 'Remote Devices' },
+  'global-variable-list': { BranchIcon: GlobalVariableListIcon, label: tr('Global Variables') },
+  function: { BranchIcon: FunctionIcon, label: tr('Functions') },
+  'function-block': { BranchIcon: FunctionBlockIcon, label: tr('Function Blocks') },
+  program: { BranchIcon: ProgramIcon, label: tr('Programs') },
+  resource: { BranchIcon: ResourceIcon, label: tr('Resource') },
+  device: { BranchIcon: DeviceIcon, label: tr('Device') },
+  server: { BranchIcon: ServerIcon, label: tr('Servers') },
+  'remote-device': { BranchIcon: RemoteDeviceIcon, label: tr('Remote Devices') },
 }
 const ProjectTreeBranch = ({ branchTarget, children, ...res }: ProjectTreeBranchProps) => {
   const {
@@ -192,10 +192,10 @@ type IProjectTreeNestedBranchProps = ComponentPropsWithoutRef<'li'> & {
 }
 
 const NestedBranchSources = {
-  array: { BranchIcon: ArrayIcon, label: 'Arrays' },
-  enumerated: { BranchIcon: EnumIcon, label: 'Enums' },
-  structure: { BranchIcon: StructureIcon, label: 'Structures' },
-  configuration: { BranchIcon: ConfigIcon, label: 'Configurations' },
+  array: { BranchIcon: ArrayIcon, label: tr('Arrays') },
+  enumerated: { BranchIcon: EnumIcon, label: tr('Enums') },
+  structure: { BranchIcon: StructureIcon, label: tr('Structures') },
+  configuration: { BranchIcon: ConfigIcon, label: tr('Configurations') },
 }
 const ProjectTreeNestedBranch = ({ nestedBranchTarget, children, ...res }: IProjectTreeNestedBranchProps) => {
   const {

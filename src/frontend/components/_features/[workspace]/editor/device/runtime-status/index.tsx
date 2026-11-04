@@ -13,6 +13,7 @@
  * offering none.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import type { TimingStats } from '@root/middleware/shared/ports/types'
 import { useOrchestrator, useRuntime } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useEffect, useState } from 'react'
@@ -234,7 +235,9 @@ const RuntimeStatusEditor = () => {
   if (!connected) {
     return (
       <div className='flex h-full w-full items-center justify-center'>
-        <p className='text-sm text-neutral-500 dark:text-neutral-400'>Connect to a runtime to see its status.</p>
+        <p className='text-sm text-neutral-500 dark:text-neutral-400'>
+          {tr('Connect to a runtime to see its status.')}
+        </p>
       </div>
     )
   }
@@ -248,7 +251,7 @@ const RuntimeStatusEditor = () => {
       <header className='flex flex-col gap-4 border-b border-neutral-200 pb-4 dark:border-neutral-800'>
         <div className='flex items-start justify-between gap-4'>
           <div className='flex flex-col gap-1'>
-            <h2 className='select-none text-lg font-medium text-neutral-950 dark:text-white'>Runtime Status</h2>
+            <h2 className='select-none text-lg font-medium text-neutral-950 dark:text-white'>{tr('Runtime Status')}</h2>
             <p className='text-sm text-neutral-500 dark:text-neutral-400'>
               {describeDevice(deviceInfo?.hostname, selectedDevice?.deviceName, ipAddress)}
             </p>
@@ -261,7 +264,7 @@ const RuntimeStatusEditor = () => {
               onClick={() => setChangeOpen(true)}
               type='button'
             >
-              Change runtime version
+              {tr('Change runtime version')}
             </button>
           )}
         </div>
@@ -272,35 +275,35 @@ const RuntimeStatusEditor = () => {
             role='alert'
           >
             <p className='text-sm font-medium text-amber-900 dark:text-amber-200'>
-              The runtime is not running. The device is in recovery.
+              {tr('The runtime is not running. The device is in recovery.')}
             </p>
             {bootloader.reason && (
               <p className='mt-1 text-xs text-amber-800 dark:text-amber-300'>{bootloader.reason}</p>
             )}
             <p className='mt-1 text-xs text-amber-800 dark:text-amber-300'>
-              Install a different version to recover it.
+              {tr('Install a different version to recover it.')}
             </p>
           </div>
         )}
 
         <dl className='grid grid-cols-2 gap-x-8 gap-y-2 md:grid-cols-3'>
-          <InfoField label='Runtime version' value={runtimeVersion} />
+          <InfoField label={tr('Runtime version')} value={runtimeVersion} />
           {bootloader.present ? (
-            <InfoField label='Bootloader' value={bootloader.version} />
+            <InfoField label={tr('Bootloader')} value={bootloader.version} />
           ) : (
             // Names the source, so a blank kernel/architecture reads as "the
             // agent does not report these" rather than "something is wrong".
-            <InfoField label='Device Agent' value={deviceInfo?.agentVersion} />
+            <InfoField label={tr('Device Agent')} value={deviceInfo?.agentVersion} />
           )}
-          <InfoField label='Host' value={deviceInfo?.hostname} />
-          <InfoField label='Operating system' value={deviceInfo?.system} />
-          <InfoField label='Kernel' value={deviceInfo?.kernel} />
-          <InfoField label='Architecture' value={deviceInfo?.architecture} />
+          <InfoField label={tr('Host')} value={deviceInfo?.hostname} />
+          <InfoField label={tr('Operating system')} value={deviceInfo?.system} />
+          <InfoField label={tr('Kernel')} value={deviceInfo?.kernel} />
+          <InfoField label={tr('Architecture')} value={deviceInfo?.architecture} />
           {/* CPU count is the one host fact with an operational consequence
               here: a scan task per core is the budget, and an operator sizing
               tasks needs the number in front of them. */}
-          <InfoField label='CPU cores' value={deviceInfo?.cpus?.toString()} />
-          <InfoField label='Memory' value={describeMemory(deviceInfo?.memoryBytes)} />
+          <InfoField label={tr('CPU cores')} value={deviceInfo?.cpus?.toString()} />
+          <InfoField label={tr('Memory')} value={describeMemory(deviceInfo?.memoryBytes)} />
         </dl>
       </header>
 
@@ -309,7 +312,7 @@ const RuntimeStatusEditor = () => {
           <ScanCycleStats timingStats={timingStats} />
         ) : (
           <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-            No scan-cycle statistics yet. They appear once a program is running.
+            {tr('No scan-cycle statistics yet. They appear once a program is running.')}
           </p>
         )}
         <EtherCATStats />

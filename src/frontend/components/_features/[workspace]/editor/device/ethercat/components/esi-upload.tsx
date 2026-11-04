@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 import { useEsi } from '@root/middleware/shared/providers/platform-context'
@@ -231,7 +233,7 @@ const ESIUpload = ({ onFilesLoaded, repository, isLoading = false }: ESIUploadPr
 
   return (
     <div className='flex flex-col gap-2'>
-      <label className='text-xs font-medium text-neutral-950 dark:text-white'>ESI Device Files</label>
+      <label className='text-xs font-medium text-neutral-950 dark:text-white'>{tr('ESI Device Files')}</label>
 
       {/* Drop zone */}
       <div
@@ -290,10 +292,12 @@ const ESIUpload = ({ onFilesLoaded, repository, isLoading = false }: ESIUploadPr
               />
             </svg>
             <span className='text-sm text-neutral-600 dark:text-neutral-400'>
-              Drop ESI files or ZIPs here or <span className='text-brand'>browse</span>
+              {trRich('Drop ESI files or ZIPs here or {{browse}}', {
+                browse: <span className='text-brand'>{tr('browse')}</span>,
+              })}
             </span>
             <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-              Supports multiple .xml ESI files and .zip archives (ETG.2000)
+              {tr('Supports multiple .xml ESI files and .zip archives (ETG.2000)')}
             </span>
             {repository.length > 0 && (
               <span className='mt-1 text-xs text-neutral-500 dark:text-neutral-400'>

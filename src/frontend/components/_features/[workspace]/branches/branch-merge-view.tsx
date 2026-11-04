@@ -5,6 +5,7 @@
 
 import { DiffEditor } from '@monaco-editor/react'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@root/frontend/components/_organisms/panel'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { Branch, BranchDiffWithBase } from '@root/middleware/shared/ports/version-control-port'
 import { MergeConflictError } from '@root/middleware/shared/ports/version-control-port'
@@ -40,12 +41,12 @@ type MergeFileEntry = {
 }
 
 const FILE_STATUS_CONFIG: Record<FileStatus, { label: string; color: string }> = {
-  A: { label: 'Added', color: 'text-green-500' },
-  M: { label: 'Modified', color: 'text-yellow-500' },
-  D: { label: 'Deleted', color: 'text-red-500' },
-  U: { label: 'Unchanged', color: 'text-neutral-400' },
-  C: { label: 'Conflict', color: 'text-amber-500' },
-  R: { label: 'Resolved', color: 'text-green-500' },
+  A: { label: tr('Added'), color: 'text-green-500' },
+  M: { label: tr('Modified'), color: 'text-yellow-500' },
+  D: { label: tr('Deleted'), color: 'text-red-500' },
+  U: { label: tr('Unchanged'), color: 'text-neutral-400' },
+  C: { label: tr('Conflict'), color: 'text-amber-500' },
+  R: { label: tr('Resolved'), color: 'text-green-500' },
 }
 
 type FileTreeNode = {
@@ -306,7 +307,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
 
   useEffect(() => {
     if (commitMessage === '' && sourceBranch && targetBranch) {
-      setCommitMessage(`Merge branch '${sourceBranch}' into ${targetBranch}`)
+      setCommitMessage(tr("Merge branch '{{sourceBranch}}' into {{targetBranch}}", { sourceBranch, targetBranch }))
     }
   }, [sourceBranch, targetBranch, commitMessage])
 
@@ -443,7 +444,9 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
           err.conflictedFiles.length > 0
             ? `Conflicts remain in: ${err.conflictedFiles.join(', ')}.`
             : err.message || 'The merge has conflicts.'
-        setMergeError(`${summary} The branches may have changed since you opened this page — please reload.`)
+        setMergeError(
+          tr('{{summary}} The branches may have changed since you opened this page — please reload.', { summary }),
+        )
         return
       }
 
@@ -479,7 +482,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
       <div className='flex h-full w-full items-center justify-center bg-neutral-100 dark:bg-neutral-900'>
         <div className='flex flex-col items-center gap-3'>
           <div className='h-6 w-6 animate-spin rounded-full border-2 border-brand-light border-t-transparent' />
-          <p className='text-sm text-neutral-500 dark:text-neutral-400'>Loading branch diff...</p>
+          <p className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('Loading branch diff...')}</p>
         </div>
       </div>
     )
@@ -489,9 +492,9 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
     return (
       <div className='flex h-full w-full items-center justify-center bg-neutral-100 dark:bg-neutral-900'>
         <div className='flex flex-col items-center gap-3'>
-          <p className='text-sm text-red-500'>Failed to load branch diff</p>
+          <p className='text-sm text-red-500'>{tr('Failed to load branch diff')}</p>
           <button onClick={goBack} className='text-xs text-brand-light hover:underline'>
-            Back to workspace
+            {tr('Back to workspace')}
           </button>
         </div>
       </div>
@@ -507,7 +510,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
             className='flex shrink-0 items-center gap-1.5 rounded-md bg-neutral-100 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
           >
             <ArrowLeft className='h-3.5 w-3.5' />
-            Back
+            {tr('Back')}
           </button>
           <div className='flex min-w-0 items-center gap-2'>
             <GitMerge className='h-4 w-4 shrink-0 text-blue-500' />
@@ -533,7 +536,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
           <button
             onClick={() => setShowCommitMessageEdit((prev) => !prev)}
             className='flex items-center gap-1 rounded-md bg-neutral-100 px-2.5 py-1.5 text-[11px] text-neutral-700 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
-            title='Edit commit message'
+            title={tr('Edit commit message')}
           >
             Message
             {showCommitMessageEdit ? <ChevronUp className='h-3 w-3' /> : <ChevronDown className='h-3 w-3' />}
@@ -557,7 +560,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
       {showCommitMessageEdit && (
         <div className='shrink-0 border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900'>
           <label className='mb-1 block text-[11px] font-medium text-neutral-600 dark:text-neutral-400'>
-            Merge commit message
+            {tr('Merge commit message')}
           </label>
           <input
             type='text'
@@ -581,7 +584,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
             onClick={finishAndClose}
             className='shrink-0 rounded-md bg-amber-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600'
           >
-            Continue
+            {tr('Continue')}
           </button>
         </div>
       )}
@@ -609,7 +612,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                     type='text'
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder='Search files...'
+                    placeholder={tr('Search files...')}
                     className='w-full rounded border border-neutral-200 bg-neutral-50 py-1 pl-6 pr-2 text-xs text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand-light dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:placeholder:text-neutral-500'
                   />
                 </div>
@@ -617,7 +620,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
               <div className='flex-1 overflow-y-auto py-1'>
                 {fileCount === 0 ? (
                   <p className='px-3 py-3 text-xs text-neutral-400 dark:text-neutral-500'>
-                    No differences. The branches are already in sync.
+                    {tr('No differences. The branches are already in sync.')}
                   </p>
                 ) : (
                   tree.map((node) => (
@@ -698,7 +701,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                               onChange={() => (chosenSide === side ? reset() : pick(side))}
                               className='h-3.5 w-3.5 cursor-pointer accent-brand'
                             />
-                            Use this version
+                            {tr('Use this version')}
                           </label>
                         </div>
                       )
@@ -724,7 +727,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                                 type='button'
                                 disabled={conflictIndex <= 1}
                                 className='rounded p-0.5 text-neutral-500 transition-colors hover:bg-neutral-200 disabled:opacity-40 disabled:hover:bg-transparent dark:text-neutral-400 dark:hover:bg-neutral-800'
-                                title='Previous conflict'
+                                title={tr('Previous conflict')}
                               >
                                 <ChevronLeft className='h-3.5 w-3.5' />
                               </button>
@@ -735,7 +738,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                                 type='button'
                                 disabled={conflictIndex >= conflictTotal}
                                 className='rounded p-0.5 text-neutral-500 transition-colors hover:bg-neutral-200 disabled:opacity-40 disabled:hover:bg-transparent dark:text-neutral-400 dark:hover:bg-neutral-800'
-                                title='Next conflict'
+                                title={tr('Next conflict')}
                               >
                                 <ChevronRight className='h-3.5 w-3.5' />
                               </button>
@@ -890,7 +893,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                 disabled={isMerging}
                 className='cursor-pointer rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
               <button
                 onClick={() => void runMerge(false)}
@@ -905,7 +908,7 @@ export function BranchMergeView({ projectId, sourceBranch, targetParam, onBack, 
                 title={canDeleteSource ? undefined : `Cannot delete the default branch (${sourceBranch})`}
                 className='cursor-pointer rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50'
               >
-                Merge and Delete
+                {tr('Merge and Delete')}
               </button>
             </div>
           </div>

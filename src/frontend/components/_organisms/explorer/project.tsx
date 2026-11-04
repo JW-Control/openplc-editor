@@ -419,7 +419,7 @@ const Project = () => {
                   elementType: { type: 'resource' },
                 })
                 setSelectedProjectTreeLeaf({
-                  label: 'Resource',
+                  label: tr('Resource'),
                   type: 'resource',
                 })
               }}

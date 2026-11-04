@@ -1,4 +1,5 @@
 import { collectHmiCandidates, describeHmiVariables } from '@root/backend/shared/compile/jwplc-hmi-host'
+import { tr } from '@root/frontend/locales/tr'
 import type { DevicePort, OpenHmiDesignerArgs } from '@root/middleware/shared/ports/device-port'
 import { useDevice } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -184,7 +185,7 @@ export const HmiDesignerEditor = () => {
           onClick={retry}
           className='h-[30px] rounded-md bg-brand px-4 py-1 font-caption text-cp-sm font-medium text-white hover:bg-brand-medium-dark'
         >
-          Reintentar
+          {tr('Reintentar')}
         </button>
       </div>
     )
@@ -192,7 +193,7 @@ export const HmiDesignerEditor = () => {
   if (!target) {
     return (
       <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-        Abriendo HMI Designer…
+        {tr('Abriendo HMI Designer…')}
       </div>
     )
   }

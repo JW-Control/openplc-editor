@@ -1,5 +1,7 @@
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible'
 import { ChevronDownIcon, ChevronRightIcon, Cross2Icon, DownloadIcon, MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import type { ModbusBufferMapping } from '@root/middleware/shared/ports/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -344,7 +346,7 @@ const AddressMappingReference = ({ bufferMapping, defaultExpanded = false }: Add
       <div className='rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'>
         <CollapsiblePrimitive.Trigger className='flex w-full items-center justify-between px-4 py-3 text-left hover:bg-neutral-50 dark:hover:bg-neutral-800'>
           <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
-            Address Mapping Reference
+            {tr('Address Mapping Reference')}
           </h3>
           <ChevronDownIcon
             className={cn(
@@ -358,9 +360,12 @@ const AddressMappingReference = ({ bufferMapping, defaultExpanded = false }: Add
           <div className='flex flex-col gap-4 border-t border-neutral-200 p-4 dark:border-neutral-700'>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-                Search accepts <span className='font-mono'>%QX37.4</span>, <span className='font-mono'>%MW12</span>,
-                offset <span className='font-mono'>300</span> or modicon <span className='font-mono'>000301</span>.
-                Click any address to copy it.
+                {trRich('Search accepts {{a}}, {{b}}, offset {{c}} or modicon {{d}}. Click any address to copy it.', {
+                  a: <span className='font-mono'>%QX37.4</span>,
+                  b: <span className='font-mono'>%MW12</span>,
+                  c: <span className='font-mono'>300</span>,
+                  d: <span className='font-mono'>000301</span>,
+                })}
               </p>
 
               <div className='flex items-center gap-2'>
@@ -405,7 +410,7 @@ const AddressMappingReference = ({ bufferMapping, defaultExpanded = false }: Add
                 <button
                   type='button'
                   onClick={exportCsv}
-                  title='Export the whole mapping as CSV'
+                  title={tr('Export the whole mapping as CSV')}
                   className='flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800'
                 >
                   <DownloadIcon className='h-3.5 w-3.5' />

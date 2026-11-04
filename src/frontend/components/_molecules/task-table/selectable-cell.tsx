@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { useEffect, useMemo, useState } from 'react'
@@ -134,7 +135,7 @@ const SelectableIntervalCell = ({ getValue, row: { index }, column: { id }, tabl
         onClose={handleCancel}
         className='flex max-h-56 w-fit select-none flex-col justify-between gap-2 rounded-lg p-8'
       >
-        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>Set interval</ModalTitle>
+        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>{tr('Set interval')}</ModalTitle>
         <div className='flex h-24 w-full gap-2'>
           {(['day', 'hour', 'min', 'sec', 'ms', 'us'] as const).map((interval) => (
             <div key={interval} className='flex w-full flex-col justify-center gap-1 font-caption text-xs'>
@@ -167,7 +168,7 @@ const SelectableIntervalCell = ({ getValue, row: { index }, column: { id }, tabl
             onClick={handleCancel}
             className='h-full w-[236px] rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={handleSave}

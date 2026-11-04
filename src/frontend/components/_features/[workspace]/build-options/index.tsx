@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { ReactNode, useState } from 'react'
 
 import { DownloadIcon } from '../../../../assets/icons/interface/Download'
@@ -96,22 +97,22 @@ export const BuildOptionsPopover = ({
           className='box z-50 flex h-fit w-[230px] flex-col gap-1 rounded-lg bg-white p-2 dark:bg-neutral-950'
         >
           <OptionRow
-            label='Build only'
-            description='Compile the program without uploading.'
+            label={tr('Build only')}
+            description={tr('Compile the program without uploading.')}
             disabled={false}
             disabledReason=''
             onClick={() => choose('build-only')}
           />
           <OptionRow
-            label='Build and upload'
-            description='Compile and upload to the target device.'
+            label={tr('Build and upload')}
+            description={tr('Compile and upload to the target device.')}
             disabled={!uploadAvailable}
             disabledReason={uploadDisabledReason}
             onClick={() => choose('build-upload')}
           />
           <OptionRow
-            label='Clean build and upload'
-            description='Invalidate the cache, fully recompile, then upload.'
+            label={tr('Clean build and upload')}
+            description={tr('Invalidate the cache, fully recompile, then upload.')}
             disabled={!uploadAvailable}
             disabledReason={uploadDisabledReason}
             onClick={() => choose('clean-upload')}

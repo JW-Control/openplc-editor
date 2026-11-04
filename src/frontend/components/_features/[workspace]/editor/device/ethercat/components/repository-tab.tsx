@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 
 import { ESIRepository } from './esi-repository'
@@ -29,7 +30,7 @@ const RepositoryTab = ({
               onClick={onRetryRepository}
               className='text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300'
             >
-              Retry
+              {tr('Retry')}
             </button>
           </div>
         )}

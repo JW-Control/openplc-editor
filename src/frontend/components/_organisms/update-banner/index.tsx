@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import type { AppUpdateStatus } from '../../../../middleware/shared/ports/app-update-port'
 import { CloseIcon } from '../../../assets/icons/interface/Close'
 import { cn } from '../../../utils/cn'
@@ -60,7 +62,7 @@ export function UpdateBanner({ update, onUpdate, onDismiss, className }: UpdateB
         type='button'
         onClick={onDismiss}
         aria-label='Dismiss'
-        title='Hide until OpenPLC Editor is opened again'
+        title={tr('Hide until OpenPLC Editor is opened again')}
         className='absolute right-2 flex h-5 w-5 items-center justify-center rounded-sm stroke-white hover:bg-brand-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white'
       >
         <CloseIcon className='h-3 w-3' />

@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@root/frontend
 import { ToggleSwitch } from '@root/frontend/components/_atoms/toggle-switch'
 import { FieldHelpIcon, TooltipProvider } from '@root/frontend/components/_atoms/tooltip'
 import { boardSelectors } from '@root/frontend/hooks/use-store-selectors'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { evalVisible, type VisibleCondition } from '@root/frontend/utils/vpp/eval-visible'
 import { resolveFieldOptions } from '@root/frontend/utils/vpp/field-options'
@@ -387,7 +388,7 @@ function FormLayout({ section }: FormLayoutProps) {
                                   }}
                                   className='inline-flex h-[26px] shrink-0 items-center justify-center rounded-md bg-brand px-2 font-caption text-xs font-medium text-white hover:opacity-90'
                                 >
-                                  Usar para Debug
+                                  {tr('Usar para Debug')}
                                 </button>
                               </div>
                             )
@@ -400,21 +401,23 @@ function FormLayout({ section }: FormLayoutProps) {
                         jwplcDiscoveryResults.length === 0 &&
                         !jwplcDiscoveryError && (
                           <span className='text-xs text-amber-500'>
-                            No se encontraron dispositivos. Verifica que el JWPLC est? encendido, conectado a la red y
-                            con Modbus TCP activo.
+                            {tr(
+                              'No se encontraron dispositivos. Verifica que el JWPLC est? encendido, conectado a la red y con Modbus TCP activo.',
+                            )}
                           </span>
                         )}
 
                       {!isDiscoveringJwplc && !hasJwplcDiscoverySearched && !jwplcDiscoveryError && (
                         <span className='text-xs text-neutral-400 dark:text-neutral-500'>
-                          Busca JWPLC Basic por discovery nativo. Si no responde, se usa respaldo por Modbus TCP puerto
-                          502.
+                          {tr(
+                            'Busca JWPLC Basic por discovery nativo. Si no responde, se usa respaldo por Modbus TCP puerto 502.',
+                          )}
                         </span>
                       )}
 
                       {values.enable_dhcp === true && !String(values.tcp_debug_ip_address ?? '').trim() && (
                         <span className='text-[11px] text-neutral-400 dark:text-neutral-500'>
-                          Con DHCP activo, usa Discovery o escribe la IP asignada en Debug IP Address.
+                          {tr('Con DHCP activo, usa Discovery o escribe la IP asignada en Debug IP Address.')}
                         </span>
                       )}
                     </div>
@@ -487,7 +490,7 @@ function FormLayout({ section }: FormLayoutProps) {
                     <Select value={String(values[field.id] ?? '')} onValueChange={(v) => updateField(field.id, v)}>
                       <SelectTrigger
                         aria-label={field.label}
-                        placeholder='Select...'
+                        placeholder={tr('Select...')}
                         withIndicator
                         className='flex h-[30px] w-48 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                       />

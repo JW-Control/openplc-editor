@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { cleanStateFingerprint, ownedSliceFingerprint, serializeOwnedSlice } from '@root/frontend/utils/vpp/owned-slice'
 import {
@@ -83,7 +84,7 @@ const VendorScreenEditor = ({ screenName }: VendorScreenEditorProps) => {
   if (!screenDefinition) {
     return (
       <div className='flex h-full w-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-        Screen not available. Make sure a VPP board is selected.
+        {tr('Screen not available. Make sure a VPP board is selected.')}
       </div>
     )
   }

@@ -1,4 +1,5 @@
 import { InputWithRef } from '@root/frontend/components/_atoms/input'
+import { tr } from '@root/frontend/locales/tr'
 import type { Cia402AxisConfig, ConfiguredEtherCATDevice } from '@root/middleware/shared/ports/esi-types'
 import { type Cia402Role, resolveCia402Objects } from '@root/middleware/shared/utils/ethercat'
 import { useMemo } from 'react'
@@ -8,25 +9,25 @@ const inputClassName =
 
 /** Human labels for the CiA 402 object roles, in a sensible display order. */
 const ROLE_LABELS: Array<{ role: Cia402Role; label: string }> = [
-  { role: 'controlWord', label: 'Control Word (0x6040)' },
-  { role: 'statusWord', label: 'Status Word (0x6041)' },
-  { role: 'modesOfOperation', label: 'Modes of Operation (0x6060)' },
-  { role: 'modesDisplay', label: 'Modes Display (0x6061)' },
-  { role: 'targetPosition', label: 'Target Position (0x607A)' },
-  { role: 'positionActual', label: 'Position Actual (0x6064)' },
-  { role: 'profileVelocity', label: 'Profile Velocity (0x6081)' },
-  { role: 'targetVelocity', label: 'Target Velocity (0x60FF)' },
-  { role: 'velocityActual', label: 'Velocity Actual (0x606C)' },
-  { role: 'targetTorque', label: 'Target Torque (0x6071)' },
-  { role: 'torqueActual', label: 'Torque Actual (0x6077)' },
+  { role: 'controlWord', label: tr('Control Word (0x6040)') },
+  { role: 'statusWord', label: tr('Status Word (0x6041)') },
+  { role: 'modesOfOperation', label: tr('Modes of Operation (0x6060)') },
+  { role: 'modesDisplay', label: tr('Modes Display (0x6061)') },
+  { role: 'targetPosition', label: tr('Target Position (0x607A)') },
+  { role: 'positionActual', label: tr('Position Actual (0x6064)') },
+  { role: 'profileVelocity', label: tr('Profile Velocity (0x6081)') },
+  { role: 'targetVelocity', label: tr('Target Velocity (0x60FF)') },
+  { role: 'velocityActual', label: tr('Velocity Actual (0x606C)') },
+  { role: 'targetTorque', label: tr('Target Torque (0x6071)') },
+  { role: 'torqueActual', label: tr('Torque Actual (0x6077)') },
 ]
 
 /** Feedback signals shown in the live-values panel (drive → controller). */
 const FEEDBACK_SIGNALS: Array<{ role: Cia402Role; label: string; unit: string }> = [
-  { role: 'positionActual', label: 'Actual Position', unit: 'u' },
-  { role: 'velocityActual', label: 'Actual Velocity', unit: 'u/s' },
-  { role: 'torqueActual', label: 'Actual Torque', unit: '' },
-  { role: 'statusWord', label: 'Status Word', unit: '' },
+  { role: 'positionActual', label: tr('Actual Position'), unit: 'u' },
+  { role: 'velocityActual', label: tr('Actual Velocity'), unit: 'u/s' },
+  { role: 'torqueActual', label: tr('Actual Torque'), unit: '' },
+  { role: 'statusWord', label: tr('Status Word'), unit: '' },
 ]
 
 function parseFloatInput(value: string): number | undefined {
@@ -79,11 +80,11 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
       {/* Scaling */}
       <div>
         <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-          Scaling (increments ↔ technical units)
+          {tr('Scaling (increments ↔ technical units)')}
         </h6>
         <div className='flex flex-wrap items-end gap-x-6 gap-y-3'>
           <label className='flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400'>
-            Units ratio numerator
+            {tr('Units ratio numerator')}
             <InputWithRef
               type='number'
               value={cia402.scaleNum}
@@ -96,7 +97,7 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
             />
           </label>
           <label className='flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400'>
-            Units ratio denominator
+            {tr('Units ratio denominator')}
             <InputWithRef
               type='number'
               value={cia402.scaleDenom}
@@ -109,7 +110,7 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
             />
           </label>
           <label className='flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400'>
-            Scale factor (inc/unit)
+            {tr('Scale factor (inc/unit)')}
             <InputWithRef
               type='number'
               value={cia402.scaleFactor}
@@ -122,7 +123,7 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
             />
           </label>
           <div className='flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400'>
-            Increments per unit
+            {tr('Increments per unit')}
             <span className='flex h-[26px] items-center font-mono text-neutral-700 dark:text-neutral-300'>
               {Number.isFinite(incPerUnit) ? incPerUnit : '—'}
             </span>
@@ -132,14 +133,16 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
 
       {/* CiA 402 object → IEC address mapping */}
       <div>
-        <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>CiA 402 Object Mapping</h6>
+        <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+          {tr('CiA 402 Object Mapping')}
+        </h6>
         <div className='overflow-x-auto'>
           <table className='w-full min-w-[420px] text-left text-xs'>
             <thead className='text-neutral-500 dark:text-neutral-400'>
               <tr>
-                <th className='py-1 pr-4 font-medium'>Object</th>
-                <th className='py-1 pr-4 font-medium'>IEC Address</th>
-                <th className='py-1 font-medium'>Type</th>
+                <th className='py-1 pr-4 font-medium'>{tr('Object')}</th>
+                <th className='py-1 pr-4 font-medium'>{tr('IEC Address')}</th>
+                <th className='py-1 font-medium'>{tr('Type')}</th>
               </tr>
             </thead>
             <tbody className='text-neutral-700 dark:text-neutral-300'>
@@ -160,7 +163,7 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
 
       {/* Real-time feedback */}
       <div>
-        <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Real-time Feedback</h6>
+        <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Real-time Feedback')}</h6>
         <div className='grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4'>
           {FEEDBACK_SIGNALS.map(({ role, label, unit }) => {
             const mapped = locationByRole.has(role)
@@ -175,7 +178,7 @@ export const Cia402AxisTab = ({ device, onUpdate }: Cia402AxisTabProps) => {
           })}
         </div>
         <p className='mt-2 text-xs text-neutral-400 dark:text-neutral-500'>
-          Live values appear here when connected to a running PLC and monitoring is active.
+          {tr('Live values appear here when connected to a running PLC and monitoring is active.')}
         </p>
       </div>
     </div>

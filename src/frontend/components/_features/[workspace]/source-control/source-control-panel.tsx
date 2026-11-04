@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { GitBranch } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
@@ -24,7 +25,7 @@ const SourceControlPanel = ({ projectId }: SourceControlPanelProps) => {
         <div className='flex h-8 w-full cursor-default select-none items-center justify-start rounded-lg bg-neutral-100 px-1.5 dark:bg-brand-dark'>
           <GitBranch className='h-3.5 w-3.5 text-[#0464FB]' />
           <span className='pl-1.5 font-caption text-xs font-medium text-neutral-1000 duration-500 ease-in-out dark:text-neutral-50'>
-            Source Control
+            {tr('Source Control')}
           </span>
         </div>
       </div>
@@ -52,7 +53,7 @@ const SourceControlPanel = ({ projectId }: SourceControlPanelProps) => {
               : 'bg-neutral-100 text-neutral-500 hover:text-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200',
           )}
         >
-          Stash
+          {tr('Stash')}
         </button>
         <button
           onClick={() => setActiveView('history')}
@@ -63,7 +64,7 @@ const SourceControlPanel = ({ projectId }: SourceControlPanelProps) => {
               : 'bg-neutral-100 text-neutral-500 hover:text-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200',
           )}
         >
-          History
+          {tr('History')}
         </button>
       </div>
 

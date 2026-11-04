@@ -3,6 +3,7 @@
  * this screen. Uses `h-full w-full` (not `h-screen`) since the viewport is the host's.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import { ArrowLeft, File, Folder, FolderOpen, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -17,10 +18,10 @@ import { RestoreConfirmationModal } from '../source-control/modals/restore-confi
 type FileStatus = 'A' | 'M' | 'D' | 'U'
 
 const FILE_STATUS_CONFIG: Record<FileStatus, { label: string; color: string }> = {
-  A: { label: 'Added', color: 'text-green-500' },
-  M: { label: 'Modified', color: 'text-yellow-500' },
-  D: { label: 'Deleted', color: 'text-red-500' },
-  U: { label: 'Unchanged', color: 'text-neutral-400' },
+  A: { label: tr('Added'), color: 'text-green-500' },
+  M: { label: tr('Modified'), color: 'text-yellow-500' },
+  D: { label: tr('Deleted'), color: 'text-red-500' },
+  U: { label: tr('Unchanged'), color: 'text-neutral-400' },
 }
 
 type FileTreeNode = {
@@ -319,7 +320,7 @@ export function CommitHistoryView({ projectId, commitHash, initialFile, onBack, 
       <div className='flex h-full w-full items-center justify-center bg-neutral-100 dark:bg-neutral-900'>
         <div className='flex flex-col items-center gap-3'>
           <div className='h-6 w-6 animate-spin rounded-full border-2 border-brand-light border-t-transparent' />
-          <p className='text-sm text-neutral-500 dark:text-neutral-400'>Loading commit files...</p>
+          <p className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('Loading commit files...')}</p>
         </div>
       </div>
     )
@@ -329,9 +330,9 @@ export function CommitHistoryView({ projectId, commitHash, initialFile, onBack, 
     return (
       <div className='flex h-full w-full items-center justify-center bg-neutral-100 dark:bg-neutral-900'>
         <div className='flex flex-col items-center gap-3'>
-          <p className='text-sm text-red-500'>Failed to load commit files</p>
+          <p className='text-sm text-red-500'>{tr('Failed to load commit files')}</p>
           <button onClick={goBack} className='text-xs text-brand-light hover:underline'>
-            Back to workspace
+            {tr('Back to workspace')}
           </button>
         </div>
       </div>
@@ -349,7 +350,7 @@ export function CommitHistoryView({ projectId, commitHash, initialFile, onBack, 
             className='flex shrink-0 items-center gap-1.5 rounded-md bg-neutral-100 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
           >
             <ArrowLeft className='h-3.5 w-3.5' />
-            Back
+            {tr('Back')}
           </button>
           <div className='flex min-w-0 items-center gap-2'>
             <span className='shrink-0 font-mono text-xs text-brand-light'>{shortHash}</span>
@@ -374,7 +375,7 @@ export function CommitHistoryView({ projectId, commitHash, initialFile, onBack, 
           className='flex shrink-0 items-center gap-1.5 rounded-md bg-blue-500/10 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/20 dark:text-blue-400'
         >
           <RotateCcw className='h-3.5 w-3.5' />
-          Restore
+          {tr('Restore')}
         </button>
       </div>
 
@@ -401,7 +402,7 @@ export function CommitHistoryView({ projectId, commitHash, initialFile, onBack, 
                     type='text'
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder='Search files...'
+                    placeholder={tr('Search files...')}
                     className='w-full rounded border border-neutral-200 bg-neutral-50 py-1 pl-6 pr-2 text-xs text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand-light dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:placeholder:text-neutral-500'
                   />
                 </div>
@@ -465,7 +466,9 @@ export function CommitHistoryView({ projectId, commitHash, initialFile, onBack, 
                 </>
               ) : (
                 <div className='flex h-full items-center justify-center'>
-                  <p className='text-sm text-neutral-400 dark:text-neutral-500'>Select a file to view the diff</p>
+                  <p className='text-sm text-neutral-400 dark:text-neutral-500'>
+                    {tr('Select a file to view the diff')}
+                  </p>
                 </div>
               )}
             </div>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Component, ErrorInfo, ReactNode } from 'react'
 
 type ErrorBoundaryProps = {
@@ -44,10 +45,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     return (
       <div className='flex h-full w-full flex-col items-center justify-center gap-4 bg-neutral-50 p-8 text-center dark:bg-neutral-950'>
         <p className='font-display text-lg font-medium text-neutral-950 dark:text-white'>
-          Something went wrong rendering the workspace
+          {tr('Something went wrong rendering the workspace')}
         </p>
         <p className='max-w-md text-sm text-neutral-600 dark:text-neutral-400'>
-          Your project data is safe — this only affects the current view. Reload to recover.
+          {tr('Your project data is safe — this only affects the current view. Reload to recover.')}
         </p>
         <pre className='max-h-32 max-w-lg overflow-auto rounded-md bg-neutral-100 p-3 text-left text-xs text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'>
           {error.message}
@@ -57,7 +58,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
           onClick={this.handleReload}
           className='rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
         >
-          Reload
+          {tr('Reload')}
         </button>
       </div>
     )

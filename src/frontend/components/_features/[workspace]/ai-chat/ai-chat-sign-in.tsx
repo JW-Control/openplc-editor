@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 interface AIChatSignInNoticeProps {
   reason: 'expired' | 'signed-out'
   /** Absent where the sign-in dialog opens by itself, so the notice offers no second one. */
@@ -20,7 +21,7 @@ export const AIChatSignInNotice = ({ reason, onSignIn }: AIChatSignInNoticeProps
         onClick={onSignIn}
         className='rounded-md bg-brand px-3.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-brand-medium-dark'
       >
-        Sign in
+        {tr('Sign in')}
       </button>
     )}
   </div>

@@ -400,10 +400,10 @@ const EditableLocationCell = ({
     const vendorGroups = buildVendorIoOptionGroups(id, vendorIoEntries)
 
     return [
-      { label: 'Analog Inputs', options: ainPins },
-      { label: 'Analog Outputs', options: aoutPins },
-      { label: 'Digital Inputs', options: dinPins },
-      { label: 'Digital Outputs', options: doutPins },
+      { label: tr('Analog Inputs'), options: ainPins },
+      { label: tr('Analog Outputs'), options: aoutPins },
+      { label: tr('Digital Inputs'), options: dinPins },
+      { label: tr('Digital Outputs'), options: doutPins },
       ...remoteGroups,
       ...vendorGroups,
     ]

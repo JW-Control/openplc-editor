@@ -5,6 +5,7 @@
  * so it takes no props and can be dropped in either place unchanged.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import type { ChangeEvent } from 'react'
 
 import { useOpenPLCStore } from '../../../store'
@@ -13,8 +14,8 @@ import type { Orientation, PageMargins, PaperSize, PrintRenderMode } from '../..
 const PAPER_SIZES: { value: PaperSize; label: string }[] = [
   { value: 'a4', label: 'A4' },
   { value: 'a3', label: 'A3' },
-  { value: 'letter', label: 'Letter' },
-  { value: 'legal', label: 'Legal' },
+  { value: 'letter', label: tr('Letter') },
+  { value: 'legal', label: tr('Legal') },
 ]
 
 const MARGIN_SIDES: (keyof PageMargins)[] = ['top', 'right', 'bottom', 'left']
@@ -38,7 +39,7 @@ const PageSetupFields = () => {
     <div className='flex flex-col gap-4'>
       <div className='flex flex-col gap-1'>
         <label htmlFor='print-paper-size' className={LABEL}>
-          Paper size
+          {tr('Paper size')}
         </label>
         <select
           id='print-paper-size'
@@ -55,7 +56,7 @@ const PageSetupFields = () => {
       </div>
 
       <fieldset className='flex flex-col gap-1'>
-        <legend className={LABEL}>Orientation</legend>
+        <legend className={LABEL}>{tr('Orientation')}</legend>
         <div className='flex gap-4'>
           {(['portrait', 'landscape'] as Orientation[]).map((orientation) => (
             <label key={orientation} className={RADIO_LABEL}>
@@ -72,7 +73,7 @@ const PageSetupFields = () => {
       </fieldset>
 
       <fieldset className='flex flex-col gap-1'>
-        <legend className={LABEL}>Margins (pt)</legend>
+        <legend className={LABEL}>{tr('Margins (pt)')}</legend>
         <div className='grid grid-cols-2 gap-2'>
           {MARGIN_SIDES.map((side) => (
             <label
@@ -93,7 +94,7 @@ const PageSetupFields = () => {
       </fieldset>
 
       <fieldset className='flex flex-col gap-1'>
-        <legend className={LABEL}>Render mode</legend>
+        <legend className={LABEL}>{tr('Render mode')}</legend>
         <div className='flex gap-4'>
           <label className={RADIO_LABEL}>
             <input
@@ -102,7 +103,7 @@ const PageSetupFields = () => {
               checked={renderMode === 'normal'}
               onChange={() => printActions.setRenderMode('normal' satisfies PrintRenderMode)}
             />
-            Normal
+            {tr('Normal')}
           </label>
           <label className={RADIO_LABEL}>
             <input
@@ -111,7 +112,7 @@ const PageSetupFields = () => {
               checked={renderMode === 'scale-to-fit'}
               onChange={() => printActions.setRenderMode('scale-to-fit' satisfies PrintRenderMode)}
             />
-            Scale to fit
+            {tr('Scale to fit')}
           </label>
         </div>
       </fieldset>

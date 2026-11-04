@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useRef, useState } from 'react'
 
 type AIChatInputProps = {
@@ -66,7 +67,7 @@ export const AIChatInput = ({ onSend, onCancel, isLoading, disabled = false, dis
           {/* Hidden until shipped; kept in the tree but inert via disabled + tabIndex={-1} + aria-hidden. */}
           <button
             type='button'
-            title='Attach context'
+            title={tr('Attach context')}
             disabled
             aria-hidden='true'
             tabIndex={-1}
@@ -87,7 +88,7 @@ export const AIChatInput = ({ onSend, onCancel, isLoading, disabled = false, dis
           </button>
           <button
             type='button'
-            title='Mention file/variable'
+            title={tr('Mention file/variable')}
             disabled
             aria-hidden='true'
             tabIndex={-1}
@@ -108,14 +109,14 @@ export const AIChatInput = ({ onSend, onCancel, isLoading, disabled = false, dis
             </svg>
           </button>
           <span className='flex-1 text-center text-[10px] text-neutral-400 dark:text-neutral-500'>
-            Shift+Enter for new line
+            {tr('Shift+Enter for new line')}
           </span>
           {isLoading ? (
             <button
               type='button'
               onClick={onCancel}
               className='grid h-[26px] w-[26px] place-items-center rounded-md bg-red-500 text-white transition-colors hover:bg-red-600'
-              title='Stop generating'
+              title={tr('Stop generating')}
             >
               <svg width='10' height='10' viewBox='0 0 10 10'>
                 <rect width='10' height='10' rx='1' fill='currentColor' />
@@ -131,7 +132,7 @@ export const AIChatInput = ({ onSend, onCancel, isLoading, disabled = false, dis
                   ? 'bg-brand text-white hover:bg-brand-medium-dark'
                   : 'cursor-default border border-neutral-200 bg-neutral-100/60 text-neutral-400 dark:border-neutral-800 dark:bg-neutral-800/40 dark:text-neutral-500'
               }`}
-              title='Send (Enter)'
+              title={tr('Send (Enter)')}
             >
               <svg
                 width='14'

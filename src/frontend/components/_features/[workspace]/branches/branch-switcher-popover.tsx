@@ -1,4 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Branch } from '../../../../../middleware/shared/ports/version-control-port'
@@ -119,7 +121,7 @@ export function BranchSwitcherPopover({
             type='text'
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder='Search branches...'
+            placeholder={tr('Search branches...')}
             autoFocus
             className='h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
           />
@@ -129,13 +131,13 @@ export function BranchSwitcherPopover({
         <div className='max-h-56 overflow-y-auto px-2 py-1'>
           {isLoading && (
             <p className='px-2 py-3 text-center font-caption text-xs font-normal text-neutral-500 dark:text-neutral-400'>
-              Loading...
+              {tr('Loading...')}
             </p>
           )}
 
           {!isLoading && filtered.length === 0 && (
             <p className='px-2 py-3 text-center font-caption text-xs font-normal text-neutral-500 dark:text-neutral-400'>
-              No branches found
+              {tr('No branches found')}
             </p>
           )}
 
@@ -186,7 +188,7 @@ export function BranchSwitcherPopover({
                     <DropdownMenu.Trigger asChild>
                       <button
                         className='rounded p-0.5 opacity-0 transition-opacity hover:bg-neutral-200 group-hover:opacity-100 dark:hover:bg-neutral-800'
-                        title='More actions'
+                        title={tr('More actions')}
                       >
                         <svg
                           className='h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400'
@@ -233,8 +235,10 @@ export function BranchSwitcherPopover({
                               <path d='M5 3.254V3.25v.005a.75.75 0 1 1 0-.005v.004zm.45 1.9a2.25 2.25 0 1 0-1.95.218v5.256a2.25 2.25 0 1 0 1.5 0V7.123A5.735 5.735 0 0 0 9.25 9h1.378a2.251 2.251 0 1 0 0-1.5H9.25a4.25 4.25 0 0 1-3.8-2.346zM12.75 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm-8.5 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z' />
                             </svg>
                             <span>
-                              Merge <span className='font-mono'>{branch.name}</span> into{' '}
-                              <span className='font-mono'>{currentBranchName}</span>
+                              {trRich('Merge {{branch}} into {{current}}', {
+                                branch: <span className='font-mono'>{branch.name}</span>,
+                                current: <span className='font-mono'>{currentBranchName}</span>,
+                              })}
                             </span>
                           </DropdownMenu.Item>
                         )}
@@ -256,7 +260,7 @@ export function BranchSwitcherPopover({
                           <svg className='h-3.5 w-3.5' viewBox='0 0 16 16' fill='currentColor'>
                             <path d='M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25ZM4.005 5.073a.75.75 0 0 1 .673.627l.79 5.532a.75.75 0 0 0 .742.643h3.58a.75.75 0 0 0 .742-.643l.79-5.532a.75.75 0 0 1 1.49.214l-.79 5.532A2.25 2.25 0 0 1 9.79 13.5H6.21a2.25 2.25 0 0 1-2.23-1.928l-.79-5.532a.75.75 0 0 1 .626-.867Z' />
                           </svg>
-                          Delete
+                          {tr('Delete')}
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 type StashCreateModalProps = {
@@ -47,7 +48,7 @@ export function StashCreateModal({
     <div className='fixed inset-0 z-50 flex items-center justify-center'>
       <div className='absolute inset-0 bg-black/40' onClick={isLoading ? undefined : onCancel} />
       <div className='relative w-80 rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900'>
-        <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>Stash Changes</h3>
+        <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>{tr('Stash Changes')}</h3>
         <p className='mb-3 text-xs text-neutral-600 dark:text-neutral-400'>{description}</p>
         <input
           type='text'
@@ -57,7 +58,7 @@ export function StashCreateModal({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !isLoading) onConfirm(message.trim())
           }}
-          placeholder='Stash message (optional)'
+          placeholder={tr('Stash message (optional)')}
           className='mb-4 w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder-neutral-500'
         />
         <div className='flex justify-end gap-2'>
@@ -66,7 +67,7 @@ export function StashCreateModal({
             disabled={isLoading}
             className='cursor-pointer rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={() => onConfirm(message.trim())}

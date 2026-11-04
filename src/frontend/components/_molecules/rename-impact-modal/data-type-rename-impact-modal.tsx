@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { useOpenPLCStore } from '../../../store'
 import { RenameImpactModal } from '.'
 
@@ -16,14 +18,14 @@ export const DataTypeRenameImpactModal = () => {
   return (
     <RenameImpactModal
       open
-      title='Data Type Rename: Impact Analysis'
+      title={tr('Data Type Rename: Impact Analysis')}
       oldName={pending.oldName}
       newName={pending.newName}
       impact={pending.impact}
-      affectedListLabel='Affected locations:'
-      byKindLabel='By reference kind:'
-      cancelLabel='No, cancel rename'
-      cancelDescription='The data type keeps its current name and nothing is changed'
+      affectedListLabel={tr('Affected locations:')}
+      byKindLabel={tr('By reference kind:')}
+      cancelLabel={tr('No, cancel rename')}
+      cancelDescription={tr('The data type keeps its current name and nothing is changed')}
       onConfirm={() => respondToPendingRename(true)}
       onCancel={() => respondToPendingRename(false)}
     />

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { OpcUaNodeConfig } from '@root/middleware/shared/ports/types'
 
 interface SelectedVariablesListProps {
@@ -30,7 +31,7 @@ export const SelectedVariablesList = ({ nodes, missingNodeIds, onEdit, onRemove 
     return (
       <div className='flex h-full items-center justify-center p-4'>
         <p className='text-center text-xs text-neutral-500 dark:text-neutral-400'>
-          No variables selected. Select variables from the left panel to expose them via OPC-UA.
+          {tr('No variables selected. Select variables from the left panel to expose them via OPC-UA.')}
         </p>
       </div>
     )
@@ -75,7 +76,7 @@ export const SelectedVariablesList = ({ nodes, missingNodeIds, onEdit, onRemove 
                     onClick={() => onEdit(node)}
                     className='h-[24px] rounded-md border border-neutral-300 bg-white px-2 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
                   >
-                    Edit
+                    {tr('Edit')}
                   </button>
                 )}
                 <button
@@ -83,7 +84,7 @@ export const SelectedVariablesList = ({ nodes, missingNodeIds, onEdit, onRemove 
                   onClick={() => onRemove(node.id)}
                   className='h-[24px] rounded-md border border-neutral-300 bg-white px-2 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700'
                 >
-                  Remove
+                  {tr('Remove')}
                 </button>
               </div>
             </div>
@@ -91,18 +92,19 @@ export const SelectedVariablesList = ({ nodes, missingNodeIds, onEdit, onRemove 
             {/* Details */}
             <div className='flex flex-col gap-1 pl-6'>
               <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                <span className='font-medium'>Variable:</span> {node.pouName}:{node.variablePath}
+                <span className='font-medium'>{tr('Variable:')}</span> {node.pouName}:{node.variablePath}
               </p>
               <p className='font-caption text-xs text-neutral-600 dark:text-neutral-400'>
-                <span className='font-medium'>Type:</span> {node.variableType}
+                <span className='font-medium'>{tr('Type:')}</span> {node.variableType}
               </p>
               <p className='font-caption text-xs text-neutral-500 dark:text-neutral-500'>
-                <span className='font-medium'>Permissions:</span> {formatPermissions(node.permissions)}
+                <span className='font-medium'>{tr('Permissions:')}</span> {formatPermissions(node.permissions)}
               </p>
               {isMissing && (
                 <p role='alert' className='font-caption text-xs font-medium text-amber-700 dark:text-amber-300'>
-                  Variable not found in the project. This tag is left out of the build until it is removed or the
-                  variable is restored.
+                  {tr(
+                    'Variable not found in the project. This tag is left out of the build until it is removed or the variable is restored.',
+                  )}
                 </p>
               )}
             </div>

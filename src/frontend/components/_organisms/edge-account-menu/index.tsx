@@ -1,4 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
 import { LayoutDashboard, LogOut, Settings, User } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -101,19 +102,19 @@ const EdgeAccountMenu = ({
             <DropdownMenu.Item asChild>
               <a href={dashboardUrl} target='_blank' rel='noreferrer' className={ITEM_CLASSES}>
                 <LayoutDashboard className={ICON_CLASSES} />
-                <span className={LABEL_CLASSES}>Dashboard</span>
+                <span className={LABEL_CLASSES}>{tr('Dashboard')}</span>
               </a>
             </DropdownMenu.Item>
             <DropdownMenu.Item asChild>
               <a href={profileUrl} target='_blank' rel='noreferrer' className={ITEM_CLASSES}>
                 <User className={ICON_CLASSES} />
-                <span className={LABEL_CLASSES}>Profile</span>
+                <span className={LABEL_CLASSES}>{tr('Profile')}</span>
               </a>
             </DropdownMenu.Item>
             <DropdownMenu.Item asChild>
               <a href={settingsUrl} target='_blank' rel='noreferrer' className={ITEM_CLASSES}>
                 <Settings className={ICON_CLASSES} />
-                <span className={LABEL_CLASSES}>Settings</span>
+                <span className={LABEL_CLASSES}>{tr('Settings')}</span>
               </a>
             </DropdownMenu.Item>
           </div>
@@ -125,7 +126,7 @@ const EdgeAccountMenu = ({
                 red row here would read as destructive when nothing is lost by it. */}
             <DropdownMenu.Item onSelect={onSignOut} className={ITEM_CLASSES}>
               <LogOut className={ICON_CLASSES} />
-              <span className={LABEL_CLASSES}>Sign out</span>
+              <span className={LABEL_CLASSES}>{tr('Sign out')}</span>
             </DropdownMenu.Item>
           </div>
         </DropdownMenu.Content>

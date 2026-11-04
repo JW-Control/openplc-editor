@@ -1,5 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Switch from '@radix-ui/react-switch'
+import { tr } from '@root/frontend/locales/tr'
 
 import { useOpenPLCStore } from '../../../../store'
 import type { AIPreferences } from '../../../../store/slices/ai/types'
@@ -28,7 +29,7 @@ export const AISettingsPopover = () => {
     <Popover.Root>
       <Popover.Trigger
         aria-label='AI settings'
-        title='AI settings'
+        title={tr('AI settings')}
         className='grid h-[26px] w-[26px] place-items-center rounded text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-white'
       >
         <svg
@@ -51,15 +52,15 @@ export const AISettingsPopover = () => {
           align='end'
           className='z-50 w-64 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg dark:border-neutral-700 dark:bg-neutral-900'
         >
-          <div className='mb-2 text-xs font-semibold text-neutral-800 dark:text-neutral-100'>AI Settings</div>
+          <div className='mb-2 text-xs font-semibold text-neutral-800 dark:text-neutral-100'>{tr('AI Settings')}</div>
 
           <div className='flex items-start justify-between gap-3'>
             <label htmlFor='ai-inline-completions-toggle' className='flex-1 cursor-pointer'>
               <div className='text-xs font-medium text-neutral-700 dark:text-neutral-200'>
-                Inline suggestions in editor
+                {tr('Inline suggestions in editor')}
               </div>
               <div className='mt-0.5 text-[10px] text-neutral-500 dark:text-neutral-400'>
-                Show AI code suggestions as you type.
+                {tr('Show AI code suggestions as you type.')}
               </div>
             </label>
             <Switch.Root

@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -68,7 +70,7 @@ const StatusBadge = ({ status }: { status: string | null }) => {
 /** Marks the one vPLC that drives the Device's local backplane I/O. */
 const BackplaneBadge = () => (
   <span className='inline-flex items-center rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'>
-    Backplane I/O
+    {tr('Backplane I/O')}
   </span>
 )
 
@@ -196,7 +198,7 @@ const OrchestratorsList = () => {
       setError(null)
     } catch (error) {
       console.error('[Orchestrators] Fetch failed', error)
-      setError('Failed to load Edge Devices. Please try again.')
+      setError(tr('Failed to load Edge Devices. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -435,7 +437,7 @@ const OrchestratorsList = () => {
           <div id='orchestrators-container' className='flex h-full w-full flex-col gap-4'>
             <div id='orchestrators-header' className='flex items-center justify-between'>
               <p className='text-sm text-neutral-600 dark:text-neutral-400'>
-                Select a vPLC from your Edge Devices to connect to.
+                {tr('Select a vPLC from your Edge Devices to connect to.')}
               </p>
               <button
                 type='button'
@@ -458,7 +460,7 @@ const OrchestratorsList = () => {
                 className='rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900'
               >
                 <label htmlFor='vendor-board-select' className='text-sm font-medium text-neutral-900 dark:text-white'>
-                  Vendor board
+                  {tr('Vendor board')}
                 </label>
                 <p className='mt-1 text-xs text-neutral-500 dark:text-neutral-400'>
                   This vPLC&apos;s vendor package supports several boards. Choose the one wired to the backplane.
@@ -472,7 +474,7 @@ const OrchestratorsList = () => {
                   }}
                   className='mt-2 w-full rounded-md border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-850 outline-none dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 >
-                  <option value=''>Select a board…</option>
+                  <option value=''>{tr('Select a board…')}</option>
                   {vendorBoards.map((board) => (
                     <option key={board} value={board}>
                       {board}
@@ -494,14 +496,16 @@ const OrchestratorsList = () => {
             >
               <div className='flex items-center justify-between'>
                 <div className='flex flex-col'>
-                  <span className='text-sm font-medium text-neutral-900 dark:text-white'>OpenPLC Simulator</span>
+                  <span className='text-sm font-medium text-neutral-900 dark:text-white'>
+                    {tr('OpenPLC Simulator')}
+                  </span>
                   <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-                    Built-in simulator — no hardware required
+                    {tr('Built-in simulator — no hardware required')}
                   </span>
                 </div>
                 {isSimulatorSelected && runtimeConnection.connectionStatus !== 'connected' && (
                   <span className='inline-flex items-center rounded px-2 py-0.5 text-xs font-medium text-brand'>
-                    Selected
+                    {tr('Selected')}
                   </span>
                 )}
               </div>
@@ -509,7 +513,7 @@ const OrchestratorsList = () => {
 
             {loading && (
               <div className='flex items-center justify-center py-8'>
-                <p className='text-sm text-neutral-500 dark:text-neutral-400'>Loading Edge Devices...</p>
+                <p className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('Loading Edge Devices...')}</p>
               </div>
             )}
 
@@ -521,9 +525,9 @@ const OrchestratorsList = () => {
 
             {!loading && !error && orchestrators.length === 0 && (
               <div className='flex flex-col items-center justify-center gap-2 py-8'>
-                <p className='text-sm text-neutral-500 dark:text-neutral-400'>No Edge Devices found.</p>
+                <p className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('No Edge Devices found.')}</p>
                 <p className='text-xs text-neutral-400 dark:text-neutral-500'>
-                  Register an Edge Device in the Autonomy Edge platform to see it here.
+                  {tr('Register an Edge Device in the Autonomy Edge platform to see it here.')}
                 </p>
               </div>
             )}
@@ -604,7 +608,7 @@ const OrchestratorsList = () => {
                                 <StatusBadge status={device.status} />
                                 {isConnected && (
                                   <span className='text-xs font-medium text-green-600 dark:text-green-400'>
-                                    Connected
+                                    {tr('Connected')}
                                   </span>
                                 )}
                               </div>
@@ -652,7 +656,7 @@ const OrchestratorsList = () => {
                 </div>
                 {runtimeConnection.connectionStatus === 'connected' && runtimeConnection.plcStatus && (
                   <div className='flex items-center gap-2'>
-                    <span className='text-xs text-neutral-500 dark:text-neutral-400'>PLC Status:</span>
+                    <span className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('PLC Status:')}</span>
                     <span
                       className={cn(
                         'text-xs font-medium',
@@ -675,16 +679,19 @@ const OrchestratorsList = () => {
             {/* Device Switch Confirmation Modal */}
             <Modal open={showSwitchConfirmModal} onOpenChange={setShowSwitchConfirmModal}>
               <ModalContent className='flex h-[320px] w-[400px] select-none flex-col items-center justify-evenly rounded-lg'>
-                <ModalTitle className='hidden'>Switch vPLC</ModalTitle>
+                <ModalTitle className='hidden'>{tr('Switch vPLC')}</ModalTitle>
                 <div className='flex select-none flex-col items-center gap-6 p-4'>
                   <WarningIcon className='h-[60px] w-[60px]' />
                   <div className='text-center'>
                     <p className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>
-                      You are currently connected to <strong>{runtimeConnection.selectedDevice?.deviceName}</strong>.
+                      {trRich('You are currently connected to {{device}}.', {
+                        device: <strong>{runtimeConnection.selectedDevice?.deviceName}</strong>,
+                      })}
                     </p>
                     <p className='mt-2 text-sm text-neutral-600 dark:text-neutral-400'>
-                      To connect to <strong>{pendingDeviceSwitch?.deviceName}</strong>, you must disconnect from the
-                      current vPLC first.
+                      {trRich('To connect to {{device}}, you must disconnect from the current vPLC first.', {
+                        device: <strong>{pendingDeviceSwitch?.deviceName}</strong>,
+                      })}
                     </p>
                   </div>
 
@@ -693,13 +700,13 @@ const OrchestratorsList = () => {
                       onClick={() => void handleConfirmDeviceSwitch()}
                       className='w-full rounded-lg bg-brand px-4 py-2 text-center text-sm font-medium text-white hover:bg-brand-medium-dark'
                     >
-                      Disconnect and Switch
+                      {tr('Disconnect and Switch')}
                     </button>
                     <button
                       onClick={handleCancelDeviceSwitch}
                       className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
                     >
-                      Cancel
+                      {tr('Cancel')}
                     </button>
                   </div>
                 </div>

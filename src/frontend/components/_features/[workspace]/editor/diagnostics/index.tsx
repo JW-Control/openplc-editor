@@ -1,4 +1,5 @@
 import { useIoDiagnostics } from '@root/frontend/hooks/use-io-diagnostics'
+import { tr } from '@root/frontend/locales/tr'
 import type {
   IoDiagnostics,
   IoDiagnosticsArea,
@@ -29,16 +30,17 @@ const DiagnosticsEditor = () => {
   return (
     <div className='flex h-full w-full select-text flex-col overflow-auto p-8'>
       <header className='mb-6'>
-        <h2 className='text-xl font-semibold text-neutral-1000 dark:text-white'>I/O Image Diagnostics</h2>
+        <h2 className='text-xl font-semibold text-neutral-1000 dark:text-white'>{tr('I/O Image Diagnostics')}</h2>
         <p className='mt-1 max-w-3xl text-sm text-neutral-600 dark:text-neutral-400'>
-          What the compiler would size this project to, computed from the same functions the build runs. Developer
-          tooling — it changes nothing and is not part of a release build.
+          {tr(
+            'What the compiler would size this project to, computed from the same functions the build runs. Developer tooling — it changes nothing and is not part of a release build.',
+          )}
         </p>
       </header>
 
       <div className='flex max-w-5xl flex-col gap-6'>
         <TargetCard diagnostics={diagnostics} />
-        <Section title='I/O image' subtitle='Every table, in the unit its addresses use'>
+        <Section title={tr('I/O image')} subtitle='Every table, in the unit its addresses use'>
           <AreaTable areas={diagnostics.areas} />
         </Section>
         <Section
@@ -56,7 +58,7 @@ const DiagnosticsEditor = () => {
         >
           <ClaimTable diagnostics={diagnostics} />
         </Section>
-        <Section title='Emitted files' subtitle='image.conf and the defines.h process-image block, verbatim'>
+        <Section title={tr('Emitted files')} subtitle='image.conf and the defines.h process-image block, verbatim'>
           <Artifacts diagnostics={diagnostics} />
         </Section>
       </div>
@@ -113,12 +115,12 @@ const AreaTable = ({ areas }: { areas: IoDiagnosticsArea[] }) => (
   <table className={TABLE}>
     <thead>
       <tr>
-        <th className={HEAD}>Table</th>
-        <th className={HEAD}>Prefix</th>
-        <th className={HEAD}>Size</th>
-        <th className={HEAD}>Unit</th>
-        <th className={HEAD}>Sized by</th>
-        <th className={HEAD}>Bare-metal macro</th>
+        <th className={HEAD}>{tr('Table')}</th>
+        <th className={HEAD}>{tr('Prefix')}</th>
+        <th className={HEAD}>{tr('Size')}</th>
+        <th className={HEAD}>{tr('Unit')}</th>
+        <th className={HEAD}>{tr('Sized by')}</th>
+        <th className={HEAD}>{tr('Bare-metal macro')}</th>
       </tr>
     </thead>
     <tbody>
@@ -145,16 +147,16 @@ const ISSUE_LABEL: Record<NonNullable<IoDiagnosticsLocated['issue']>, string> = 
 }
 
 const LocatedTable = ({ located }: { located: IoDiagnosticsLocated[] }) => {
-  if (located.length === 0) return <Empty>No located declarations in this project.</Empty>
+  if (located.length === 0) return <Empty>{tr('No located declarations in this project.')}</Empty>
   return (
     <table className={TABLE}>
       <thead>
         <tr>
-          <th className={HEAD}>Scope</th>
-          <th className={HEAD}>Name</th>
-          <th className={HEAD}>Location</th>
-          <th className={HEAD}>Slots</th>
-          <th className={HEAD}>Verdict</th>
+          <th className={HEAD}>{tr('Scope')}</th>
+          <th className={HEAD}>{tr('Name')}</th>
+          <th className={HEAD}>{tr('Location')}</th>
+          <th className={HEAD}>{tr('Slots')}</th>
+          <th className={HEAD}>{tr('Verdict')}</th>
         </tr>
       </thead>
       <tbody>
@@ -175,16 +177,16 @@ const LocatedTable = ({ located }: { located: IoDiagnosticsLocated[] }) => {
 }
 
 const ServerTable = ({ servers }: { servers: IoDiagnosticsServer[] }) => {
-  if (servers.length === 0) return <Empty>This project declares no servers.</Empty>
+  if (servers.length === 0) return <Empty>{tr('This project declares no servers.')}</Empty>
   return (
     <table className={TABLE}>
       <thead>
         <tr>
-          <th className={HEAD}>Name</th>
-          <th className={HEAD}>Protocol</th>
-          <th className={HEAD}>Enabled</th>
-          <th className={HEAD}>Target runs it</th>
-          <th className={HEAD}>Sizes the image</th>
+          <th className={HEAD}>{tr('Name')}</th>
+          <th className={HEAD}>{tr('Protocol')}</th>
+          <th className={HEAD}>{tr('Enabled')}</th>
+          <th className={HEAD}>{tr('Target runs it')}</th>
+          <th className={HEAD}>{tr('Sizes the image')}</th>
         </tr>
       </thead>
       <tbody>
@@ -214,16 +216,16 @@ const ServerTable = ({ servers }: { servers: IoDiagnosticsServer[] }) => {
 
 const ClaimTable = ({ diagnostics }: { diagnostics: IoDiagnostics }) => {
   const { claims, conflicts } = diagnostics
-  if (claims.length === 0) return <Empty>No producer on this target claims an address.</Empty>
+  if (claims.length === 0) return <Empty>{tr('No producer on this target claims an address.')}</Empty>
   const conflicting = new Set(conflicts.map((conflict) => conflict.address))
   return (
     <table className={TABLE}>
       <thead>
         <tr>
-          <th className={HEAD}>Address</th>
-          <th className={HEAD}>Producer</th>
-          <th className={HEAD}>Source</th>
-          <th className={HEAD}>Alias</th>
+          <th className={HEAD}>{tr('Address')}</th>
+          <th className={HEAD}>{tr('Producer')}</th>
+          <th className={HEAD}>{tr('Source')}</th>
+          <th className={HEAD}>{tr('Alias')}</th>
         </tr>
       </thead>
       <tbody>
@@ -247,7 +249,7 @@ const Artifacts = ({ diagnostics: { artifacts } }: { diagnostics: IoDiagnostics 
   <div className='flex flex-col gap-4'>
     <Listing title='conf/image.conf' body={artifacts.imageConf} />
     <Listing
-      title='defines.h — process image'
+      title={tr('defines.h — process image')}
       body={artifacts.processImageDefines}
       empty='Not emitted for this target.'
     />

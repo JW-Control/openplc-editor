@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useState } from 'react'
 
 import type { ToolCall } from './ai-chat-turns'
@@ -135,7 +136,7 @@ export const AIChatToolSummary = ({ toolCalls }: AIChatToolSummaryProps) => {
       {open && (
         <div className='overflow-hidden rounded-[10px] border border-neutral-200 bg-neutral-50/60 dark:border-white/[0.06] dark:bg-white/[0.025]'>
           {errors.length > 0 && (
-            <ToolGroup title='Failed' count={errors.length} accent='error'>
+            <ToolGroup title={tr('Failed')} count={errors.length} accent='error'>
               {errors.map((call) => (
                 <ToolRow key={call.id} call={call} />
               ))}

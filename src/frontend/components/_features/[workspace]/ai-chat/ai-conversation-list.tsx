@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { useState } from 'react'
 
 import {
@@ -61,7 +62,7 @@ export const AIConversationList = ({ projectId, currentConversationId, onSelect,
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
         aria-label='Conversation history'
-        title='Conversation history'
+        title={tr('Conversation history')}
         className='grid h-[26px] w-[26px] place-items-center rounded text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-white'
       >
         <svg
@@ -100,20 +101,20 @@ export const AIConversationList = ({ projectId, currentConversationId, onSelect,
             >
               <path d='M12 5v14M5 12h14' />
             </svg>
-            New chat
+            {tr('New chat')}
           </button>
 
           <div className='my-1 border-t border-neutral-100 dark:border-white/5' />
 
           <div className='mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500'>
-            Recent
+            {tr('Recent')}
           </div>
 
           {isLoading ? (
-            <div className='px-2 py-1.5 text-[11px] text-neutral-500 dark:text-neutral-400'>Loading…</div>
+            <div className='px-2 py-1.5 text-[11px] text-neutral-500 dark:text-neutral-400'>{tr('Loading…')}</div>
           ) : !conversations || conversations.length === 0 ? (
             <div className='px-2 py-1.5 text-[11px] text-neutral-500 dark:text-neutral-400'>
-              No conversations yet for this project.
+              {tr('No conversations yet for this project.')}
             </div>
           ) : (
             <ul className='max-h-72 overflow-y-auto'>
@@ -139,7 +140,7 @@ export const AIConversationList = ({ projectId, currentConversationId, onSelect,
                     </button>
                     <div className='absolute right-1 top-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100'>
                       <RowAction
-                        title='Rename'
+                        title={tr('Rename')}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleRename(c)
@@ -160,7 +161,7 @@ export const AIConversationList = ({ projectId, currentConversationId, onSelect,
                         </svg>
                       </RowAction>
                       <RowAction
-                        title='Delete'
+                        title={tr('Delete')}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDelete(c)

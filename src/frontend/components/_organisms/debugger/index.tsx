@@ -1,4 +1,5 @@
 import * as Select from '@radix-ui/react-select'
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowIcon } from '../../../assets/icons/interface/Arrow'
@@ -139,7 +140,7 @@ const Debugger = ({ graphList }: DebuggerData) => {
         <div className='header relative flex justify-between'>
           <div className='flex '>
             <span className='flex h-7 select-none items-center justify-center rounded-md bg-inherit  p-2 text-cp-sm font-medium text-neutral-1000 outline-none  dark:text-white'>
-              Range
+              {tr('Range')}
             </span>
             <div className='relative z-[999999] flex gap-2'>
               <Select.Root onValueChange={(value) => setRange(Number(value))}>
@@ -221,7 +222,7 @@ const Debugger = ({ graphList }: DebuggerData) => {
           <p className='font-normal'>
             {debugTick}
             {debugDataStale && (
-              <span className='ml-2 text-amber-500' title='No data received for >2s'>
+              <span className='ml-2 text-amber-500' title={tr('No data received for >2s')}>
                 (stale)
               </span>
             )}

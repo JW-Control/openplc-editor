@@ -20,6 +20,7 @@
  */
 
 import * as Tabs from '@radix-ui/react-tabs'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import type { InstalledLibrary } from '@root/middleware/shared/ports/library-types'
@@ -144,7 +145,7 @@ const LibraryManagerEditor = () => {
   if (!library) {
     return (
       <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-        Library management is not available on this platform.
+        {tr('Library management is not available on this platform.')}
       </div>
     )
   }
@@ -152,9 +153,9 @@ const LibraryManagerEditor = () => {
   return (
     <div className='flex min-h-0 flex-1 flex-col overflow-hidden p-4'>
       <div className='mb-4 shrink-0'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>Library Manager</h2>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>{tr('Library Manager')}</h2>
         <p className='text-sm text-neutral-600 dark:text-neutral-400'>
-          Install IEC 61131-3 libraries system-wide, then enable them per project.
+          {tr('Install IEC 61131-3 libraries system-wide, then enable them per project.')}
         </p>
       </div>
 
@@ -164,8 +165,8 @@ const LibraryManagerEditor = () => {
         className='flex min-h-0 flex-1 flex-col overflow-hidden'
       >
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='system' label='System Libraries' isActive={activeTab === 'system'} />
-          <TabItem value='project' label='Project Libraries' isActive={activeTab === 'project'} />
+          <TabItem value='system' label={tr('System Libraries')} isActive={activeTab === 'system'} />
+          <TabItem value='project' label={tr('Project Libraries')} isActive={activeTab === 'project'} />
         </Tabs.List>
 
         <Tabs.Content

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect } from 'react'
 
 type RestoreConfirmationModalProps = {
@@ -35,7 +36,9 @@ export function RestoreConfirmationModal({
     <div className='fixed inset-0 z-50 flex items-center justify-center'>
       <div className='absolute inset-0 bg-black/40' onClick={onCancel} />
       <div className='relative w-80 rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900'>
-        <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>Restore to This Version?</h3>
+        <h3 className='mb-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>
+          {tr('Restore to This Version?')}
+        </h3>
         <p className='mb-1 text-xs text-neutral-600 dark:text-neutral-400'>
           This will restore all project files to commit{' '}
           <span className='font-mono text-blue-500'>{commitHash.slice(0, 7)}</span>:
@@ -44,7 +47,7 @@ export function RestoreConfirmationModal({
           &ldquo;{commitMessage}&rdquo;
         </p>
         <p className='mb-4 text-xs text-yellow-600 dark:text-yellow-400'>
-          Current unsaved changes will be overwritten. This action cannot be undone.
+          {tr('Current unsaved changes will be overwritten. This action cannot be undone.')}
         </p>
         {error ? <p className='mb-3 text-xs text-red-500'>{error}</p> : null}
         <div className='flex justify-end gap-2'>
@@ -53,7 +56,7 @@ export function RestoreConfirmationModal({
             disabled={isLoading}
             className='rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={onConfirm}

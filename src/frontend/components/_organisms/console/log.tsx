@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { LogSegment, StructuredCompileError } from '@root/middleware/shared/ports/types'
 import { Copy } from 'lucide-react'
 import { ComponentPropsWithoutRef, useCallback, useEffect, useRef, useState } from 'react'
@@ -130,7 +131,7 @@ const CompileErrorMessage = ({
           type='button'
           onClick={handleClick}
           className='cursor-pointer underline-offset-2 hover:underline focus:outline-none focus-visible:underline'
-          title='Open in editor'
+          title={tr('Open in editor')}
         >
           <HighlightedText text={headerText} searchTerm={searchTerm} />
         </button>

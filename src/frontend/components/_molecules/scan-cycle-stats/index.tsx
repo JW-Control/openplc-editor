@@ -1,4 +1,5 @@
 import { RangeCell, StatsTable, type StatsTableColumn } from '@root/frontend/components/_molecules/stats-table'
+import { tr } from '@root/frontend/locales/tr'
 import type { TaskTimingStats, TimingStats } from '@root/middleware/shared/ports/types'
 
 interface ScanCycleStatsProps {
@@ -60,8 +61,8 @@ export const ScanCycleStats = ({ timingStats }: ScanCycleStatsProps) => {
   return (
     <StatsTable
       context='scan-cycle-stats'
-      title='Scan Cycle Statistics'
-      description='Times in microseconds. Each cell shows a moving average with min / max below.'
+      title={tr('Scan Cycle Statistics')}
+      description={tr('Times in microseconds. Each cell shows a moving average with min / max below.')}
       columns={columns}
       rows={activeTasks}
       rowKey={(task) => task.name}

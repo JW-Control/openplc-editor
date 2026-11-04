@@ -1,4 +1,5 @@
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 import { useCallback, useState } from 'react'
@@ -34,7 +35,7 @@ const ESIRepositoryTable = ({ repository, onRemoveItem, onClearAll, isLoading = 
     return (
       <div className='flex flex-1 items-center justify-center rounded-lg border border-dashed border-neutral-300 p-8 dark:border-neutral-700'>
         <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-          No ESI files loaded. Upload files above to populate the repository.
+          {tr('No ESI files loaded. Upload files above to populate the repository.')}
         </p>
       </div>
     )
@@ -65,16 +66,16 @@ const ESIRepositoryTable = ({ repository, onRemoveItem, onClearAll, isLoading = 
             <tr>
               <th className='w-8 px-2 py-2'></th>
               <th className='w-[35%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Filename
+                {tr('Filename')}
               </th>
               <th className='w-[30%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Vendor
+                {tr('Vendor')}
               </th>
               <th className='w-[15%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Devices
+                {tr('Devices')}
               </th>
               <th className='px-2 py-2 text-right text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Actions
+                {tr('Actions')}
               </th>
             </tr>
           </thead>
@@ -158,7 +159,7 @@ const RepositoryItemRow = ({ item, isExpanded, onToggleExpand, onRemove }: Repos
             }}
             className='text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300'
           >
-            Remove
+            {tr('Remove')}
           </button>
         </td>
       </tr>

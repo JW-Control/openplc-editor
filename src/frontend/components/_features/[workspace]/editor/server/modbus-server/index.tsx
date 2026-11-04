@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { ModbusBufferMapping } from '@root/middleware/shared/ports/types'
 import type { ModbusSegment, ModbusServerTransport } from '@root/middleware/shared/utils/modbus-server-profile'
 import { useCallback, useEffect, useState } from 'react'
@@ -14,8 +15,8 @@ import { DuplicateProtocolNotice } from '../duplicate-protocol-notice'
 import { AddressMappingReference } from './address-mapping-reference'
 
 const BIND_ADDRESS_OPTIONS = [
-  { value: '0.0.0.0', label: 'All Interfaces (0.0.0.0)' },
-  { value: '127.0.0.1', label: 'Localhost (127.0.0.1)' },
+  { value: '0.0.0.0', label: tr('All Interfaces (0.0.0.0)') },
+  { value: '127.0.0.1', label: tr('Localhost (127.0.0.1)') },
 ]
 
 // Buffer mapping constraints
@@ -272,9 +273,9 @@ const boardValueStyles =
  * missing rather than guess.
  */
 const TRANSPORT_CHOICES: { value: string; label: string; transports: ModbusServerTransport[] }[] = [
-  { value: 'rtu', label: 'Modbus RTU', transports: ['rtu'] },
-  { value: 'tcp', label: 'Modbus TCP', transports: ['tcp'] },
-  { value: 'rtu+tcp', label: 'Modbus RTU and TCP', transports: ['rtu', 'tcp'] },
+  { value: 'rtu', label: tr('Modbus RTU'), transports: ['rtu'] },
+  { value: 'tcp', label: tr('Modbus TCP'), transports: ['tcp'] },
+  { value: 'rtu+tcp', label: tr('Modbus RTU and TCP'), transports: ['rtu', 'tcp'] },
 ]
 
 const ModbusServerEditor = () => {
@@ -439,8 +440,9 @@ const ModbusServerEditor = () => {
     return (
       <div className='flex h-full w-full items-center justify-center p-8'>
         <p className='max-w-md text-center text-sm text-neutral-500 dark:text-neutral-400'>
-          The selected target does not serve Modbus. Pick a board that does, or install the vendor package that adds
-          Modbus support for it.
+          {tr(
+            'The selected target does not serve Modbus. Pick a board that does, or install the vendor package that adds Modbus support for it.',
+          )}
         </p>
       </div>
     )
@@ -465,21 +467,21 @@ const ModbusServerEditor = () => {
         <div className='flex flex-1 flex-col gap-6 overflow-auto'>
           <DuplicateProtocolNotice name={serverName} protocol={protocol} />
 
-          <Panel title='Modbus Server'>
+          <Panel title={tr('Modbus Server')}>
             {/* One screen for every target. What a target cannot configure comes
              * through disabled with the reason, rather than absent: a control
              * that disappears makes the user wonder whether the feature exists
              * at all, and two targets whose screens differ in shape cannot be
              * compared. */}
             <Group>
-              <Row label='Enabled' hint={enabled ? 'Serving.' : 'Not serving. Settings are kept.'}>
-                <Toggle checked={enabled} onChange={actions.setEnabled} label='Enable Modbus server' />
+              <Row label={tr('Enabled')} hint={enabled ? 'Serving.' : 'Not serving. Settings are kept.'}>
+                <Toggle checked={enabled} onChange={actions.setEnabled} label={tr('Enable Modbus server')} />
               </Row>
 
-              <Row label='Transport' hint={transportHint}>
+              <Row label={tr('Transport')} hint={transportHint}>
                 <div className='w-64'>
                   <Select value={transportChoiceValue} onValueChange={onTransportChange} disabled={!enabled}>
-                    <SelectTrigger withIndicator placeholder='Select transport' className={selectTriggerStyles} />
+                    <SelectTrigger withIndicator placeholder={tr('Select transport')} className={selectTriggerStyles} />
                     <SelectContent className={selectContentStyles}>
                       {TRANSPORT_CHOICES.map((choice) => (
                         <SelectItem
@@ -502,14 +504,14 @@ const ModbusServerEditor = () => {
             <Group
               name='Serial line'
               action={{
-                label: 'Board serial settings',
+                label: tr('Board serial settings'),
                 screen: profile.vppScreens.serial,
                 reason: noBoardPage('serial'),
                 onOpen: openVppScreen,
               }}
             >
               <Row
-                label='Server serial port'
+                label={tr('Server serial port')}
                 hint={
                   !rtuAvailable
                     ? 'RTU only.'
@@ -524,7 +526,11 @@ const ModbusServerEditor = () => {
                     onValueChange={actions.setSerialPort}
                     disabled={!enabled || !rtuAvailable || profile.serialPorts.length === 0}
                   >
-                    <SelectTrigger withIndicator placeholder='Select serial port' className={selectTriggerStyles} />
+                    <SelectTrigger
+                      withIndicator
+                      placeholder={tr('Select serial port')}
+                      className={selectTriggerStyles}
+                    />
                     <SelectContent className={selectContentStyles}>
                       {(profile.serialPorts.length > 0 ? profile.serialPorts : [profile.defaultSerial]).map(
                         (option) => (
@@ -541,7 +547,7 @@ const ModbusServerEditor = () => {
               </Row>
 
               <Row
-                label='Baud Rate'
+                label={tr('Baud Rate')}
                 hint={
                   !rtuAvailable
                     ? 'RTU only.'
@@ -573,7 +579,11 @@ const ModbusServerEditor = () => {
                       onValueChange={(value) => actions.setBaudRate(Number(value))}
                       disabled={!enabled || !rtuAvailable || !baudRateEditable}
                     >
-                      <SelectTrigger withIndicator placeholder='Select baud rate' className={selectTriggerStyles} />
+                      <SelectTrigger
+                        withIndicator
+                        placeholder={tr('Select baud rate')}
+                        className={selectTriggerStyles}
+                      />
                       <SelectContent className={selectContentStyles}>
                         {BAUD_RATE_OPTIONS.map((option) => (
                           <SelectItem key={option} value={option} className={selectItemStyles}>
@@ -589,7 +599,7 @@ const ModbusServerEditor = () => {
               </Row>
 
               <Row
-                label='Slave ID'
+                label={tr('Slave ID')}
                 hint={
                   !rtuAvailable
                     ? 'RTU only. TCP addresses by IP.'
@@ -615,14 +625,14 @@ const ModbusServerEditor = () => {
             <Group
               name='Network'
               action={{
-                label: 'Board network settings',
+                label: tr('Board network settings'),
                 screen: profile.vppScreens.network,
                 reason: noBoardPage('network'),
                 onOpen: openVppScreen,
               }}
             >
               <Row
-                label='Network Interface'
+                label={tr('Network Interface')}
                 hint={profile.configurableBindAddress ? undefined : 'This board has one interface.'}
               >
                 <div className='w-64'>
@@ -633,7 +643,7 @@ const ModbusServerEditor = () => {
                   >
                     <SelectTrigger
                       withIndicator
-                      placeholder='Select network interface'
+                      placeholder={tr('Select network interface')}
                       className={selectTriggerStyles}
                     />
                     <SelectContent className={selectContentStyles}>
@@ -649,7 +659,7 @@ const ModbusServerEditor = () => {
                 </div>
               </Row>
 
-              <Row label='Port' hint={profile.configurablePort ? 'Default 502.' : 'Fixed by the firmware.'}>
+              <Row label={tr('Port')} hint={profile.configurablePort ? 'Default 502.' : 'Fixed by the firmware.'}>
                 <div className='w-64'>
                   <InputWithRef
                     type='number'
@@ -668,12 +678,12 @@ const ModbusServerEditor = () => {
             </Group>
           </Panel>
 
-          <Panel title='Buffer Mapping'>
+          <Panel title={tr('Buffer Mapping')}>
             {profile.configurableBuffers && (
               <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-                How many addresses each IEC segment gets. A field left empty follows the I/O image — the greyed number
-                is what this project sizes it to. Type a number to ask for more than that, or 0 to publish none of it.
-                Clearing the field follows the image again.
+                {tr(
+                  'How many addresses each IEC segment gets. A field left empty follows the I/O image — the greyed number is what this project sizes it to. Type a number to ask for more than that, or 0 to publish none of it. Clearing the field follows the image again.',
+                )}
               </p>
             )}
 

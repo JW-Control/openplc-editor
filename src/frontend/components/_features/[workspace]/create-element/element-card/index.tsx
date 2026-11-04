@@ -54,16 +54,16 @@ type CreateRemoteDeviceFormProps = {
 }
 
 const ServerProtocolSources = [
-  { value: 'modbus-tcp', label: 'Modbus/TCP', disabled: false },
-  { value: 's7comm', label: 'Siemens S7comm', disabled: false },
+  { value: 'modbus-tcp', label: tr('Modbus/TCP'), disabled: false },
+  { value: 's7comm', label: tr('Siemens S7comm'), disabled: false },
   { value: 'opcua', label: 'OPC-UA', disabled: false },
-  { value: 'ethernet-ip', label: 'EtherNet/IP', disabled: true },
+  { value: 'ethernet-ip', label: tr('EtherNet/IP'), disabled: true },
 ] as const
 
 const RemoteDeviceProtocolSources = [
-  { value: 'modbus-tcp', label: 'Modbus', disabled: false },
-  { value: 'ethernet-ip', label: 'EtherNet/IP', disabled: true },
-  { value: 'ethercat', label: 'EtherCAT', disabled: false },
+  { value: 'modbus-tcp', label: tr('Modbus'), disabled: false },
+  { value: 'ethernet-ip', label: tr('EtherNet/IP'), disabled: true },
+  { value: 'ethercat', label: tr('EtherCAT'), disabled: false },
   { value: 'profinet', label: 'PROFINET', disabled: true },
 ] as const
 
