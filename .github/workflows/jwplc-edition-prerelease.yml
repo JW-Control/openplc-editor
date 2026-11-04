@@ -26,7 +26,7 @@ env:
   PLATFORM_DESIGNER_SHA: 94edd7d4ace73718f0f226ded8d0b7c30019823d
   # v2.1.0-alpha.17/Editor-Upstream/feature/vpp-4.3 @ 24d15e0 (VPP 2.1.0-alpha.17, pantallas 4.3, firma jwcontrol-2026
   # verificada). Al fusionar platform-jwplc#227, pasar al SHA de …/Editor-Upstream/main.
-  PLATFORM_VPP_SHA: 24d15e01b550e29b90fe6e8ee9fe2c8c6d22165a
+  PLATFORM_VPP_SHA: cfb5908ed3a953efe409835014cd56f59a44431d
   # Short download names (the version is in the release title and in SHA256SUMS.txt).
   VPP_NAME: JWPLC-Basic.vpp
   EXE_NAME: OpenPLC-Editor.exe
