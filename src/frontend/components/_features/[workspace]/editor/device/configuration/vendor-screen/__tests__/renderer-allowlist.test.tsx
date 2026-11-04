@@ -79,6 +79,16 @@ describe('vendor screen renderer allowlists', () => {
     expect(Object.keys(stored)).not.toContain('hostile')
   })
 
+  it('renders the JWPLC device discovery field', () => {
+    renderSection({
+      layout: 'form',
+      fields: [{ id: 'tcp_device_discovery', label: 'JWPLC Device Discovery', type: 'jwplc-device-discovery' }],
+    })
+
+    expect(screen.getByText('JWPLC Device Discovery')).toBeTruthy()
+    expect(screen.getByText('Buscar JWPLC en la red')).toBeTruthy()
+  })
+
   it('ignores a field with no usable id', () => {
     renderSection({
       layout: 'form',

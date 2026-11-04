@@ -53,7 +53,18 @@ const TEXT_INPUT_CLASS =
  * behaviour — falling back to a text input — meant an unrecognised type still
  * produced a value the device would be configured with.
  */
-const SUPPORTED_FIELD_TYPES = new Set(['boolean', 'number', 'select', 'password', 'ip-address', 'mac-address', 'text'])
+// JWPLC Edition: 'communication-port' and 'jwplc-device-discovery' have their own renderers below.
+const SUPPORTED_FIELD_TYPES = new Set([
+  'boolean',
+  'number',
+  'select',
+  'password',
+  'ip-address',
+  'mac-address',
+  'text',
+  'communication-port',
+  'jwplc-device-discovery',
+])
 
 // Anchor-less HTML5 patterns for the formatted text types. The schema's
 // per-field `validation` (when present) is more specific and wins via the
