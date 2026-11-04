@@ -24,6 +24,8 @@ export type ModbusBoardInfoLike = {
    *  Absent means the package did not say, which keeps both on offer. */
   networkInterfaces?: string[]
   serialPorts?: string[]
+  /** JWPLC Edition: display name per UART, from `device.serialPortLabels`. */
+  serialPortLabels?: Record<string, string>
   defaultSerial?: string
 }
 
@@ -110,6 +112,7 @@ const NO_SERVER: ModbusServerProfile = {
   configurablePort: false,
   configurableBindAddress: false,
   serialPorts: [],
+  serialPortLabels: {},
   defaultSerial: FALLBACK_DEFAULT_SERIAL,
   fixedPort: DEFAULT_TCP_PORT,
   derivedCounts: null,
@@ -189,6 +192,7 @@ export function resolveModbusServerProfile(board: ModbusBoardInfoLike | undefine
       // One network interface on a microcontroller; there is nothing to bind to.
       configurableBindAddress: false,
       serialPorts: board.serialPorts ?? [],
+      serialPortLabels: board.serialPortLabels ?? {},
       defaultSerial: board.defaultSerial ?? FALLBACK_DEFAULT_SERIAL,
       fixedPort: BAREMETAL_TCP_PORT,
       derivedCounts: firmwareCounts(board.platform),
@@ -211,6 +215,7 @@ export function resolveModbusServerProfile(board: ModbusBoardInfoLike | undefine
     configurableBindAddress: true,
     // A Runtime v4 target's Modbus is TCP only, so it declares no UART here.
     serialPorts: [],
+    serialPortLabels: {},
     defaultSerial: FALLBACK_DEFAULT_SERIAL,
     fixedPort: DEFAULT_TCP_PORT,
     derivedCounts: null,

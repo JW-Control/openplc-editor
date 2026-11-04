@@ -386,6 +386,7 @@ class HardwareModule {
                 : null,
             },
             ...(device.serialPorts ? { serialPorts: device.serialPorts } : {}),
+            ...(device.serialPortLabels ? { serialPortLabels: device.serialPortLabels } : {}),
             ...(device.defaultSerial ? { defaultSerial: device.defaultSerial } : {}),
             ...(device.networkInterfaces ? { networkInterfaces: device.networkInterfaces } : {}),
             ...(device.debug ? { debug: device.debug } : {}),

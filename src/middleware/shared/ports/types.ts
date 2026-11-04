@@ -626,6 +626,8 @@ export interface BoardInfo {
   platformOptions?: PlatformOption[]
   /** Hardware serial ports this board exposes. Absent → the editor assumes a single `Serial`. */
   serialPorts?: string[]
+  /** JWPLC Edition: display name per serial port, for pickers. */
+  serialPortLabels?: Record<string, string>
   /** Default serial port for the debugger. Absent → `Serial`. */
   defaultSerial?: string
   /** TCP carriers this board can bring up. Absent → every carrier stays on offer; declared only to REMOVE one the firmware can't serve. */
@@ -782,6 +784,8 @@ export interface PackageManifest {
      *  Surfaced onto `BoardInfo.serialPorts` and consumed by VPP screen
      *  `select` fields via `optionsRef: 'board.serialPorts'`. */
     serialPorts?: string[]
+    /** JWPLC Edition: display name per serial port (`{"Serial2": "RS-485 (Serial2)"}`). */
+    serialPortLabels?: Record<string, string>
     /** Name of the default serial port (usually the USB CDC port). Surfaced onto
      *  `BoardInfo.defaultSerial`. Absent → `Serial`. */
     defaultSerial?: string

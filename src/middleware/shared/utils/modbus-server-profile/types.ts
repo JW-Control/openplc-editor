@@ -91,6 +91,9 @@ export interface ModbusServerProfile {
    *  configuration that works today. */
   serialPorts: string[]
 
+  /** JWPLC Edition: display name per UART (`USB (Serial)`); a port without one shows its own name. */
+  serialPortLabels: Record<string, string>
+
   /** The UART the editor's own connection lands on. RTU may use it, and the
    *  firmware then serves the debugger and the register table there together,
    *  but the package owns that port's speed and slave id: they are what the

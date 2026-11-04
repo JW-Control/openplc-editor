@@ -147,6 +147,12 @@ describe('resolveModbusServerProfile', () => {
     expect(profile.defaultSerial).toBe('SerialUSB')
   })
 
+  it('carries the display names a package gives its UARTs', () => {
+    const labels = { Serial: 'USB (Serial)', Serial2: 'RS-485 (Serial2)' }
+    expect(resolveModbusServerProfile(arduinoBoard({ serialPortLabels: labels })).serialPortLabels).toEqual(labels)
+    expect(resolveModbusServerProfile(arduinoBoard({})).serialPortLabels).toEqual({})
+  })
+
   it('offers RTU on a board that declares no UART set at all', () => {
     // 13 boards do not declare one, because their variants were not confirmed
     // against hardware. Refusing RTU there would remove a configuration that

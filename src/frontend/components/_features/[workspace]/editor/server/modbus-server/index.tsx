@@ -509,7 +509,7 @@ const ModbusServerEditor = () => {
               }}
             >
               <Row
-                label='Serial Port'
+                label='Server serial port'
                 hint={
                   !rtuAvailable
                     ? 'RTU only.'
@@ -530,7 +530,7 @@ const ModbusServerEditor = () => {
                         (option) => (
                           <SelectItem key={option} value={option} className={selectItemStyles}>
                             <span className='text-start font-caption text-xs font-normal text-neutral-700 dark:text-neutral-100'>
-                              {option}
+                              {profile.serialPortLabels[option] ?? option}
                             </span>
                           </SelectItem>
                         ),
