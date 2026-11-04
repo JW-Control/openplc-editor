@@ -1,7 +1,7 @@
 import { collectHmiCandidates, describeHmiVariables } from '@root/backend/shared/compile/jwplc-hmi-host'
 import type { DevicePort, OpenHmiDesignerArgs } from '@root/middleware/shared/ports/device-port'
 import { useDevice } from '@root/middleware/shared/providers/platform-context'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { registerHmiDesignerSaver } from '../../../../../services/hmi-designer-save'
 import { type OpenPLCStore, useOpenPLCStore, useOpenPLCStoreApi } from '../../../../../store'
@@ -51,6 +51,19 @@ export async function openHmiDesigner(
 
 const VARIABLES_DEBOUNCE_MS = 400
 
+type ScriptRunner = { executeJavaScript: (code: string) => Promise<unknown> }
+
+function canRunScript(node: object): node is ScriptRunner {
+  return 'executeJavaScript' in node && typeof node.executeJavaScript === 'function'
+}
+
+/** The binding view follows OpenPLC's theme (designer-openplc-bindings.js, JWPLCBindingsView). */
+function applyDesignerTheme(node: HTMLElement | null, dark: boolean): void {
+  if (!node || !canRunScript(node)) return
+  const theme = dark ? 'dark' : 'light'
+  node.executeJavaScript(`window.JWPLCBindingsView?.setTheme?.('${theme}')`).catch(() => undefined)
+}
+
 /**
  * JWPLC HMI Designer tab (Alpha14 F3, bridge 1.4): the Designer's binding view
  * in a `<webview>` (preview, page tabs, object tree and "Variable PLC"),
@@ -72,6 +85,10 @@ export const HmiDesignerEditor = () => {
   const [target, setTarget] = useState<{ url: string } | { error: string } | null>(null)
   const [attempt, setAttempt] = useState(0)
   const lastVariables = useRef('')
+  const darkMode = useOpenPLCStore((s) => s.workspace.systemConfigs.shouldUseDarkMode)
+  const darkModeRef = useRef(darkMode)
+  darkModeRef.current = darkMode
+  const webviewRef = useRef<HTMLElement | null>(null)
 
   // Link the Designer to this project (again when the project changes).
   useEffect(() => {
@@ -139,7 +156,24 @@ export const HmiDesignerEditor = () => {
     }
   }, [device, store])
 
+  // OpenPLC's theme switch reaches the loaded view without reloading it.
+  useEffect(() => {
+    applyDesignerTheme(webviewRef.current, darkMode)
+  }, [darkMode])
+
+  // A theme switch while the view was loading is applied once it is ready.
+  const attachWebview = useCallback((node: HTMLElement | null) => {
+    webviewRef.current = node
+    node?.addEventListener('dom-ready', () => applyDesignerTheme(node, darkModeRef.current))
+  }, [])
+
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
+
+  // The theme at load time only: a later switch must not change src (it would reload the view).
+  const webviewSrc = useMemo(
+    () => (target && 'url' in target ? `${target.url}&theme=${darkModeRef.current ? 'dark' : 'light'}` : ''),
+    [target],
+  )
 
   if (target && 'error' in target) {
     return (
@@ -162,5 +196,13 @@ export const HmiDesignerEditor = () => {
       </div>
     )
   }
-  return <webview key={target.url} src={target.url} partition='persist:jwplc-hmi-designer' className='h-full w-full' />
+  return (
+    <webview
+      key={target.url}
+      ref={attachWebview}
+      src={webviewSrc}
+      partition='persist:jwplc-hmi-designer'
+      className='h-full w-full'
+    />
+  )
 }
