@@ -36,13 +36,22 @@ Editor de la alpha **2.1.0-alpha.17** de JWPLC (en curso). Es la JWPLC Edition p
 - **Actualizaciones automáticas** desde las releases de `JW-Control/openplc-editor` (aviso arriba de la ventana).
 - **Sin cuenta Autonomy ni asistente de IA:** el inicio de sesión, los proyectos en la nube y la IA quedan
   desactivados.
+- **Interfaz en español** por defecto (menús, inicio, diálogos, editores y avisos). El idioma se cambia en
+  **Ver › Idioma**.
+- **HMI Designer dentro de OpenPLC:** la entrada «HMI Designer» de *Device* abre una pestaña con la vista de
+  enlaces de variables, con el tema claro u oscuro del editor. La ventana del Designer se abre solo con
+  «Abrir HMI Designer para diseñar». Se retira el panel lateral azul de HMI.
+- **Pantallas del VPP para 4.3:** *Serial* (USB y el RS-485 del Backplane), *Network* (MAC de fábrica del ESP32
+  si se deja vacía) y *Backplane* (módulos de E/S remotas). El servidor Modbus nombra los puertos serie como
+  los da el VPP.
 - **arduino-cli sigue usando Arduino15 estándar**, así el modo developer (`jwplc_local`) funciona igual.
-- Todo lo de 4.2.8-jwplc.9 (HMI Designer, panel lateral HMI, zoom, consola acoplable).
+- Todo lo de 4.2.8-jwplc.9 (HMI Designer, zoom, consola acoplable).
 
 ### Limitaciones conocidas
 
 - Pre-release de una alpha en curso.
-- Las pantallas *Serial* y *Network* del VPP JWPLC Basic para 4.3 están pendientes en `platform-jwplc`.
+- La depuración ya no va por RS-485: se depura por USB o por red.
+- Algunos textos internos (mensajes de compilación y de servicios) siguen en inglés.
 - RETAIN sobre la FRAM del JWPLC Basic: para una alpha posterior.
 - Firmware Modbus/Ethernet: pendiente de prueba física en placa.
 - Sólo Windows x64.

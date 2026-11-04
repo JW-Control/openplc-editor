@@ -22,11 +22,11 @@ on:
 env:
   NODE_VERSION: '22.x'
   PLATFORM_REPO: https://github.com/JW-Control/platform-jwplc.git
-  # v2.1.0-alpha.16/JWPLC-Sim/main @ 94edd7d (Designer 2.1.0-alpha.16: iconos, medidor, historial, modo claro, proyecto Runtime)
-  PLATFORM_DESIGNER_SHA: 94edd7d4ace73718f0f226ded8d0b7c30019823d
-  # v2.1.0-alpha.17/Editor-Upstream/feature/vpp-4.3 @ 24d15e0 (VPP 2.1.0-alpha.17, pantallas 4.3, firma jwcontrol-2026
-  # verificada). Al fusionar platform-jwplc#227, pasar al SHA de …/Editor-Upstream/main.
-  PLATFORM_VPP_SHA: cfb5908ed3a953efe409835014cd56f59a44431d
+  # v2.1.0-alpha.17/JWPLC-Sim/main @ 4cb23c5 (Designer: temas claro/oscuro, indicadores de nivel, vista embebida en OpenPLC)
+  PLATFORM_DESIGNER_SHA: 4cb23c5c990100cc362df909596a65c83130a024
+  # v2.1.0-alpha.17/Editor-Upstream/main @ 0647a84 (VPP 2.1.0-alpha.17, pantallas 4.3, firma jwcontrol-2026
+  # verificada, mismo árbol que cfb5908).
+  PLATFORM_VPP_SHA: 0647a84c15cb24f024021a0ea9402a9876fed2d2
   # Short download names (the version is in the release title and in SHA256SUMS.txt).
   VPP_NAME: JWPLC-Basic.vpp
   EXE_NAME: OpenPLC-Editor.exe
@@ -124,8 +124,10 @@ jobs:
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
           done
           grep -q '2.1.0-alpha.16' resources/jwplc-hmi-designer/poc/desktop.html
-          # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4).
-          test -f resources/jwplc-hmi-designer/poc/designer-openplc-bindings.js
+          # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4) and the light/dark theme.
+          for f in designer-openplc-bindings.js designer-theme.js designer-light-theme.css; do
+            test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
+          done
           rm -rf platform
           echo "Designer files: $(find resources/jwplc-hmi-designer/poc -type f | wc -l)"
 
