@@ -26,6 +26,7 @@
 import { MagnifierIcon } from '@root/frontend/assets/icons/interface/Magnifier'
 import { MinusIcon } from '@root/frontend/assets/icons/interface/Minus'
 import { PlusIcon } from '@root/frontend/assets/icons/interface/Plus'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import type { InstalledLibrary } from '@root/middleware/shared/ports/library-types'
 import { useMemo, useState } from 'react'
@@ -75,12 +76,12 @@ const ProjectLibrariesTab = ({ installed }: ProjectLibrariesTabProps) => {
   return (
     <div className='flex min-h-0 flex-1 gap-4 overflow-hidden'>
       {/* Left card — available system libraries */}
-      <Card title='Available Libraries' subtitle='Pick a library to add to this project.'>
+      <Card title={tr('Available Libraries')} subtitle='Pick a library to add to this project.'>
         <SearchBar value={availableFilter} onChange={setAvailableFilter} />
         <ListBody>
           {available.length === 0 ? (
             <EmptyState>
-              Every installed library is already in this project. Install more on the System Libraries tab.
+              {tr('Every installed library is already in this project. Install more on the System Libraries tab.')}
             </EmptyState>
           ) : filteredAvailable.length === 0 ? (
             <EmptyState>No libraries match &ldquo;{availableFilter}&rdquo;.</EmptyState>
@@ -91,7 +92,7 @@ const ProjectLibrariesTab = ({ installed }: ProjectLibrariesTabProps) => {
                 lib={lib}
                 action='add'
                 onAction={() => enableLibrary(lib.name)}
-                actionTitle='Add to project'
+                actionTitle={tr('Add to project')}
               />
             ))
           )}
@@ -100,7 +101,7 @@ const ProjectLibrariesTab = ({ installed }: ProjectLibrariesTabProps) => {
 
       {/* Right card — project libraries */}
       <Card
-        title='Project Libraries'
+        title={tr('Project Libraries')}
         subtitle={
           enabled.length + bundled.length === 0
             ? 'No libraries enabled yet.'
@@ -109,7 +110,7 @@ const ProjectLibrariesTab = ({ installed }: ProjectLibrariesTabProps) => {
       >
         {missingLibraries.length > 0 && (
           <div className='shrink-0 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs dark:border-yellow-700 dark:bg-yellow-950/40'>
-            <span className='font-medium text-yellow-800 dark:text-yellow-200'>Missing libraries:</span>
+            <span className='font-medium text-yellow-800 dark:text-yellow-200'>{tr('Missing libraries:')}</span>
             <ul className='mt-1 list-inside list-disc text-yellow-700 dark:text-yellow-300'>
               {missingLibraries.map((m) => (
                 <li key={m.name}>
@@ -119,17 +120,17 @@ const ProjectLibrariesTab = ({ installed }: ProjectLibrariesTabProps) => {
               ))}
             </ul>
             <p className='mt-1 text-yellow-700 dark:text-yellow-300'>
-              Install them on the System Libraries tab to make them available to this project.
+              {tr('Install them on the System Libraries tab to make them available to this project.')}
             </p>
           </div>
         )}
         <ListBody>
           {bundled.length === 0 && enabled.length === 0 ? (
-            <EmptyState>Pick a library from the left to add it to this project.</EmptyState>
+            <EmptyState>{tr('Pick a library from the left to add it to this project.')}</EmptyState>
           ) : (
             <>
               {bundled.map((lib) => (
-                <LibraryRow key={lib.name} lib={lib} action='locked' actionTitle='Bundled — always available' />
+                <LibraryRow key={lib.name} lib={lib} action='locked' actionTitle={tr('Bundled — always available')} />
               ))}
               {enabled.map((lib) => (
                 <LibraryRow
@@ -137,7 +138,7 @@ const ProjectLibrariesTab = ({ installed }: ProjectLibrariesTabProps) => {
                   lib={lib}
                   action='remove'
                   onAction={() => disableLibrary(lib.name)}
-                  actionTitle='Remove from project'
+                  actionTitle={tr('Remove from project')}
                 />
               ))}
             </>
@@ -172,7 +173,7 @@ function SearchBar({ value, onChange }: { value: string; onChange: (v: string) =
         type='text'
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder='Search libraries…'
+        placeholder={tr('Search libraries…')}
         className='w-full bg-transparent font-caption text-xs text-neutral-950 placeholder:text-neutral-400 focus:outline-none dark:text-white dark:placeholder:text-neutral-500'
       />
     </div>

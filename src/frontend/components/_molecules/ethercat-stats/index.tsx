@@ -1,4 +1,5 @@
 import { RangeCell, StatsTable, type StatsTableColumn } from '@root/frontend/components/_molecules/stats-table'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { normalizeEthercatStatus } from '@root/frontend/utils/ethercat-status'
 import type { EtherCATMasterStatus } from '@root/middleware/shared/ports/ethercat-types'
@@ -98,8 +99,8 @@ export const EtherCATStats = () => {
   return (
     <StatsTable
       context='ethercat-stats'
-      title='EtherCAT Bus Statistics'
-      description='Times in microseconds. Each cell shows a moving average with min / max below.'
+      title={tr('EtherCAT Bus Statistics')}
+      description={tr('Times in microseconds. Each cell shows a moving average with min / max below.')}
       columns={columns}
       rows={masters}
       rowKey={(m) => m.name || 'default'}

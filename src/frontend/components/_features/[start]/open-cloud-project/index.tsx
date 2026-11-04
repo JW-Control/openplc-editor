@@ -10,6 +10,7 @@
  * way and with the same words.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import { CloudDownload, FolderOpen, Loader2, Lock } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -100,7 +101,7 @@ const OpenCloudProjectModal = ({ open, onOpenChange }: OpenCloudProjectModalProp
     // Refused here rather than on the way back: Edge answers 403 to every write on
     // this project, so opening it would only lead to a save that fails.
     if (summary.locked) {
-      toast({ title: 'This project is locked.', description: LOCKED_REASON, variant: 'fail' })
+      toast({ title: tr('This project is locked.'), description: LOCKED_REASON, variant: 'fail' })
 
       return
     }
@@ -117,7 +118,7 @@ const OpenCloudProjectModal = ({ open, onOpenChange }: OpenCloudProjectModalProp
     }
 
     toast({
-      title: 'Cannot open the project.',
+      title: tr('Cannot open the project.'),
       description: result.error?.description ?? `${summary.name} could not be opened.`,
       variant: 'fail',
     })
@@ -139,30 +140,30 @@ const OpenCloudProjectModal = ({ open, onOpenChange }: OpenCloudProjectModalProp
             <CloudDownload className='size-5' />
           </span>
           <ModalTitle className='text-xl font-normal text-neutral-900 dark:text-neutral-100'>
-            Open from Autonomy Edge
+            {tr('Open from Autonomy Edge')}
           </ModalTitle>
         </div>
 
         {folders === null ? (
           <div className='flex flex-1 items-center justify-center gap-2 text-sm text-neutral-500' role='status'>
-            <Loader2 className='size-4 animate-spin' /> Loading your folders…
+            <Loader2 className='size-4 animate-spin' /> {tr('Loading your folders…')}
           </div>
         ) : folders.status === 'signed-out' ? (
           <div className='flex flex-1 flex-col items-center justify-center gap-4 text-center'>
             <p className='max-w-md text-sm text-neutral-600 dark:text-neutral-400'>
-              Sign in with your Autonomy Edge account to browse your cloud projects.
+              {tr('Sign in with your Autonomy Edge account to browse your cloud projects.')}
             </p>
             <button
               type='button'
               onClick={() => setSignInOpen(true)}
               className='cursor-pointer rounded-lg bg-brand px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-medium-dark'
             >
-              Sign in
+              {tr('Sign in')}
             </button>
           </div>
         ) : folders.status !== 'ok' ? (
           <p className='flex flex-1 items-center justify-center text-sm text-neutral-600 dark:text-neutral-400'>
-            Could not reach Autonomy Edge. Your local projects are unaffected.
+            {tr('Could not reach Autonomy Edge. Your local projects are unaffected.')}
           </p>
         ) : (
           <div className='flex min-h-0 flex-1 gap-4'>
@@ -208,15 +209,15 @@ const OpenCloudProjectModal = ({ open, onOpenChange }: OpenCloudProjectModalProp
             >
               {projects === null ? (
                 <div className='flex flex-1 items-center justify-center gap-2 text-sm text-neutral-500' role='status'>
-                  <Loader2 className='size-4 animate-spin' /> Loading projects…
+                  <Loader2 className='size-4 animate-spin' /> {tr('Loading projects…')}
                 </div>
               ) : projects.status !== 'ok' ? (
                 <p className='flex flex-1 items-center justify-center text-sm text-neutral-600 dark:text-neutral-400'>
-                  Could not list the projects in this folder.
+                  {tr('Could not list the projects in this folder.')}
                 </p>
               ) : projects.projects.length === 0 ? (
                 <p className='flex flex-1 items-center justify-center text-sm text-neutral-600 dark:text-neutral-400'>
-                  No projects in this folder.
+                  {tr('No projects in this folder.')}
                 </p>
               ) : (
                 projects.projects.map((summary) => (

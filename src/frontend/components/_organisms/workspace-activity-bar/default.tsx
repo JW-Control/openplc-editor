@@ -1,4 +1,5 @@
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
+import { tr } from '@root/frontend/locales/tr'
 import { evaluatePreBuildPlcGate } from '@root/middleware/shared/utils/build-gate/pre-build-plc-gate'
 import {
   evaluateRuntimeCapabilityGate,
@@ -446,7 +447,7 @@ export const DefaultWorkspaceActivityBar = ({ zoom }: DefaultWorkspaceActivityBa
         if (gate.kind === 'refuse') {
           addLog({ level: 'error', message: `Build refused: ${gate.reason}` })
           toast({
-            title: 'Build refused',
+            title: tr('Build refused'),
             description: gate.reason,
             variant: 'fail',
           })

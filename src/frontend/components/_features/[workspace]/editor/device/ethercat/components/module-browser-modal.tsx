@@ -1,4 +1,5 @@
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '@root/frontend/components/_molecules/modal'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIModuleSummary, ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 import type { CouplerCompatibility } from '@root/middleware/shared/utils/ethercat'
@@ -118,13 +119,13 @@ const ModuleBrowserModal = ({ isOpen, onClose, onSelectModule, repository, coupl
     <Modal open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <ModalContent className='h-[600px] w-[600px]' onClose={handleClose}>
         <ModalHeader>
-          <ModalTitle>Add Module from Repository</ModalTitle>
+          <ModalTitle>{tr('Add Module from Repository')}</ModalTitle>
         </ModalHeader>
 
         <div className='mb-2'>
           <input
             type='text'
-            placeholder='Search modules by name, ident, or vendor...'
+            placeholder={tr('Search modules by name, ident, or vendor...')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className='h-[34px] w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
@@ -228,14 +229,14 @@ const ModuleBrowserModal = ({ isOpen, onClose, onSelectModule, repository, coupl
             onClick={handleClose}
             className='rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedKey}
             className='rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark disabled:cursor-not-allowed disabled:opacity-50'
           >
-            Add Module
+            {tr('Add Module')}
           </button>
         </ModalFooter>
       </ModalContent>

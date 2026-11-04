@@ -8,6 +8,7 @@ import {
   RuntimeUserModal,
   type RuntimeUserModalSubmit,
 } from '@root/frontend/components/_organisms/modals/runtime-user-modal'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import type { RuntimeUser, UpdateUserParams } from '@root/middleware/shared/ports/runtime-port'
 import { useRuntime } from '@root/middleware/shared/providers'
@@ -63,7 +64,11 @@ const UserManagementEditor = () => {
     if (!password) return 'Password is required'
     const result = await runtime.createUser({ username, password, role })
     if (!result.success) return result.error || 'Failed to create user'
-    toast({ title: 'User created', description: `"${username}" was created.`, variant: 'default' })
+    toast({
+      title: tr('User created'),
+      description: tr('"{{username}}" was created.', { username }),
+      variant: 'default',
+    })
     void refresh()
     return null
   }
@@ -88,14 +93,18 @@ const UserManagementEditor = () => {
       setRuntimeJwtToken(null)
       setRuntimeConnectionStatus('disconnected')
       toast({
-        title: 'Password changed',
-        description: 'You have been signed out. Reconnect with your new password.',
+        title: tr('Password changed'),
+        description: tr('You have been signed out. Reconnect with your new password.'),
         variant: 'default',
       })
       return null
     }
 
-    toast({ title: 'User updated', description: `"${values.username}" was updated.`, variant: 'default' })
+    toast({
+      title: tr('User updated'),
+      description: tr('"{{username}}" was updated.', { username: values.username }),
+      variant: 'default',
+    })
     void refresh()
     return null
   }
@@ -106,10 +115,14 @@ const UserManagementEditor = () => {
     const result = await runtime.deleteUser(deleteTarget.id)
     setDeleting(false)
     if (!result.success) {
-      toast({ title: 'Delete failed', description: result.error || 'Failed to delete user', variant: 'fail' })
+      toast({ title: tr('Delete failed'), description: result.error || 'Failed to delete user', variant: 'fail' })
       return
     }
-    toast({ title: 'User deleted', description: `"${deleteTarget.username}" was deleted.`, variant: 'default' })
+    toast({
+      title: tr('User deleted'),
+      description: tr('"{{username}}" was deleted.', { username: deleteTarget.username }),
+      variant: 'default',
+    })
     setDeleteTarget(null)
     void refresh()
   }
@@ -123,9 +136,9 @@ const UserManagementEditor = () => {
   if (connectionStatus !== 'connected') {
     return (
       <div className='flex h-full w-full select-none flex-col items-center justify-center gap-2 p-8 text-center'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-white'>User Management</h2>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-white'>{tr('User Management')}</h2>
         <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-          You are not connected to a runtime. Connect to the runtime to manage its users.
+          {tr('You are not connected to a runtime. Connect to the runtime to manage its users.')}
         </p>
       </div>
     )
@@ -135,16 +148,16 @@ const UserManagementEditor = () => {
     <div className='flex h-full w-full select-none flex-col overflow-auto p-8'>
       <div className='mb-6 flex items-start justify-between'>
         <div>
-          <h2 className='text-xl font-semibold text-neutral-1000 dark:text-white'>User Management</h2>
+          <h2 className='text-xl font-semibold text-neutral-1000 dark:text-white'>{tr('User Management')}</h2>
           <p className='mt-1 text-sm text-neutral-600 dark:text-neutral-400'>
-            Manage the accounts that can log in to this runtime.
+            {tr('Manage the accounts that can log in to this runtime.')}
           </p>
         </div>
         <div className='flex items-center gap-2'>
           <button
             type='button'
             onClick={() => void refresh()}
-            title='Refresh'
+            title={tr('Refresh')}
             className='flex h-9 w-9 items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-850'
           >
             <RefreshIcon className='h-4 w-4' />
@@ -158,14 +171,14 @@ const UserManagementEditor = () => {
               {/* PlusIcon strokes `inherit`; without a stroke color it renders
                   invisibly and its empty box pushed the label off-center. */}
               <PlusIcon className='h-4 w-4 stroke-current' />
-              <span className='leading-none'>New User</span>
+              <span className='leading-none'>{tr('New User')}</span>
             </button>
           )}
         </div>
       </div>
 
       {loading ? (
-        <p className='text-sm text-neutral-500'>Loading users…</p>
+        <p className='text-sm text-neutral-500'>{tr('Loading users…')}</p>
       ) : loadError ? (
         <p className='text-sm text-red-600 dark:text-red-400'>{loadError}</p>
       ) : (
@@ -173,10 +186,10 @@ const UserManagementEditor = () => {
           <table className='w-full border-collapse text-sm'>
             <thead>
               <tr className='border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900'>
-                <th className='px-4 py-2 font-medium text-neutral-700 dark:text-neutral-300'>Username</th>
-                <th className='px-4 py-2 font-medium text-neutral-700 dark:text-neutral-300'>Role</th>
+                <th className='px-4 py-2 font-medium text-neutral-700 dark:text-neutral-300'>{tr('Username')}</th>
+                <th className='px-4 py-2 font-medium text-neutral-700 dark:text-neutral-300'>{tr('Role')}</th>
                 <th className='w-24 px-4 py-2 text-right font-medium text-neutral-700 dark:text-neutral-300'>
-                  Actions
+                  {tr('Actions')}
                 </th>
               </tr>
             </thead>
@@ -195,7 +208,7 @@ const UserManagementEditor = () => {
                         {canEditRow(user) && (
                           <button
                             type='button'
-                            title='Edit user'
+                            title={tr('Edit user')}
                             onClick={() => setEditTarget({ user, isSelf })}
                             className='flex h-7 w-7 items-center justify-center rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-850'
                           >
@@ -207,7 +220,7 @@ const UserManagementEditor = () => {
                         {canDeleteRow(user) && (
                           <button
                             type='button'
-                            title='Delete user'
+                            title={tr('Delete user')}
                             onClick={() => setDeleteTarget(user)}
                             className='flex h-7 w-7 items-center justify-center rounded-md text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950'
                           >
@@ -221,7 +234,7 @@ const UserManagementEditor = () => {
               })}
             </tbody>
           </table>
-          {users.length === 0 && <p className='px-4 py-3 text-sm text-neutral-500'>No users found.</p>}
+          {users.length === 0 && <p className='px-4 py-3 text-sm text-neutral-500'>{tr('No users found.')}</p>}
         </div>
       )}
 
@@ -231,8 +244,8 @@ const UserManagementEditor = () => {
           open={createOpen}
           onOpenChange={setCreateOpen}
           mode='create'
-          title='New User'
-          submitLabel='Create user'
+          title={tr('New User')}
+          submitLabel={tr('Create user')}
           showRole
           initialRole='user'
           onSubmit={handleCreate}
@@ -248,7 +261,7 @@ const UserManagementEditor = () => {
           }}
           mode='edit'
           title={editTarget.isSelf ? 'Edit your account' : `Edit user — ${editTarget.user.username}`}
-          submitLabel='Save'
+          submitLabel={tr('Save')}
           initialUsername={editTarget.user.username}
           initialRole={editTarget.user.role}
           // Only admins can change roles, and never their own (prevents self-lockout);
@@ -267,7 +280,7 @@ const UserManagementEditor = () => {
         }}
       >
         <ModalContent className='flex w-[360px] select-none flex-col rounded-lg p-6'>
-          <ModalTitle className='mb-2 text-lg font-semibold'>Delete user</ModalTitle>
+          <ModalTitle className='mb-2 text-lg font-semibold'>{tr('Delete user')}</ModalTitle>
           <p className='mb-6 text-sm text-neutral-600 dark:text-neutral-400'>
             "{deleteTarget?.username}" will no longer be able to log in to the runtime. This cannot be undone.
           </p>
@@ -278,7 +291,7 @@ const UserManagementEditor = () => {
               disabled={deleting}
               className='rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'

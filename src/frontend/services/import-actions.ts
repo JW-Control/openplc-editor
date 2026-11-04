@@ -6,6 +6,8 @@
  * in-memory project data is replaced with what the XML parses to.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import type { ProjectPort } from '../../middleware/shared/ports/project-port'
 import type { OpenPLCStore } from '../store'
 import type { OpenProjectResponseData } from '../store/slices/shared/types'
@@ -44,14 +46,14 @@ export async function executeImportPlcopen(
         console.warn(`[PLCopen import] ${warning}`)
       }
       toast({
-        title: 'Project imported',
-        description: `Imported with ${warnings.length} warning(s), see console.`,
+        title: tr('Project imported'),
+        description: tr('Imported with {{length}} warning(s), see console.', { length: warnings.length }),
         variant: 'warn',
       })
     } else {
       toast({
-        title: 'Project imported',
-        description: 'The PLCopen XML file was imported successfully.',
+        title: tr('Project imported'),
+        description: tr('The PLCopen XML file was imported successfully.'),
         variant: 'default',
       })
     }
@@ -59,7 +61,7 @@ export async function executeImportPlcopen(
     return { success: true }
   } catch (err) {
     toast({
-      title: 'Error importing PLCopen XML',
+      title: tr('Error importing PLCopen XML'),
       description: err instanceof Error ? err.message : 'Failed to parse the selected file.',
       variant: 'fail',
     })

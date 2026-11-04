@@ -1395,10 +1395,10 @@ void loop()
       <Modal open={isOpen} onOpenChange={setIsOpen}>
         <ModalContent className='flex h-56 w-96 select-none flex-col justify-between gap-2 rounded-lg p-8'>
           <ModalTitle className='text-sm font-medium text-neutral-950 dark:text-white'>
-            Please enter a name for the block
+            {tr('Please enter a name for the block')}
           </ModalTitle>
           <label htmlFor='Block name' className='text-xs text-neutral-600 dark:text-neutral-50'>
-            Block name
+            {tr('Block name')}
           </label>
           <input
             id='Block name'
@@ -1411,7 +1411,7 @@ void loop()
               onClick={handleCancelRenamePou}
               className='h-full w-[236px] rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'
@@ -1419,7 +1419,7 @@ void loop()
               onClick={handleRenamePou}
               disabled={!newName || newName === ''}
             >
-              Ok
+              {tr('Ok')}
             </button>
           </div>
         </ModalContent>
@@ -1428,3 +1428,5 @@ void loop()
   )
 }
 export { MonacoEditor }
+
+import { tr } from '@root/frontend/locales/tr'

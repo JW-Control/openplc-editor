@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect } from 'react'
 
 import { useAccelerator, useCapabilities, useProject, useTheme, useWindow } from '../../../middleware/shared/providers'
@@ -108,8 +109,8 @@ const AcceleratorHandler = () => {
             if (result) return
             restoreOpenProjectRoot(projectPort, openPath)
             toast({
-              title: 'Cannot open the project.',
-              description: 'The selected project could not be loaded.',
+              title: tr('Cannot open the project.'),
+              description: tr('The selected project could not be loaded.'),
               variant: 'fail',
             })
           })()
@@ -121,8 +122,8 @@ const AcceleratorHandler = () => {
           break
         case 'save-request':
           toast({
-            title: 'Save in progress',
-            description: 'Please wait for the current save operation to complete.',
+            title: tr('Save in progress'),
+            description: tr('Please wait for the current save operation to complete.'),
             variant: 'warn',
           })
           break
@@ -156,7 +157,7 @@ const AcceleratorHandler = () => {
       }
       if (!result) restoreOpenProjectRoot(projectPort, openPath)
       toast({
-        title: 'Cannot open the project.',
+        title: tr('Cannot open the project.'),
         description: result?.error?.description ?? `The path ${projectPath} does not exist on this computer.`,
         variant: 'fail',
       })
@@ -179,8 +180,8 @@ const AcceleratorHandler = () => {
           break
         case 'save-request':
           toast({
-            title: 'Save in progress',
-            description: 'Please wait for the current save operation to complete.',
+            title: tr('Save in progress'),
+            description: tr('Please wait for the current save operation to complete.'),
             variant: 'warn',
           })
           break
@@ -254,8 +255,8 @@ const AcceleratorHandler = () => {
       const { label, type } = selectedProjectTreeLeaf
       if (!type || !label) {
         toast({
-          title: 'Error',
-          description: 'No file selected to delete.',
+          title: tr('Error'),
+          description: tr('No file selected to delete.'),
           variant: 'fail',
         })
         return
@@ -270,8 +271,8 @@ const AcceleratorHandler = () => {
         deleteDatatypeRequest(label)
       } else {
         toast({
-          title: 'Error',
-          description: 'This element cannot be deleted.',
+          title: tr('Error'),
+          description: tr('This element cannot be deleted.'),
           variant: 'fail',
         })
         return
@@ -363,8 +364,8 @@ const AcceleratorHandler = () => {
   // than letting the shortcut look broken (DOPE-495).
   const notifyStaleBody = useCallback((pouName: string) => {
     toast({
-      title: 'History unavailable',
-      description: `The graphical body of "${pouName}" is invalid, so its history was not changed.`,
+      title: tr('History unavailable'),
+      description: tr('The graphical body of "{{pouName}}" is invalid, so its history was not changed.', { pouName }),
       variant: 'fail',
     })
   }, [])

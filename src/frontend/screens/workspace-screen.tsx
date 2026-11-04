@@ -1,4 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs'
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ImperativePanelHandle } from 'react-resizable-panels'
 import { useShallow } from 'zustand/react/shallow'
@@ -338,7 +339,7 @@ const WorkspaceScreen = () => {
       try {
         result = await project.openProjectByPath(projectPath)
       } catch {
-        toast({ title: 'Failed to reload project', description: whenStale, variant: 'fail' })
+        toast({ title: tr('Failed to reload project'), description: whenStale, variant: 'fail' })
         return false
       }
 
@@ -347,7 +348,7 @@ const WorkspaceScreen = () => {
         return true
       }
 
-      toast({ title: 'Failed to reload project', description: whenStale, variant: 'fail' })
+      toast({ title: tr('Failed to reload project'), description: whenStale, variant: 'fail' })
       return false
     },
     [projectPath, project, sharedWorkspaceActions],
@@ -359,15 +360,15 @@ const WorkspaceScreen = () => {
       try {
         if (await reloadOpenProject('The branch was switched but the project could not be reloaded.')) {
           toast({
-            title: 'Branch switched',
-            description: `Now on branch: ${branchName}`,
+            title: tr('Branch switched'),
+            description: tr('Now on branch: {{branchName}}', { branchName }),
             variant: 'default',
           })
         }
       } catch (error) {
         console.error('[WorkspaceScreen] Failed to switch branch:', error)
         toast({
-          title: 'Failed to switch branch',
+          title: tr('Failed to switch branch'),
           description: error instanceof Error ? error.message : 'Unknown error',
           variant: 'fail',
         })
@@ -530,14 +531,14 @@ const WorkspaceScreen = () => {
             value='console'
             className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
           >
-            Console
+            {tr('Console')}
           </Tabs.Trigger>
           {isDebuggerVisible && (
             <Tabs.Trigger
               value='debug'
               className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
             >
-              Debugger
+              {tr('Debugger')}
             </Tabs.Trigger>
           )}
           {hasSearchResults && (
@@ -545,7 +546,7 @@ const WorkspaceScreen = () => {
               value='search'
               className='h-7 w-16 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
             >
-              Search
+              {tr('Search')}
             </Tabs.Trigger>
           )}
           {isPlcLogsVisible && (
@@ -553,7 +554,7 @@ const WorkspaceScreen = () => {
               value='plc-logs'
               className='h-7 w-20 rounded-md bg-neutral-100 text-xs font-medium text-brand-light data-[state=active]:bg-blue-500 data-[state=active]:text-white dark:bg-neutral-900 dark:text-neutral-700 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white'
             >
-              PLC Logs
+              {tr('PLC Logs')}
             </Tabs.Trigger>
           )}
         </Tabs.List>
@@ -570,7 +571,7 @@ const WorkspaceScreen = () => {
               <ClearConsoleButton
                 onClear={clearPlcLogs}
                 isEmpty={typeof plcLogs === 'string' ? plcLogs.length === 0 : plcLogs.length === 0}
-                label='Clear logs'
+                label={tr('Clear logs')}
               />
             </>
           )}
@@ -737,7 +738,9 @@ const WorkspaceScreen = () => {
                           className='flex w-auto items-center rounded-b-lg border-brand bg-neutral-50 px-2 py-1 dark:bg-neutral-900'
                           onClick={togglePanel}
                         >
-                          <p className='text-xs font-medium text-brand-medium dark:text-brand-light'>Expand Table</p>
+                          <p className='text-xs font-medium text-brand-medium dark:text-brand-light'>
+                            {tr('Expand Table')}
+                          </p>
                           <ExitIcon
                             size='sm'
                             className='-rotate-90 select-none fill-brand-medium  stroke-brand dark:fill-brand-light dark:stroke-brand-light'
@@ -945,7 +948,7 @@ const WorkspaceScreen = () => {
                       </>
                     ) : (
                       <p className='mx-auto my-auto flex cursor-default select-none flex-col items-center gap-2 font-display text-xl font-medium'>
-                        No tabs open
+                        {tr('No tabs open')}
                       </p>
                     )}
                     {!isConsoleDockedRight && (

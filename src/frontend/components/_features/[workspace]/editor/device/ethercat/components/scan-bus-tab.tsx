@@ -2,6 +2,7 @@ import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
 import { MinusIcon } from '@root/frontend/assets/icons/interface/Minus'
 import { PlusIcon } from '@root/frontend/assets/icons/interface/Plus'
 import TableActions from '@root/frontend/components/_atoms/table-actions'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type {
   ConfiguredEtherCATDevice,
@@ -86,7 +87,7 @@ const ScanBusTab = ({
       {isConnectedToRuntime && serviceAvailable === false && (
         <div className='mb-4 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 dark:border-yellow-700 dark:bg-yellow-900/20'>
           <p className='text-sm font-medium text-yellow-700 dark:text-yellow-300'>
-            EtherCAT Discovery Service Not Available
+            {tr('EtherCAT Discovery Service Not Available')}
           </p>
           <p className='mt-1 max-w-md text-xs text-yellow-600 dark:text-yellow-400'>{serviceMessage}</p>
         </div>
@@ -117,7 +118,7 @@ const ScanBusTab = ({
             {isScanning ? (
               <>
                 <ArrowIcon size='sm' className='animate-spin stroke-white' />
-                Scanning...
+                {tr('Scanning...')}
               </>
             ) : (
               'Scan'
@@ -143,7 +144,7 @@ const ScanBusTab = ({
           {/* Scanned Devices — left */}
           <div className='flex min-w-0 flex-1 flex-col overflow-hidden'>
             <div className='mb-2 flex h-[28px] items-center justify-between'>
-              <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>Scanned Devices</h3>
+              <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>{tr('Scanned Devices')}</h3>
               <button
                 onClick={onAddSelectedFromScan}
                 disabled={isAdding || selectedScannedDevices.size === 0}
@@ -217,16 +218,16 @@ const ScanBusTab = ({
                 <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-900'>
                   <tr>
                     <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                      Pos
+                      {tr('Pos')}
                     </th>
                     <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                      Name
+                      {tr('Name')}
                     </th>
                     <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                      Vendor
+                      {tr('Vendor')}
                     </th>
                     <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                      Product
+                      {tr('Product')}
                     </th>
                   </tr>
                 </thead>
@@ -234,7 +235,7 @@ const ScanBusTab = ({
                   {configuredDevices.length === 0 ? (
                     <tr>
                       <td colSpan={4} className='px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-                        No devices configured. Click + to add a device from the repository.
+                        {tr('No devices configured. Click + to add a device from the repository.')}
                       </td>
                     </tr>
                   ) : (

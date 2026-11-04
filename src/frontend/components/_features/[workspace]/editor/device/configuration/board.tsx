@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 import { hasHmiDisplay } from '@root/backend/shared/compile/jwplc-hmi'
 import { describeVppPinDrift, type VppPackagePin } from '@root/backend/shared/utils/vpp/vpp-package-pin'
+import { tr } from '@root/frontend/locales/tr'
 import { useCapabilities, useDevice, usePackages } from '@root/middleware/shared/providers/platform-context'
 import { evaluateVppBackplaneGate, vppGateStateFor } from '@root/middleware/shared/utils/build-gate/vpp-backplane-gate'
 import { resolveTargetCapabilities } from '@root/middleware/shared/utils/target-capabilities'
@@ -535,11 +536,11 @@ const Board = memo(function () {
           className='flex w-[360px] flex-shrink-0 flex-col items-start justify-start gap-3'
         >
           <h2 id='slot-title' className='select-none text-lg font-medium text-neutral-950 dark:text-white'>
-            Board Settings
+            {tr('Board Settings')}
           </h2>
           <div id='board-selector' className='flex w-full items-center justify-start gap-1 pr-5'>
             <Label id='device-selector-label' className='w-fit text-xs text-neutral-950 dark:text-white'>
-              Device
+              {tr('Device')}
             </Label>
             <Select
               value={formattedBoardState}
@@ -614,7 +615,7 @@ const Board = memo(function () {
                 )}
                 {groupedBoards.length === 0 ? (
                   <div className='px-3 py-6 text-center text-[11px] italic text-neutral-500 dark:text-neutral-400'>
-                    No devices match “{deviceSearchTerm}”.
+                    {tr('No devices match “{{deviceSearchTerm}}”.', { deviceSearchTerm })}
                   </div>
                 ) : (
                   groupedBoards.map(({ vendor, boards }) => (
@@ -728,7 +729,7 @@ const Board = memo(function () {
           {isSimulatorTarget(currentBoardInfo) ? (
             <div id='simulator-info' className='flex w-full flex-col items-start justify-start gap-4'>
               <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-                Built-in simulator — no configuration required. Press Build to compile and run.
+                {tr('Built-in simulator — no configuration required. Press Build to compile and run.')}
               </p>
             </div>
           ) : isOpenPLCRuntimeTarget(currentBoardInfo) ? (
@@ -738,24 +739,24 @@ const Board = memo(function () {
                   id='runtime-ip-address-label'
                   className='whitespace-pre text-xs text-neutral-950 dark:text-white'
                 >
-                  IP Address
+                  {tr('IP Address')}
                 </Label>
                 <input
                   type='text'
                   value={runtimeIpAddress}
                   onChange={(e) => setRuntimeIpAddress(e.target.value)}
-                  placeholder='127.0.0.1 or localhost'
+                  placeholder={tr('127.0.0.1 or localhost')}
                   className='flex h-[30px] min-w-0 flex-1 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <button
                   type='button'
                   aria-label='Search for devices'
-                  title='Search for devices on the local network'
+                  title={tr('Search for devices on the local network')}
                   onClick={() => openModal('runtime-discover-devices', null)}
                   className='flex h-[30px] items-center gap-1 rounded-md bg-neutral-100 px-3 font-caption text-cp-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
                 >
                   <MagnifierIcon size='sm' className='h-4 w-4 stroke-neutral-1000 dark:stroke-neutral-100' />
-                  Search
+                  {tr('Search')}
                 </button>
               </div>
               <DeviceConnectButton
@@ -765,7 +766,9 @@ const Board = memo(function () {
                 onDisconnect={handleConnectToRuntime}
               >
                 {connectionStatus === 'connected' && plcStatus && (
-                  <span className='text-xs text-neutral-600 dark:text-neutral-400'>PLC: {plcStatus}</span>
+                  <span className='text-xs text-neutral-600 dark:text-neutral-400'>
+                    {tr('PLC: {{plcStatus}}', { plcStatus })}
+                  </span>
                 )}
                 {/* Same affordance as the serial connect row below: renders
                     nothing at all unless this board's VPP is sold licensed AND a
@@ -789,7 +792,7 @@ const Board = memo(function () {
             // Connect (Modbus TCP), not the v4 REST connect.
             <>
               <div id='device-ip-address-field' className='flex w-full items-center justify-start gap-1'>
-                <Label className='whitespace-pre text-xs text-neutral-950 dark:text-white'>IP Address</Label>
+                <Label className='whitespace-pre text-xs text-neutral-950 dark:text-white'>{tr('IP Address')}</Label>
                 <input
                   type='text'
                   value={runtimeIpAddress}
@@ -800,12 +803,12 @@ const Board = memo(function () {
                 <button
                   type='button'
                   aria-label='Search for devices'
-                  title='Search for devices on the local network'
+                  title={tr('Search for devices on the local network')}
                   onClick={() => openModal('runtime-discover-devices', null)}
                   className='flex h-[30px] items-center gap-1 rounded-md bg-neutral-100 px-3 font-caption text-cp-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
                 >
                   <MagnifierIcon size='sm' className='h-4 w-4 stroke-neutral-1000 dark:stroke-neutral-100' />
-                  Search
+                  {tr('Search')}
                 </button>
               </div>
               <DeviceConnectButton
@@ -834,7 +837,7 @@ const Board = memo(function () {
                   id='communication-ports-selector-label'
                   className='whitespace-pre text-xs text-neutral-950 dark:text-white'
                 >
-                  Communication Port
+                  {tr('Communication Port')}
                 </Label>
                 <Select
                   value={communicationPort}
@@ -843,7 +846,7 @@ const Board = memo(function () {
                 >
                   <SelectTrigger
                     aria-label='Communication port selection'
-                    placeholder='Select a communication port'
+                    placeholder={tr('Select a communication port')}
                     withIndicator
                     className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                   />
@@ -923,7 +926,7 @@ const Board = memo(function () {
           {!isOpenPLCRuntimeTarget(currentBoardInfo) && !isSimulatorTarget(currentBoardInfo) && (
             <div id='board-specs' className='flex w-full flex-col items-start justify-start gap-4'>
               <Label id='board-specs-label' className='w-fit text-xs text-neutral-950 dark:text-white'>
-                Specs
+                {tr('Specs')}
               </Label>
               <div id='board-specs-container' className='grid grid-cols-2 place-content-around gap-2'>
                 {Object.entries(currentBoardInfo?.specs ?? {}).map(([spec, value]) => (
@@ -941,7 +944,7 @@ const Board = memo(function () {
         </div>
         <div id='board-preview-container' className='flex flex-shrink-0 items-start'>
           <div className='h-[16rem] w-[20rem]'>
-            <img src={previewImage} alt='Device preview' className='h-full w-full object-contain' />
+            <img src={previewImage} alt={tr('Device preview')} className='h-full w-full object-contain' />
           </div>
         </div>
       </div>
@@ -972,7 +975,7 @@ const Board = memo(function () {
         <div id='pin-mapping-container' className='flex h-3/5 w-full flex-col gap-4'>
           <div id='pin-mapping-table-header-container' className='flex h-fit w-full justify-between'>
             <h2 id='slot-title' className='select-none text-lg font-medium text-neutral-950 dark:text-white'>
-              Pin Mapping
+              {tr('Pin Mapping')}
             </h2>
             <div className='flex items-center gap-2'>
               {currentBoardInfo?.vpp && (
@@ -980,9 +983,9 @@ const Board = memo(function () {
                   type='button'
                   onClick={loadDefaultPinMapping}
                   className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand'
-                  title='Replace this board pin mapping with the defaults declared by its package'
+                  title={tr('Replace this board pin mapping with the defaults declared by its package')}
                 >
-                  Load defaults
+                  {tr('Load defaults')}
                 </button>
               )}
               <button
@@ -990,9 +993,9 @@ const Board = memo(function () {
                 onClick={clearPinMapping}
                 disabled={pins.length === 0}
                 className='rounded-md border border-neutral-300 px-2 py-1 font-caption text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
-                title='Clear this board pin mapping and free its IEC addresses'
+                title={tr('Clear this board pin mapping and free its IEC addresses')}
               >
-                Clear
+                {tr('Clear')}
               </button>
               <TableActions
                 className='w-fit *:rounded-md *:p-1'
@@ -1020,17 +1023,22 @@ const Board = memo(function () {
       <Modal open={showPythonWarning} onOpenChange={setShowPythonWarning}>
         <ModalContent className='h-fit w-[500px]'>
           <ModalHeader>
-            <ModalTitle>{unsupportedBlocksLabel} Function Blocks Not Supported</ModalTitle>
+            <ModalTitle>
+              {tr('{{blocks}} Function Blocks Not Supported', { blocks: unsupportedBlocksLabel })}
+            </ModalTitle>
           </ModalHeader>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              The selected target ({pendingBoardChange?.formattedBoard}) does not support {unsupportedBlocksLabel}{' '}
-              Function Blocks.
+              {tr('The selected target ({{board}}) does not support {{blocks}} Function Blocks.', {
+                board: pendingBoardChange?.formattedBoard ?? '',
+                blocks: unsupportedBlocksLabel,
+              })}
             </p>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              Your project contains {unsupportedBlocksLabel} Function Blocks that will cause compilation to fail on this
-              target. To use this target, you must remove all {unsupportedBlocksLabel} Function Blocks from your
-              project.
+              {tr(
+                'Your project contains {{blocks}} Function Blocks that will cause compilation to fail on this target. To use this target, you must remove all {{blocks}} Function Blocks from your project.',
+                { blocks: unsupportedBlocksLabel },
+              )}
             </p>
           </div>
           <ModalFooter className='flex justify-end gap-2'>
@@ -1042,7 +1050,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-neutral-100 px-4 font-caption text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-white dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'
@@ -1056,7 +1064,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-brand px-4 font-caption text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Continue Anyway
+              {tr('Continue Anyway')}
             </button>
           </ModalFooter>
         </ModalContent>
@@ -1075,13 +1083,15 @@ const Board = memo(function () {
           </ModalHeader>
           <div className='flex flex-col gap-4'>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-              The selected target ({pendingBoardChange?.formattedBoard}) does not support{' '}
-              {v4FeaturesAffected.hasServers && v4FeaturesAffected.hasRemoteDevices
-                ? 'Modbus Server and Remote IO configurations'
-                : v4FeaturesAffected.hasServers
-                  ? 'Modbus Server configuration'
-                  : 'Remote IO configuration'}
-              .
+              {tr('The selected target ({{board}}) does not support {{features}}.', {
+                board: pendingBoardChange?.formattedBoard ?? '',
+                features:
+                  v4FeaturesAffected.hasServers && v4FeaturesAffected.hasRemoteDevices
+                    ? tr('Modbus Server and Remote IO configurations')
+                    : v4FeaturesAffected.hasServers
+                      ? tr('Modbus Server configuration')
+                      : tr('Remote IO configuration'),
+              })}
             </p>
             <p className='text-sm text-neutral-700 dark:text-neutral-300'>
               Your project contains{' '}
@@ -1108,7 +1118,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-neutral-100 px-4 font-caption text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-white dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
             <button
               type='button'
@@ -1122,7 +1132,7 @@ const Board = memo(function () {
               }}
               className='h-8 rounded-md bg-brand px-4 font-caption text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Continue Anyway
+              {tr('Continue Anyway')}
             </button>
           </ModalFooter>
         </ModalContent>

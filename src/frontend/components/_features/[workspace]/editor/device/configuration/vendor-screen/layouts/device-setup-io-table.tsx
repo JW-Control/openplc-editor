@@ -1,5 +1,6 @@
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { boardSelectors } from '@root/frontend/hooks/use-store-selectors'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { DEVICE_SETUP_KEY, IO_MAPPING_KEY, MODULE_CONFIGURATION_KEY } from '@root/frontend/utils/vpp/persistence-keys'
 import type { IoMappingEntry, VppModuleDefinition } from '@root/middleware/shared/ports/types'
@@ -55,7 +56,7 @@ const EMPTY_CATALOGUE: VppModuleDefinition[] = []
 function NotInCatalogueBadge() {
   return (
     <span className='shrink-0 rounded bg-amber-100 px-1.5 py-0.5 font-caption text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'>
-      Not in catalogue
+      {tr('Not in catalogue')}
     </span>
   )
 }
@@ -129,7 +130,7 @@ function DeviceSetupIoTable() {
   if (!selected) {
     return (
       <p className='p-8 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-        No modules configured. Add modules in Backplane Configuration to generate I/O mappings.
+        {tr('No modules configured. Add modules in Backplane Configuration to generate I/O mappings.')}
       </p>
     )
   }
@@ -187,7 +188,7 @@ function DeviceSetupIoTable() {
               {`Module type ${selected.typeId} is not in this package's catalogue, so it has no channels.`}
             </p>
           ) : channels.length === 0 ? (
-            <p className='text-sm text-neutral-500 dark:text-neutral-400'>No addressable channels.</p>
+            <p className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('No addressable channels.')}</p>
           ) : (
             <IoChannelTable
               entries={channels}

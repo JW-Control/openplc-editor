@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useMemo, useState } from 'react'
 
 import { cn } from '../../../../../../utils/cn'
@@ -135,7 +136,7 @@ const ImportIOGroupsModal = ({ preview, existingGroupNames, onClose, onConfirm }
     <Modal open={preview !== null} onOpenChange={(open) => !open && onClose()}>
       <ModalContent className='h-fit max-h-[85vh] w-[720px]' onClose={onClose} data-testid='io-group-import-modal'>
         <ModalHeader>
-          <ModalTitle>Import IO Groups</ModalTitle>
+          <ModalTitle>{tr('Import IO Groups')}</ModalTitle>
           <p
             data-testid='io-group-import-summary'
             className='truncate font-caption text-xs text-neutral-600 dark:text-neutral-400'
@@ -154,8 +155,8 @@ const ImportIOGroupsModal = ({ preview, existingGroupNames, onClose, onConfirm }
               </legend>
               {(
                 [
-                  { value: 'append', label: 'Append to existing groups' },
-                  { value: 'replace', label: 'Replace existing groups' },
+                  { value: 'append', label: tr('Append to existing groups') },
+                  { value: 'replace', label: tr('Replace existing groups') },
                 ] as const
               ).map((option) => (
                 <label
@@ -237,7 +238,7 @@ const ImportIOGroupsModal = ({ preview, existingGroupNames, onClose, onConfirm }
             onClick={onClose}
             className='rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'

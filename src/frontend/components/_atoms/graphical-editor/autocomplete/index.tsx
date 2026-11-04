@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithRef, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 
 import type { PLCVariable } from '../../../../../middleware/shared/ports/types'
@@ -330,7 +331,7 @@ export const GraphicalEditorAutocomplete = forwardRef<HTMLDivElement, GraphicalE
                     }
                   >
                     <PlusIcon className='h-3 w-3 stroke-brand' />
-                    <div className='ml-2'>Add variable</div>
+                    <div className='ml-2'>{tr('Add variable')}</div>
                   </div>
                   {newBlock.canCreate && <div className='h-px w-full bg-neutral-300 dark:bg-neutral-700' />}
                 </>

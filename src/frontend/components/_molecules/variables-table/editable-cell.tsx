@@ -3,6 +3,7 @@ import { useAliasRegistry } from '@root/frontend/hooks/use-alias-registry'
 import { useDuplicateOutputLocations } from '@root/frontend/hooks/use-duplicate-output-locations'
 import { useProjectAliasBindings } from '@root/frontend/hooks/use-project-alias-bindings'
 import { useTargetCapabilities } from '@root/frontend/hooks/use-target-capabilities'
+import { tr } from '@root/frontend/locales/tr'
 import { isLiteralLocation } from '@root/middleware/shared/utils/iec-address/registry'
 import type { CellContext, RowData } from '@tanstack/react-table'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -140,8 +141,8 @@ const EditableNameCellImpl = ({
 
     if (!matchingGlobalVar) {
       toast({
-        title: 'Error',
-        description: `Global variable '${selectedName}' not found`,
+        title: tr('Error'),
+        description: tr("Global variable '{{selectedName}}' not found", { selectedName }),
         variant: 'fail',
       })
       return
@@ -158,8 +159,8 @@ const EditableNameCellImpl = ({
 
     if (!typeRes?.ok) {
       toast({
-        title: 'Warning',
-        description: 'Variable name updated but type could not be auto-filled',
+        title: tr('Warning'),
+        description: tr('Variable name updated but type could not be auto-filled'),
         variant: 'fail',
       })
     }
@@ -186,14 +187,14 @@ const EditableNameCellImpl = ({
 
     const [isNameLegal, reason] = isLegalIdentifier(newName)
     if (isNameLegal === false) {
-      toast({ title: 'Error', description: `'${newName}' ${reason}`, variant: 'fail' })
+      toast({ title: tr('Error'), description: `'${newName}' ${reason}`, variant: 'fail' })
       setCellValue(oldName)
       setIsEditing(false)
       return
     }
 
     if (!variable) {
-      toast({ title: 'Error', description: 'Variable not found', variant: 'fail' })
+      toast({ title: tr('Error'), description: tr('Variable not found'), variant: 'fail' })
       setCellValue(oldName)
       setIsEditing(false)
       return
@@ -204,8 +205,8 @@ const EditableNameCellImpl = ({
 
       if (!matchingGlobalVar) {
         toast({
-          title: 'Error',
-          description: `External variable '${newName}' must reference an existing global variable`,
+          title: tr('Error'),
+          description: tr("External variable '{{newName}}' must reference an existing global variable", { newName }),
           variant: 'fail',
         })
         setCellValue(oldName)
@@ -219,8 +220,11 @@ const EditableNameCellImpl = ({
 
       if (!typeMatches) {
         toast({
-          title: 'Error',
-          description: `Type mismatch: external variable type must match global variable '${matchingGlobalVar.name}' (${matchingGlobalVar.type.value})`,
+          title: tr('Error'),
+          description: tr("Type mismatch: external variable type must match global variable '{{name}}' ({{value}})", {
+            name: matchingGlobalVar.name,
+            value: matchingGlobalVar.type.value,
+          }),
           variant: 'fail',
         })
         setCellValue(oldName)
@@ -406,7 +410,7 @@ const EditableInitialValueCellImpl = ({
     //   const validation = validateInitialValue(cellValue, variable.type.value)
 
     //   if (!validation.valid) {
-    //     toast({ title: 'Error', description: validation.message, variant: 'fail' })
+    //     toast({ title: tr('Error'), description: validation.message, variant: 'fail' })
     //     setCellValue('')
     //     setIsEditing(false)
     //     return

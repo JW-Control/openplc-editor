@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import type { Commit } from '../../../../../middleware/shared/ports/version-control-port'
@@ -68,7 +69,9 @@ export function HistorySection({ projectId }: HistorySectionProps) {
   }
 
   if (commits.length === 0 && offset === 0) {
-    return <p className='px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400'>No commits yet</p>
+    return (
+      <p className='px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400'>{tr('No commits yet')}</p>
+    )
   }
 
   return (
@@ -97,14 +100,14 @@ export function HistorySection({ projectId }: HistorySectionProps) {
             disabled={offset === 0 || isFetching}
             className='rounded px-2 py-1 text-xs text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800'
           >
-            Prev
+            {tr('Prev')}
           </button>
           <button
             onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
             disabled={!hasMore || isFetching}
             className='rounded px-2 py-1 text-xs text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800'
           >
-            Next
+            {tr('Next')}
           </button>
         </div>
       </div>

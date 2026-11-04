@@ -7,6 +7,8 @@
  * transparent background lets the button show through. `image-rendering:
  * pixelated` keeps the low-res art crisp when scaled to the rail size.
  */
+import { tr } from '@root/frontend/locales/tr'
+
 import buildPng from '../../../assets/icons/retro/build.png'
 import debugPng from '../../../assets/icons/retro/debug.png'
 import explorerPng from '../../../assets/icons/retro/explorer.png'
@@ -30,10 +32,12 @@ function RetroImg({ src, alt, className }: { src: string; alt: string; className
   )
 }
 
-export const RetroExplorer = (p: RetroIconProps) => <RetroImg src={explorerPng} alt='Explorer' {...p} />
-export const RetroSourceControl = (p: RetroIconProps) => <RetroImg src={sourceControlPng} alt='Source Control' {...p} />
-export const RetroSearch = (p: RetroIconProps) => <RetroImg src={searchPng} alt='Search' {...p} />
-export const RetroZoom = (p: RetroIconProps) => <RetroImg src={toolboxPng} alt='Open/Close Toolbox' {...p} />
-export const RetroBuild = (p: RetroIconProps) => <RetroImg src={buildPng} alt='Build' {...p} />
-export const RetroPlay = (p: RetroIconProps) => <RetroImg src={startPng} alt='Play' {...p} />
-export const RetroDebugger = (p: RetroIconProps) => <RetroImg src={debugPng} alt='Debugger' {...p} />
+export const RetroExplorer = (p: RetroIconProps) => <RetroImg src={explorerPng} alt={tr('Explorer')} {...p} />
+export const RetroSourceControl = (p: RetroIconProps) => (
+  <RetroImg src={sourceControlPng} alt={tr('Source Control')} {...p} />
+)
+export const RetroSearch = (p: RetroIconProps) => <RetroImg src={searchPng} alt={tr('Search')} {...p} />
+export const RetroZoom = (p: RetroIconProps) => <RetroImg src={toolboxPng} alt={tr('Open/Close Toolbox')} {...p} />
+export const RetroBuild = (p: RetroIconProps) => <RetroImg src={buildPng} alt={tr('Build')} {...p} />
+export const RetroPlay = (p: RetroIconProps) => <RetroImg src={startPng} alt={tr('Play')} {...p} />
+export const RetroDebugger = (p: RetroIconProps) => <RetroImg src={debugPng} alt={tr('Debugger')} {...p} />

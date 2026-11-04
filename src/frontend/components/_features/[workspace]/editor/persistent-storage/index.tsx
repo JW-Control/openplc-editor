@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import {
@@ -49,10 +51,12 @@ const PersistentStorageEditor = () => {
   return (
     <div className='flex h-full w-full select-none flex-col overflow-auto p-8'>
       <div className='mb-6'>
-        <h2 className='text-xl font-semibold text-neutral-1000 dark:text-white'>Persistent Storage</h2>
+        <h2 className='text-xl font-semibold text-neutral-1000 dark:text-white'>{tr('Persistent Storage')}</h2>
         <p className='mt-1 max-w-2xl text-sm text-neutral-600 dark:text-neutral-400'>
-          Where the device keeps the values of <span className='font-medium'>RETAIN</span> variables so they survive a
-          restart. With storage off, retained variables start at their initial values every time.
+          {trRich(
+            'Where the device keeps the values of {{retain}} variables so they survive a restart. With storage off, retained variables start at their initial values every time.',
+            { retain: <span className='font-medium'>RETAIN</span> },
+          )}
         </p>
       </div>
 
@@ -65,13 +69,13 @@ const PersistentStorageEditor = () => {
             className='h-4 w-4 accent-brand'
           />
           <span className='text-sm font-medium text-neutral-1000 dark:text-white'>
-            Keep retained variables on the device
+            {tr('Keep retained variables on the device')}
           </span>
         </label>
 
         <div className='flex flex-col gap-1.5'>
           <label htmlFor='retain-path' className='text-sm font-medium text-neutral-1000 dark:text-white'>
-            File location
+            {tr('File location')}
           </label>
           <input
             id='retain-path'
@@ -79,18 +83,18 @@ const PersistentStorageEditor = () => {
             value={path}
             disabled={!enabled}
             spellCheck={false}
-            placeholder='Leave empty to use the runtime default'
+            placeholder={tr('Leave empty to use the runtime default')}
             onChange={(e) => setPersistentStorage({ path: e.target.value })}
             className='h-9 rounded-md border border-neutral-300 px-3 font-mono text-sm disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white'
           />
           <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-            An absolute path on the device. Leave it empty and the runtime uses its own default location.
+            {tr('An absolute path on the device. Leave it empty and the runtime uses its own default location.')}
           </p>
         </div>
 
         <div className='flex flex-col gap-1.5'>
           <label htmlFor='retain-flush' className='text-sm font-medium text-neutral-1000 dark:text-white'>
-            Save every
+            {tr('Save every')}
           </label>
           <div className='flex items-center gap-2'>
             <input
@@ -112,12 +116,14 @@ const PersistentStorageEditor = () => {
           </div>
           {flushInvalid && (
             <p className='text-xs text-red-600 dark:text-red-400' role='alert'>
-              Use a whole number of seconds between {RETAIN_MIN_FLUSH_SECONDS} and {RETAIN_MAX_FLUSH_SECONDS}. A
-              fraction would be rounded on upload, and the runtime refuses anything outside that range.
+              {tr(
+                'Use a whole number of seconds between {{min}} and {{max}}. A fraction would be rounded on upload, and the runtime refuses anything outside that range.',
+                { min: RETAIN_MIN_FLUSH_SECONDS, max: RETAIN_MAX_FLUSH_SECONDS },
+              )}
             </p>
           )}
           <p id='retain-flush-help' className='text-xs text-neutral-500 dark:text-neutral-400'>
-            Saving more often keeps less at risk, but on an SD card or flash will shorten its life.
+            {tr('Saving more often keeps less at risk, but on an SD card or flash will shorten its life.')}
           </p>
         </div>
       </div>

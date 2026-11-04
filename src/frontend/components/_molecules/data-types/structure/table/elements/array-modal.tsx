@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { baseTypeEnum } from '@root/middleware/shared/ports/plc-schemas'
 import type { PLCDataType, PLCStructureVariable } from '@root/middleware/shared/ports/types'
 import { useEffect, useState } from 'react'
@@ -141,8 +142,8 @@ export const ArrayModal = ({
     const dimensionToSave = dimensions.filter((value) => value !== '')
     if (dimensionToSave.length === 0) {
       toast({
-        title: 'Invalid array',
-        description: 'Array must have at least one non-empty dimension',
+        title: tr('Invalid array'),
+        description: tr('Array must have at least one non-empty dimension'),
         variant: 'fail',
       })
       return
@@ -156,8 +157,8 @@ export const ArrayModal = ({
 
     if (!structure || !('variable' in structure)) {
       toast({
-        title: 'Structure not found',
-        description: `The structure '${dataTypeName}' was not found.`,
+        title: tr('Structure not found'),
+        description: tr("The structure '{{dataTypeName}}' was not found.", { dataTypeName }),
         variant: 'fail',
       })
       return

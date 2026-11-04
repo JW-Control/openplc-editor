@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { Branch } from '../../../../../middleware/shared/ports/version-control-port'
@@ -92,8 +93,8 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
       // and would silently wipe them, and getChanges below can't see them either.
       if (!checkIfAllFilesAreSaved()) {
         toast({
-          title: 'Unsaved changes',
-          description: 'Save or discard your changes before switching branches.',
+          title: tr('Unsaved changes'),
+          description: tr('Save or discard your changes before switching branches.'),
           variant: 'warn',
         })
         setShowSwitcher(false)
@@ -215,7 +216,7 @@ export function BranchStatusBar({ projectId, onBranchSwitch }: BranchStatusBarPr
           ref={branchButtonRef}
           onClick={() => setShowSwitcher(true)}
           className='flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs text-white transition-colors hover:bg-brand-medium-dark dark:text-neutral-400 dark:hover:bg-neutral-900'
-          title='Switch branch'
+          title={tr('Switch branch')}
         >
           <svg className='h-3.5 w-3.5' viewBox='0 0 16 16' fill='currentColor'>
             <path d='M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z' />

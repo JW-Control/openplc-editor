@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { PlusIcon } from '../../../../../assets/icons/interface/Plus'
 
 type CreateRungProps = {
@@ -10,7 +12,7 @@ export const CreateRung = ({ onClick }: CreateRungProps) => {
       aria-label='Create new rung'
       className='flex w-full select-none flex-row items-center justify-between rounded-lg border bg-transparent p-1 opacity-40 hover:opacity-100 dark:border-neutral-800'
     >
-      <p className='ml-2 cursor-default text-xs'>Create new rung</p>
+      <p className='ml-2 cursor-default text-xs'>{tr('Create new rung')}</p>
       <button
         aria-label='Create new rung button'
         onClick={onClick}

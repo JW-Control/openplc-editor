@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { findInstanceName } from '@root/frontend/utils/debug-variable-finder'
 import { GLOBAL_SCOPE_POU, isGlobalScopePou } from '@root/frontend/utils/opcua/resolve-indices'
@@ -226,14 +227,15 @@ export const AddressSpaceTab = ({ config, serverName, onConfigChange }: AddressS
       {/* Header */}
       <div className='flex flex-col gap-2'>
         <p className='text-xs text-neutral-600 dark:text-neutral-400'>
-          Select PLC variables to expose via OPC-UA. Variable indices are resolved automatically during project
-          compilation.
+          {tr(
+            'Select PLC variables to expose via OPC-UA. Variable indices are resolved automatically during project compilation.',
+          )}
         </p>
       </div>
 
       {/* Namespace URI */}
       <div className='flex flex-col gap-2'>
-        <Label className='text-xs text-neutral-950 dark:text-white'>Namespace URI</Label>
+        <Label className='text-xs text-neutral-950 dark:text-white'>{tr('Namespace URI')}</Label>
         <InputWithRef
           type='text'
           value={config.addressSpace.namespaceUri}
@@ -242,7 +244,7 @@ export const AddressSpaceTab = ({ config, serverName, onConfigChange }: AddressS
           className={inputStyles}
         />
         <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-          Unique namespace identifier for your OPC-UA address space
+          {tr('Unique namespace identifier for your OPC-UA address space')}
         </span>
       </div>
 
@@ -253,9 +255,9 @@ export const AddressSpaceTab = ({ config, serverName, onConfigChange }: AddressS
           {/* Panel Header */}
           <div className='border-b border-neutral-200 p-3 dark:border-neutral-800'>
             <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
-              Available PLC Variables
+              {tr('Available PLC Variables')}
             </h3>
-            <p className='text-xs text-neutral-500 dark:text-neutral-400'>Select variables to expose</p>
+            <p className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Select variables to expose')}</p>
           </div>
 
           {/* Filter Input */}
@@ -264,7 +266,7 @@ export const AddressSpaceTab = ({ config, serverName, onConfigChange }: AddressS
               type='text'
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder='Filter variables...'
+              placeholder={tr('Filter variables...')}
               className='h-[28px] w-full rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-xs text-neutral-850 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
             />
           </div>
@@ -284,7 +286,9 @@ export const AddressSpaceTab = ({ config, serverName, onConfigChange }: AddressS
         <div className='flex w-1/2 flex-col rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'>
           {/* Panel Header */}
           <div className='border-b border-neutral-200 p-3 dark:border-neutral-800'>
-            <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>Selected for OPC-UA</h3>
+            <h3 className='font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
+              {tr('Selected for OPC-UA')}
+            </h3>
             <p className='text-xs text-neutral-500 dark:text-neutral-400'>
               {config.addressSpace.nodes.length} variable{config.addressSpace.nodes.length !== 1 ? 's' : ''} configured
             </p>

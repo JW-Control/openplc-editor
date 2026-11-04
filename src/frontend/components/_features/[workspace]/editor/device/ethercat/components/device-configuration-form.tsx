@@ -2,6 +2,7 @@ import { extractDefaultSdoConfigurations } from '@root/backend/shared/ethercat/s
 import { ArrowIcon } from '@root/frontend/assets/icons/interface/Arrow'
 import { Checkbox } from '@root/frontend/components/_atoms/checkbox'
 import { InputWithRef } from '@root/frontend/components/_atoms/input'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type {
   ESIChannel,
@@ -36,31 +37,33 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
   <div className='flex flex-col gap-4'>
     {/* Startup Checks */}
     <div>
-      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Startup Checks</h6>
+      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Startup Checks')}</h6>
       <div className='flex flex-wrap gap-x-6 gap-y-2'>
         <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
           <Checkbox
             checked={config.startupChecks.checkVendorId}
             onCheckedChange={(checked) => updateConfig('startupChecks', { checkVendorId: checked === true })}
           />
-          Verify Vendor ID
+          {tr('Verify Vendor ID')}
         </label>
         <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
           <Checkbox
             checked={config.startupChecks.checkProductCode}
             onCheckedChange={(checked) => updateConfig('startupChecks', { checkProductCode: checked === true })}
           />
-          Verify Product Code
+          {tr('Verify Product Code')}
         </label>
       </div>
     </div>
 
     {/* Addressing */}
     <div>
-      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Addressing</h6>
+      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Addressing')}</h6>
       <div className='flex flex-wrap items-center gap-x-6 gap-y-2'>
         <div className='flex items-center gap-2'>
-          <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>EtherCAT Address</span>
+          <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>
+            {tr('EtherCAT Address')}
+          </span>
           <InputWithRef
             type='number'
             value={config.addressing.ethercatAddress}
@@ -79,10 +82,10 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
 
     {/* Timeouts */}
     <div>
-      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Timeouts</h6>
+      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Timeouts')}</h6>
       <div className='grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3'>
         <div className='flex items-center gap-2'>
-          <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>SDO (ms)</span>
+          <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('SDO (ms)')}</span>
           <InputWithRef
             type='number'
             value={config.timeouts.sdoTimeoutMs}
@@ -127,7 +130,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
 
     {/* Watchdog */}
     <div>
-      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Watchdog</h6>
+      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Watchdog')}</h6>
       <div className='flex flex-col gap-2'>
         <div className='flex flex-wrap items-center gap-x-4 gap-y-2'>
           <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
@@ -135,10 +138,10 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
               checked={config.watchdog.smWatchdogEnabled}
               onCheckedChange={(checked) => updateConfig('watchdog', { smWatchdogEnabled: checked === true })}
             />
-            SM Watchdog
+            {tr('SM Watchdog')}
           </label>
           <div className='flex items-center gap-2'>
-            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>Time (ms)</span>
+            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('Time (ms)')}</span>
             <InputWithRef
               type='number'
               value={config.watchdog.smWatchdogMs}
@@ -158,10 +161,10 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
               checked={config.watchdog.pdiWatchdogEnabled}
               onCheckedChange={(checked) => updateConfig('watchdog', { pdiWatchdogEnabled: checked === true })}
             />
-            PDI Watchdog
+            {tr('PDI Watchdog')}
           </label>
           <div className='flex items-center gap-2'>
-            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>Time (ms)</span>
+            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('Time (ms)')}</span>
             <InputWithRef
               type='number'
               value={config.watchdog.pdiWatchdogMs}
@@ -185,7 +188,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
          the user override the ESI defaults when a slave advertises something
          different from what it actually accepts. */}
     <div>
-      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>CoE Flags</h6>
+      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('CoE Flags')}</h6>
       <div className='flex flex-wrap gap-x-6 gap-y-2'>
         <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
           <Checkbox
@@ -198,7 +201,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
               })
             }
           />
-          PdoAssign (0x1C12 / 0x1C13 writes)
+          {tr('PdoAssign (0x1C12 / 0x1C13 writes)')}
         </label>
         <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
           <Checkbox
@@ -211,7 +214,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
               })
             }
           />
-          PdoConfig (0xF030 module ident list)
+          {tr('PdoConfig (0xF030 module ident list)')}
         </label>
         <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
           <Checkbox
@@ -224,14 +227,16 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
               })
             }
           />
-          CompleteAccess (multi-sub-index SDO writes)
+          {tr('CompleteAccess (multi-sub-index SDO writes)')}
         </label>
       </div>
     </div>
 
     {/* Distributed Clocks (DC) */}
     <div>
-      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Distributed Clocks (DC)</h6>
+      <h6 className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+        {tr('Distributed Clocks (DC)')}
+      </h6>
       <div className='flex flex-col gap-2'>
         <div className='flex flex-wrap items-center gap-x-6 gap-y-2'>
           <label className='flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-300'>
@@ -239,11 +244,11 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
               checked={config.distributedClocks.dcEnabled}
               onCheckedChange={(checked) => updateConfig('distributedClocks', { dcEnabled: checked === true })}
             />
-            Enable DC
+            {tr('Enable DC')}
           </label>
           <div className='flex items-center gap-2'>
             <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>
-              Sync Unit Cycle (us)
+              {tr('Sync Unit Cycle (us)')}
             </span>
             <InputWithRef
               type='number'
@@ -271,7 +276,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
             SYNC0
           </label>
           <div className='flex items-center gap-2'>
-            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>Cycle (us)</span>
+            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('Cycle (us)')}</span>
             <InputWithRef
               type='number'
               value={config.distributedClocks.dcSync0CycleUs}
@@ -289,7 +294,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
             />
           </div>
           <div className='flex items-center gap-2'>
-            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>Shift (us)</span>
+            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('Shift (us)')}</span>
             <InputWithRef
               type='number'
               value={config.distributedClocks.dcSync0ShiftUs}
@@ -319,7 +324,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
             SYNC1
           </label>
           <div className='flex items-center gap-2'>
-            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>Cycle (us)</span>
+            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('Cycle (us)')}</span>
             <InputWithRef
               type='number'
               value={config.distributedClocks.dcSync1CycleUs}
@@ -337,7 +342,7 @@ const DeviceConfigurationForm = ({ config, updateConfig }: DeviceConfigurationFo
             />
           </div>
           <div className='flex items-center gap-2'>
-            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>Shift (us)</span>
+            <span className='whitespace-nowrap text-xs text-neutral-600 dark:text-neutral-400'>{tr('Shift (us)')}</span>
             <InputWithRef
               type='number'
               value={config.distributedClocks.dcSync1ShiftUs}
@@ -381,7 +386,7 @@ const SdoParametersSection = ({
     {isLoading && (
       <div className='flex items-center gap-2 py-4 text-sm text-neutral-500 dark:text-neutral-400'>
         <ArrowIcon size='sm' className='animate-spin stroke-neutral-400' />
-        Loading CoE data...
+        {tr('Loading CoE data...')}
       </div>
     )}
 
@@ -398,7 +403,7 @@ const SdoParametersSection = ({
     {!isLoading && !loadError && !sdoConfigurations && coeObjects && coeObjects.length > 0 && (
       <div className='flex flex-col items-center gap-2 py-4'>
         <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-          CoE Object Dictionary available. Auto-configure startup parameters?
+          {tr('CoE Object Dictionary available. Auto-configure startup parameters?')}
         </p>
         <button
           onClick={() => {
@@ -408,7 +413,7 @@ const SdoParametersSection = ({
           }}
           className='rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-medium-dark'
         >
-          Auto-configure from ESI defaults
+          {tr('Auto-configure from ESI defaults')}
         </button>
       </div>
     )}
@@ -421,7 +426,7 @@ const SdoParametersSection = ({
 
     {!isLoading && !loadError && !sdoConfigurations && !coeObjects && (
       <p className='py-4 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-        No CoE Object Dictionary available for this device.
+        {tr('No CoE Object Dictionary available for this device.')}
       </p>
     )}
   </>
@@ -448,7 +453,7 @@ const ChannelMappingsSection = ({
     {isLoading && (
       <div className='flex items-center gap-2 py-4 text-sm text-neutral-500 dark:text-neutral-400'>
         <ArrowIcon size='sm' className='animate-spin stroke-neutral-400' />
-        Loading channels...
+        {tr('Loading channels...')}
       </div>
     )}
 
@@ -460,7 +465,7 @@ const ChannelMappingsSection = ({
 
     {!isLoading && !loadError && channels.length === 0 && (
       <p className='py-4 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-        No channels available for this device.
+        {tr('No channels available for this device.')}
       </p>
     )}
 

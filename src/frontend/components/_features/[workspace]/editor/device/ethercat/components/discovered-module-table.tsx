@@ -1,4 +1,5 @@
 import { Checkbox } from '@root/frontend/components/_atoms/checkbox'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIModuleSummary, ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 
@@ -49,9 +50,15 @@ const DiscoveredModuleTable = ({
                 disabled={moduleMatches.length === 0}
               />
             </th>
-            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Slot</th>
-            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Name</th>
-            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>Ident</th>
+            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+              {tr('Slot')}
+            </th>
+            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+              {tr('Name')}
+            </th>
+            <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+              {tr('Ident')}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -94,17 +101,17 @@ const DiscoveredModuleTable = ({
                       {hasNoXml && (
                         <span
                           className='rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700 dark:bg-neutral-700/60 dark:text-neutral-300'
-                          title='ESI XML not in repository — import it from the Repository tab before adding.'
+                          title={tr('ESI XML not in repository — import it from the Repository tab before adding.')}
                         >
-                          No XML
+                          {tr('No XML')}
                         </span>
                       )}
                       {notAccepted && (
                         <span
                           className='rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700 dark:bg-neutral-700/60 dark:text-neutral-300'
-                          title='The coupler ESI does not accept this module in any slot.'
+                          title={tr('The coupler ESI does not accept this module in any slot.')}
                         >
-                          Not supported
+                          {tr('Not supported')}
                         </span>
                       )}
                     </span>

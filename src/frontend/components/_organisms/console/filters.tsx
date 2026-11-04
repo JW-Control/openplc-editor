@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ChevronDown, Download, Filter, Search, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -17,19 +18,19 @@ const levelConfig: Record<
   }
 > = {
   debug: {
-    label: 'Debug',
+    label: tr('Debug'),
     colorDot: 'bg-neutral-500 dark:bg-neutral-400',
   },
   info: {
-    label: 'Info',
+    label: tr('Info'),
     colorDot: 'bg-blue-500',
   },
   warning: {
-    label: 'Warning',
+    label: tr('Warning'),
     colorDot: 'bg-yellow-500',
   },
   error: {
-    label: 'Error',
+    label: tr('Error'),
     colorDot: 'bg-red-500',
   },
 }
@@ -37,7 +38,7 @@ const levelConfig: Record<
 const formatOptions: { value: TimestampFormat; label: string }[] = [
   { value: 'full', label: 'DD-MM-YY HH:MM:SS' },
   { value: 'time', label: 'HH:MM:SS' },
-  { value: 'none', label: 'None' },
+  { value: 'none', label: tr('None') },
 ]
 
 const ConsoleFilters = memo(() => {
@@ -200,7 +201,7 @@ const ConsoleFilters = memo(() => {
             type='button'
             onClick={() => setShowExportMenu(!showExportMenu)}
             className='flex h-7 w-fit select-none items-center gap-1 rounded-lg bg-neutral-100 px-2 transition-colors hover:bg-neutral-200 dark:bg-neutral-850 dark:hover:bg-neutral-900'
-            title='Export logs'
+            title={tr('Export logs')}
           >
             <Download className='h-3.5 w-3.5' />
           </button>
@@ -238,7 +239,7 @@ const ConsoleFilters = memo(() => {
           )}
         >
           <Filter className='h-3.5 w-3.5' />
-          <span className='font-caption text-cp-base font-normal'>Filters</span>
+          <span className='font-caption text-cp-base font-normal'>{tr('Filters')}</span>
           {hasActiveFilters && (
             <span className='flex h-4 w-4 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-brand'>
               {activeFiltersCount}
@@ -260,7 +261,7 @@ const ConsoleFilters = memo(() => {
               <Search className='absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 stroke-neutral-400 dark:stroke-neutral-500' />
               <input
                 type='text'
-                placeholder='Search logs...'
+                placeholder={tr('Search logs...')}
                 value={filters.searchTerm}
                 onChange={(e) => consoleActions.setSearchTerm(e.target.value)}
                 className='h-[28px] w-full rounded-md border border-neutral-300 bg-white px-2 py-1 pl-8 pr-8 text-xs text-neutral-850 placeholder-neutral-400 outline-none focus:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300 dark:placeholder-neutral-500'
@@ -278,7 +279,7 @@ const ConsoleFilters = memo(() => {
             {/* Log Levels */}
             <div>
               <label className='mb-2 block text-xs font-medium text-neutral-850 dark:text-neutral-300'>
-                Log Levels
+                {tr('Log Levels')}
               </label>
               <div className='space-y-1.5'>
                 {(['debug', 'info', 'warning', 'error'] as LogLevel[]).map((level) => (
@@ -316,7 +317,7 @@ const ConsoleFilters = memo(() => {
             <div className='space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800'>
               {/* Timestamp Format Dropdown */}
               <div className='flex items-center justify-between'>
-                <span className='text-xs font-medium text-neutral-850 dark:text-neutral-300'>Format</span>
+                <span className='text-xs font-medium text-neutral-850 dark:text-neutral-300'>{tr('Format')}</span>
                 <div className='relative'>
                   <button
                     onClick={() => setShowFormatMenu(!showFormatMenu)}

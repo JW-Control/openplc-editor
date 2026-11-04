@@ -14,6 +14,7 @@ import { StickArrowIcon } from '@root/frontend/assets/icons/interface/StickArrow
 import TableActions from '@root/frontend/components/_atoms/table-actions'
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '@root/frontend/components/_molecules/modal'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import { generateUniqueSlaveName } from '@root/frontend/utils/unique-slave-name'
@@ -190,7 +191,7 @@ export const ModulesTab = ({
 
   const handleScan = useCallback(async () => {
     if (scanPort === undefined) {
-      setScanError('Scan is not available on this platform.')
+      setScanError(tr('Scan is not available on this platform.'))
       return
     }
     setIsScanning(true)
@@ -267,7 +268,7 @@ export const ModulesTab = ({
     }
 
     if (refused.length > 0) {
-      toast({ title: 'Some modules were not added', description: refused.join('\n'), variant: 'fail' })
+      toast({ title: tr('Some modules were not added'), description: refused.join('\n'), variant: 'fail' })
     }
     onUpdateModules(station)
     setSelectedScannedSlots(new Set())
@@ -290,8 +291,11 @@ export const ModulesTab = ({
       if (esiModule === undefined) {
         // A module without its full ESI has no PDOs: it would map nothing on the wire.
         toast({
-          title: 'Module not added',
-          description: `No ESI details available for ${modSummary.name}. Load the module's ESI file into the repository and try again.`,
+          title: tr('Module not added'),
+          description: tr(
+            "No ESI details available for {{name}}. Load the module's ESI file into the repository and try again.",
+            { name: modSummary.name },
+          ),
           variant: 'fail',
         })
         return
@@ -308,7 +312,7 @@ export const ModulesTab = ({
       const candidate = [...modules, built]
       const problems = placementProblems(candidate, built)
       if (problems.length > 0) {
-        toast({ title: 'Module not added', description: `${built.name}: ${problems.join('; ')}`, variant: 'fail' })
+        toast({ title: tr('Module not added'), description: `${built.name}: ${problems.join('; ')}`, variant: 'fail' })
         return
       }
       onUpdateModules(candidate)
@@ -328,7 +332,7 @@ export const ModulesTab = ({
       const next = shiftModule(modules, selectedConfiguredId, direction, increments)
       const problems = next.flatMap((m) => placementProblems(next, m))
       if (problems.length > 0) {
-        toast({ title: 'Module not moved', description: problems.join('\n'), variant: 'fail' })
+        toast({ title: tr('Module not moved'), description: problems.join('\n'), variant: 'fail' })
         return
       }
       onUpdateModules(next)
@@ -356,7 +360,7 @@ export const ModulesTab = ({
           {isScanning ? (
             <>
               <ArrowIcon size='sm' className='animate-spin stroke-white' />
-              Scanning...
+              {tr('Scanning...')}
             </>
           ) : (
             'Scan'
@@ -384,7 +388,7 @@ export const ModulesTab = ({
         {/* Scanned Modules — left */}
         <div className='flex min-w-0 flex-1 flex-col'>
           <div className='mb-2 flex h-[28px] items-center justify-between'>
-            <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>Scanned Modules</h3>
+            <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>{tr('Scanned Modules')}</h3>
             <button
               onClick={() => void handleAddSelectedFromScan()}
               disabled={addSelectedDisabled}
@@ -458,13 +462,13 @@ export const ModulesTab = ({
               <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-900'>
                 <tr>
                   <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Slot
+                    {tr('Slot')}
                   </th>
                   <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Name
+                    {tr('Name')}
                   </th>
                   <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Ident
+                    {tr('Ident')}
                   </th>
                 </tr>
               </thead>
@@ -472,7 +476,7 @@ export const ModulesTab = ({
                 {sortedConfigured.length === 0 ? (
                   <tr>
                     <td colSpan={3} className='px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-                      No modules configured. Click + to add a module from the repository.
+                      {tr('No modules configured. Click + to add a module from the repository.')}
                     </td>
                   </tr>
                 ) : (
@@ -526,7 +530,7 @@ export const ModulesTab = ({
           className='!inset-x-0 !bottom-auto !top-1/2 !h-auto max-h-[80vh] w-[480px] !-translate-y-1/2 p-6'
         >
           <ModalHeader>
-            <ModalTitle>Missing ESI XML for some modules</ModalTitle>
+            <ModalTitle>{tr('Missing ESI XML for some modules')}</ModalTitle>
           </ModalHeader>
           <p className='text-sm text-neutral-700 dark:text-neutral-300'>
             {unmatchedWarning.length === 1
@@ -538,10 +542,10 @@ export const ModulesTab = ({
               <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-900'>
                 <tr>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Slot
+                    {tr('Slot')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Ident
+                    {tr('Ident')}
                   </th>
                 </tr>
               </thead>
@@ -560,7 +564,7 @@ export const ModulesTab = ({
               onClick={() => setUnmatchedWarning([])}
               className='rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Close
+              {tr('Close')}
             </button>
           </ModalFooter>
         </ModalContent>

@@ -53,6 +53,10 @@ export function createEditorSystemAdapter(): SystemPort {
       window.bridge.setStoreValue(key, value)
     },
 
+    setUiLanguage(language: 'es' | 'en'): void {
+      window.bridge.setUiLanguage(language)
+    },
+
     openExternalLink(url: string): Promise<{ success: boolean }> {
       return window.bridge.openExternalLinkAccelerator(url)
     },

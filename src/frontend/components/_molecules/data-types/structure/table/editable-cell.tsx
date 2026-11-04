@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { CellContext, RowData } from '@tanstack/react-table'
 import { useEffect, useState } from 'react'
 
@@ -54,7 +55,7 @@ const EditableNameCell = ({ getValue, row: { index }, column: { id }, table }: I
     const validation = validateVariableName(cellValue ?? '', existingVariableNames, initialValue)
 
     if (!validation.valid) {
-      toast({ title: 'Error', description: validation.message, variant: 'fail' })
+      toast({ title: tr('Error'), description: validation.message, variant: 'fail' })
       setCellValue(initialValue)
       return
     }

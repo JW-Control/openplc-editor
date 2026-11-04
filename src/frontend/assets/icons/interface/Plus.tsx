@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -22,7 +23,7 @@ export const PlusIcon = (props: IPlusIconProps) => {
       className={cn(`${sizeClasses[size]}`, className)}
       {...res}
     >
-      <title>Plus Icon</title>
+      <title>{tr('Plus Icon')}</title>
       <path d='M1.5 9H16.5M9 1.5L9 16.5' stroke='inherit' strokeWidth='1.5' strokeLinecap='round' />
     </svg>
   )

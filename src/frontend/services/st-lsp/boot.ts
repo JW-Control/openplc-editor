@@ -16,6 +16,8 @@
  * handles for us.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import type { PlatformPorts } from '../../../middleware/shared/providers/types'
 import type { OpenPLCStore } from '../../store'
 import { toast } from '../../utils/toast'
@@ -77,7 +79,7 @@ export function bootStLsp(
       if (crashToastShown) return
       crashToastShown = true
       toast({
-        title: 'STruC++ service crashed',
+        title: tr('STruC++ service crashed'),
         description:
           err.message ||
           'The Structured Text language server stopped responding. Reload the editor to restore autocomplete and diagnostics.',

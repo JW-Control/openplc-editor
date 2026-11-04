@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { PLCGlobalVariable } from '../../../../../middleware/shared/ports/types'
@@ -141,7 +142,7 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
     const parsed = parseGlobalVariableListFromText(draft, listName)
     if (!parsed.globalVariableList) {
       toast({
-        title: 'The declaration could not be read',
+        title: tr('The declaration could not be read'),
         description: parsed.error ?? 'Check the declaration and try again.',
         variant: 'fail',
       })
@@ -177,7 +178,7 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
     if (draft !== committedText) return commit()
     if (list?.text === undefined) return true
     toast({
-      title: 'The declaration could not be read',
+      title: tr('The declaration could not be read'),
       description:
         parseGlobalVariableListFromText(draft, listName).error ??
         'Fix the declaration to edit these members as a table.',
@@ -299,7 +300,7 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
         className='flex h-full w-full flex-1 items-center justify-center'
       >
         <p className='font-caption text-xs text-neutral-500 dark:text-neutral-400'>
-          This global variable list no longer exists.
+          {tr('This global variable list no longer exists.')}
         </p>
       </div>
     )
@@ -318,7 +319,7 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
         className='flex w-full shrink-0 items-center gap-4 rounded-md bg-neutral-50 p-2 shadow-md dark:border dark:border-neutral-800 dark:bg-neutral-1000'
       >
         <div className='flex items-center gap-2'>
-          <span className='font-caption text-xs font-medium text-neutral-950 dark:text-white'>Name:</span>
+          <span className='font-caption text-xs font-medium text-neutral-950 dark:text-white'>{tr('Name:')}</span>
           <span
             aria-label='Global variable list name'
             className='font-caption text-xs text-neutral-850 dark:text-neutral-100'
@@ -331,7 +332,7 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
             htmlFor={`gvl-qualifier-${listName}`}
             className='font-caption text-xs font-medium text-neutral-950 dark:text-white'
           >
-            Qualifier:
+            {tr('Qualifier:')}
           </label>
           {/* The header qualifier (`VAR_GLOBAL CONSTANT`) appears nowhere in the table, and
               it round-trips to CODESYS, so the table view has to be able to show and set it. */}
@@ -341,7 +342,7 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
             key={list.qualifier ?? ''}
             defaultValue={list.qualifier ?? ''}
             onBlur={handleQualifierBlur}
-            placeholder='None'
+            placeholder={tr('None')}
             className='h-6 w-40 rounded-md border border-neutral-400 bg-white p-1 font-caption text-xs text-neutral-850 outline-none focus:border-brand dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
           />
         </div>
@@ -388,9 +389,9 @@ const GlobalVariableListEditor = ({ listName }: GlobalVariableListEditorProps) =
         <ViewModeToggle
           display={display}
           onDisplayChange={handleVisualizationTypeChange}
-          containerLabel='Global variable list visualization switch container'
-          tableLabel='Global variable list table visualization'
-          codeLabel='Global variable list code visualization'
+          containerLabel={tr('Global variable list visualization switch container')}
+          tableLabel={tr('Global variable list table visualization')}
+          codeLabel={tr('Global variable list code visualization')}
           className={cn({ 'ml-auto': display === 'code' })}
         />
       </div>

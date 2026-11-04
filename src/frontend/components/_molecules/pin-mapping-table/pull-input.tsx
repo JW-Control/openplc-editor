@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { CellContext } from '@tanstack/react-table'
 
 import type { DevicePin, PinPullMode, PinPullSpec } from '../../../../middleware/shared/ports/types'
@@ -28,7 +29,7 @@ export const PinPullInputCell = ({ row, column: { id }, table, pullSpec, selecte
   const rule = resolvePinPullRule(pullSpec, pin.pin)
   if (rule.kind === 'fixed') {
     return (
-      <span className={readOnlyClassName} title='Fixed by the board, not configurable'>
+      <span className={readOnlyClassName} title={tr('Fixed by the board, not configurable')}>
         {PIN_PULL_LABELS[rule.value]}
       </span>
     )

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { GraphicalEditorActiveProvider } from './active-context'
@@ -34,7 +35,10 @@ const GraphicalEditor = ({ name, language, readOnly, isActive = true }: Graphica
     <GraphicalEditorActiveProvider pouName={name} isActive={isActive}>
       <div className='relative h-full w-full overflow-y-auto'>
         {readOnly && (
-          <div className='absolute inset-0 z-10 cursor-not-allowed' title='Read-only: viewing historical commit' />
+          <div
+            className='absolute inset-0 z-10 cursor-not-allowed'
+            title={tr('Read-only: viewing historical commit')}
+          />
         )}
         <div className={`h-full w-full${readOnly ? ' pointer-events-none' : ''}`}>
           <GraphicalPlacementProvider language={language} isActive={isActive} readOnly={readOnly}>

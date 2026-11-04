@@ -1,5 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { useDeviceConfiguration } from '@root/frontend/hooks/use-device-configuration'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type {
   ConfiguredEtherCATDevice,
@@ -100,10 +101,14 @@ const DeviceDetailPanel = ({
         className='flex min-h-0 flex-1 flex-col overflow-hidden'
       >
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='info' label='Device Info' isActive={activeTab === 'info'} />
-          <TabItem value='configuration' label='Configuration' isActive={activeTab === 'configuration'} />
-          <TabItem value='startup-params' label='Startup Parameters' isActive={activeTab === 'startup-params'} />
-          <TabItem value='channel-mappings' label='Channel Mappings' isActive={activeTab === 'channel-mappings'} />
+          <TabItem value='info' label={tr('Device Info')} isActive={activeTab === 'info'} />
+          <TabItem value='configuration' label={tr('Configuration')} isActive={activeTab === 'configuration'} />
+          <TabItem value='startup-params' label={tr('Startup Parameters')} isActive={activeTab === 'startup-params'} />
+          <TabItem
+            value='channel-mappings'
+            label={tr('Channel Mappings')}
+            isActive={activeTab === 'channel-mappings'}
+          />
         </Tabs.List>
 
         {/* Device Info Tab */}
@@ -114,45 +119,45 @@ const DeviceDetailPanel = ({
           <div className='flex-1 overflow-auto p-4'>
             <div className='grid grid-cols-2 gap-x-6 gap-y-3 text-xs'>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Vendor</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Vendor')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.vendor.name || 'Unknown'}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Vendor ID</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Vendor ID')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.vendorId}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Product Code</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Product Code')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.productCode}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Revision</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Revision')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.revisionNo}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>ESI File</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('ESI File')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.filename || 'Not found'}</span>
               </div>
               {esiDevice?.groupName && (
                 <div className='flex flex-col gap-0.5'>
-                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>Group</span>
+                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Group')}</span>
                   <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.groupName}</span>
                 </div>
               )}
               {esiDevice && (
                 <>
                   <div className='flex flex-col gap-0.5'>
-                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>Input Channels</span>
+                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Input Channels')}</span>
                     <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.inputChannelCount}</span>
                   </div>
                   <div className='flex flex-col gap-0.5'>
-                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>Output Channels</span>
+                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Output Channels')}</span>
                     <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.outputChannelCount}</span>
                   </div>
                 </>
               )}
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Source</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Source')}</span>
                 <span
                   className={cn(
                     'inline-block w-fit rounded px-1.5 py-0.5 text-xs font-medium',

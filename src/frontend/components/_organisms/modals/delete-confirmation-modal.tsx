@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import type { PLCVariable } from '../../../../middleware/shared/ports/types'
 import { WarningIcon } from '../../../assets/icons/interface/Warning'
 import { useOpenPLCStore } from '../../../store'
@@ -161,8 +163,8 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
     removeRung(editorName, rung.id)
 
     toast({
-      title: 'Rung deleted success!',
-      description: 'Your rung was successfully deleted.',
+      title: tr('Rung deleted success!'),
+      description: tr('Your rung was successfully deleted.'),
       variant: 'default',
     })
   }
@@ -190,16 +192,16 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
         case 'pou':
           deletePouAction(name)
           toast({
-            title: 'POU deleted success!',
-            description: `POU "${name}" was successfully deleted.`,
+            title: tr('POU deleted success!'),
+            description: tr('POU "{{name}}" was successfully deleted.', { name }),
             variant: 'default',
           })
           break
         case 'datatype':
           deleteDatatypeAction(name)
           toast({
-            title: 'Datatype deleted success!',
-            description: `Datatype "${name}" was successfully deleted.`,
+            title: tr('Datatype deleted success!'),
+            description: tr('Datatype "{{name}}" was successfully deleted.', { name }),
             variant: 'default',
           })
           // Datatypes live inside project.json — they ride along the next
@@ -208,24 +210,24 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
         case 'global-variable-list':
           deleteGlobalVariableListAction(name)
           toast({
-            title: 'Global variable list deleted!',
-            description: `"${name}" was successfully deleted.`,
+            title: tr('Global variable list deleted!'),
+            description: tr('"{{name}}" was successfully deleted.', { name }),
             variant: 'default',
           })
           break
         case 'server':
           deleteServerAction(name)
           toast({
-            title: 'Server deleted success!',
-            description: `Server "${name}" was successfully deleted.`,
+            title: tr('Server deleted success!'),
+            description: tr('Server "{{name}}" was successfully deleted.', { name }),
             variant: 'default',
           })
           break
         case 'remote-device':
           deleteRemoteDeviceAction(name)
           toast({
-            title: 'Remote device deleted success!',
-            description: `Remote device "${name}" was successfully deleted.`,
+            title: tr('Remote device deleted success!'),
+            description: tr('Remote device "{{name}}" was successfully deleted.', { name }),
             variant: 'default',
           })
           break
@@ -234,8 +236,8 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
       }
     } catch (_error) {
       toast({
-        title: 'Error deleting element',
-        description: 'An error occurred while deleting the element. Please try again.',
+        title: tr('Error deleting element'),
+        description: tr('An error occurred while deleting the element. Please try again.'),
         variant: 'fail',
       })
     }
@@ -267,7 +269,7 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
           <WarningIcon className='mr-2 mt-2 h-[73px] w-[73px]' />
           <div>
             <p className='text-m w-full text-center font-bold text-gray-600 dark:text-neutral-100'>
-              Are you sure you want to delete this item?
+              {tr('Are you sure you want to delete this item?')}
             </p>
           </div>
           <div className='flex w-[200px] flex-col gap-1 space-y-2 text-sm'>
@@ -275,13 +277,13 @@ const ConfirmDeleteElementModal = ({ rung, isOpen, ...rest }: ConfirmDeleteEleme
               onClick={handleDeleteElement}
               className='w-full rounded-lg bg-brand px-4 py-2 text-center font-medium text-white'
             >
-              Delete
+              {tr('Delete')}
             </button>
             <button
               onClick={handleCloseModal}
               className='w-full rounded-md bg-neutral-100 px-4 py-2 font-medium dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </div>

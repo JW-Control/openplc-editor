@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import React, { useEffect, useRef } from 'react'
 
@@ -95,8 +96,10 @@ const DimensionsTable = ({
         writeDimensions(newRows.map((row) => ({ dimension: row.dimension })))
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Invalid array',
-          description: `The array value is invalid. Pattern: "LEFT_number..RIGHT_number" and RIGHT must be GREATER than LEFT. Example: 0..10.`,
+          title: tr('Invalid array'),
+          description: tr(
+            'The array value is invalid. Pattern: "LEFT_number..RIGHT_number" and RIGHT must be GREATER than LEFT. Example: 0..10.',
+          ),
           variant: 'fail',
         })
       } else {

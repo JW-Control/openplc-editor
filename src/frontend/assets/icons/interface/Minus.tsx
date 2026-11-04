@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -22,7 +23,7 @@ export const MinusIcon = (props: IMinusIconProps) => {
       className={cn(`${sizeClasses[size]}`, className)}
       {...res}
     >
-      <title>Minus Icon</title>
+      <title>{tr('Minus Icon')}</title>
       <path d='M1.28571 1H12.7143' stroke='#0464FB' strokeWidth='1.5' strokeLinecap='round' />
     </svg>
   )

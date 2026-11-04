@@ -1,4 +1,5 @@
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
+import { tr } from '@root/frontend/locales/tr'
 import { applyConfiguratorSnapshot } from '@root/frontend/services/apply-configurator-snapshot'
 import { markTabsUnsaved } from '@root/frontend/services/mark-tabs-unsaved'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
@@ -92,7 +93,7 @@ function ConfiguratorScreen({ section }: ConfiguratorScreenProps) {
         const applied = applyConfiguratorSnapshot(store, { configuratorKey, controller, bundleVersion }, snapshot)
         notifyDroppedAliases(applied.dropped)
       },
-      onError: (message) => toast({ title: 'I/O Configurator', description: message, variant: 'fail' }),
+      onError: (message) => toast({ title: tr('I/O Configurator'), description: message, variant: 'fail' }),
     })
     return () => session.dispose()
   }, [store, frameKey, controller, configuratorKey, bundleVersion])
@@ -105,11 +106,11 @@ function ConfiguratorScreen({ section }: ConfiguratorScreenProps) {
     )
   }
 
-  if (!url) return <Notice>The I/O Configurator is not available in this host yet.</Notice>
+  if (!url) return <Notice>{tr('The I/O Configurator is not available in this host yet.')}</Notice>
 
   return (
     <div className='flex min-h-0 flex-1 flex-col gap-2'>
-      {status.kind === 'booting' && <Notice>Loading the I/O Configurator…</Notice>}
+      {status.kind === 'booting' && <Notice>{tr('Loading the I/O Configurator…')}</Notice>}
       {status.kind === 'failed' && (
         <p role='alert' className='text-sm text-red-600 dark:text-red-400'>
           {status.message}
@@ -119,7 +120,7 @@ function ConfiguratorScreen({ section }: ConfiguratorScreenProps) {
       <iframe
         key={frameKey}
         ref={iframeRef}
-        title='I/O Configurator'
+        title={tr('I/O Configurator')}
         src={url}
         sandbox={IFRAME_SANDBOX}
         className={`min-h-[640px] w-full flex-1 rounded-md border border-neutral-200 bg-white dark:border-neutral-800 ${status.kind === 'failed' ? 'hidden' : ''} ${status.kind === 'booting' ? 'pointer-events-none' : ''}`}

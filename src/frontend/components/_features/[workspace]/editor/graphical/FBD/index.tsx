@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useMemo } from 'react'
 
 import { useGraphicalFocus } from '../../../../../../hooks/use-graphical-focus'
@@ -116,7 +117,7 @@ export default function FbdEditor() {
       {flow?.rung ? (
         <FBDBody rung={flow?.rung} nodeDivergences={nodeDivergences} isDebuggerActive={isDebuggerVisible} />
       ) : (
-        <span>No rung found for editor</span>
+        <span>{tr('No rung found for editor')}</span>
       )}
     </div>
   )

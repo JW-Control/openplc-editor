@@ -35,6 +35,7 @@
     "test:watch": "jest --watch --no-coverage",
     "test:e2e": "npm run build && npx playwright test",
     "validate:arch": "npx tsx src/__architecture__/validate.ts",
+    "i18n:check": "node scripts/i18n-check.js",
     "prepare": "husky"
   },
   "browserslist": [],

@@ -1,5 +1,6 @@
 import * as Switch from '@radix-ui/react-switch'
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import type { LibraryState } from '@root/frontend/store/slices/library'
 import { cn } from '@root/frontend/utils/cn'
@@ -411,10 +412,10 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
     // past this guard.
     if (hasLegacyInOutOutputHandle(selectedNode) || hasLegacyInOutOutputHandle(node)) {
       toast({
-        title: 'Update this block first',
-        description:
-          'It is still drawn with a VAR_IN_OUT pin on both sides. Hover the block and click its ' +
-          'update badge to convert it, then reapply this change.',
+        title: tr('Update this block first'),
+        description: tr(
+          'It is still drawn with a VAR_IN_OUT pin on both sides. Hover the block and click its update badge to convert it, then reapply this change.',
+        ),
         variant: 'fail',
       })
       return
@@ -539,10 +540,13 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
 
     if (droppedWires > 0) {
       toast({
-        title: `${droppedWires} connection${droppedWires === 1 ? '' : 's'} removed`,
-        description:
-          `The replacement block has no matching pin for ${droppedWires === 1 ? 'it' : 'them'}. ` +
-          'Reconnect to the pins you want.',
+        title:
+          droppedWires === 1
+            ? tr('1 connection removed')
+            : tr('{{droppedWires}} connections removed', { droppedWires }),
+        description: tr(
+          'The replacement block has no matching pin for some connections. Reconnect them to the pins you want.',
+        ),
         variant: 'fail',
       })
     }
@@ -565,7 +569,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => onOpenChange('block-fbd-element', open)}>
-      {/* <ModalTrigger>Open</ModalTrigger> */}
+      {/* <ModalTrigger>{tr('Open')}</ModalTrigger> */}
       <ModalContent
         onEscapeKeyDown={(event) => {
           event.preventDefault()
@@ -577,11 +581,13 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
         }}
         className='h-[739px] w-[625px] select-none flex-col gap-8 px-14 py-4'
       >
-        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>Block Properties</ModalTitle>
+        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>
+          {tr('Block Properties')}
+        </ModalTitle>
         <div className='flex h-[587px] w-full justify-between'>
           <div id='container-modifier-variable' className='h-full w-[236px]'>
             <div className='flex h-full w-full flex-col gap-2'>
-              <label className={labelStyle}>Type:</label>
+              <label className={labelStyle}>{tr('Type:')}</label>
               <ModalBlockLibrary selectedFileKey={selectedFileKey} setSelectedFileKey={setSelectedFileKey} />
               <div className='border-neural-100 h-full max-h-[119px] overflow-hidden rounded-lg border px-1 py-4 text-xs font-normal text-neutral-950 dark:border-neutral-850 dark:text-neutral-100'>
                 <div className='h-full overflow-y-auto'>
@@ -592,7 +598,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
           </div>
           <div id='preview' className='flex h-full w-[236px] flex-col gap-2'>
             <label htmlFor='name' className={labelStyle}>
-              Name:
+              {tr('Name:')}
             </label>
             <InputWithRef
               id='name'
@@ -608,7 +614,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
             {blockVariant.type === 'function' && blockVariant.extensible && (
               <>
                 <label htmlFor='inputs' className={labelStyle}>
-                  Inputs:
+                  {tr('Inputs:')}
                 </label>
                 <div className='flex items-center gap-1'>
                   <InputWithRef
@@ -630,7 +636,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
               </>
             )}
             <label htmlFor='executionOrder' className={labelStyle}>
-              Execution Order:
+              {tr('Execution Order:')}
             </label>
             <div className='flex items-center gap-1'>
               <InputWithRef
@@ -652,7 +658,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
 
             <div className='flex items-center gap-2'>
               <label htmlFor='executionControlSwitch' className={labelStyle}>
-                Execution Control:
+                {tr('Execution Control:')}
               </label>
               <Switch.Root
                 className={cn(
@@ -667,7 +673,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
             </div>
 
             <label htmlFor='block-preview' className={labelStyle}>
-              Preview
+              {tr('Preview')}
             </label>
             <div
               id='block-preview'
@@ -690,7 +696,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
             className='h-full w-[236px] items-center rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
             onClick={handleCloseModal}
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             className={
@@ -699,7 +705,7 @@ const BlockElement = <T extends object>({ isOpen, onClose, selectedNode }: Block
             disabled={!isFormValid || (!isExecutionOrderDirty && !isBlockDifferent)}
             onClick={handleBlockSubmit}
           >
-            Ok
+            {tr('Ok')}
           </button>
         </div>
       </ModalContent>

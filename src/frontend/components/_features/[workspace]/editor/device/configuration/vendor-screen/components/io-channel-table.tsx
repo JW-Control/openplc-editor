@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { IoMappingEntry } from '@root/middleware/shared/ports/types'
 import { type ReactNode, useEffect, useState } from 'react'
 
@@ -27,7 +28,7 @@ function AliasInputCell({
       onBlur={() => {
         if (local !== value && onCommit(local) === false) setLocal(value)
       }}
-      placeholder='Alias...'
+      placeholder={tr('Alias...')}
       className='h-[26px] w-full rounded border border-neutral-100 bg-white px-2 font-caption text-cp-sm text-neutral-850 outline-none placeholder:text-neutral-400 focus:border-brand-medium-dark dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300 dark:placeholder:text-neutral-600'
     />
   )
@@ -47,15 +48,15 @@ type IoChannelTableProps = {
 function IoChannelTable({ entries, typeOf, renderMode, aliasLabel, onAliasCommit }: IoChannelTableProps) {
   return (
     <section>
-      <h4 className='mb-2 font-caption text-sm font-semibold text-neutral-950 dark:text-white'>I/O Mapping</h4>
+      <h4 className='mb-2 font-caption text-sm font-semibold text-neutral-950 dark:text-white'>{tr('I/O Mapping')}</h4>
       <table className='w-full text-left'>
         <thead>
           <tr className='border-b border-neutral-200 dark:border-neutral-700'>
-            <th className={HEADER_CELL}>Channel</th>
-            <th className={HEADER_CELL}>Type</th>
-            {renderMode && <th className={HEADER_CELL}>Mode</th>}
-            <th className={HEADER_CELL}>IEC Address</th>
-            <th className={HEADER_CELL}>Alias</th>
+            <th className={HEADER_CELL}>{tr('Channel')}</th>
+            <th className={HEADER_CELL}>{tr('Type')}</th>
+            {renderMode && <th className={HEADER_CELL}>{tr('Mode')}</th>}
+            <th className={HEADER_CELL}>{tr('IEC Address')}</th>
+            <th className={HEADER_CELL}>{tr('Alias')}</th>
           </tr>
         </thead>
         <tbody>

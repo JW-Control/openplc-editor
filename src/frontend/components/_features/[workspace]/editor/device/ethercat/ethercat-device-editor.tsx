@@ -1,5 +1,6 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { useDeviceConfiguration } from '@root/frontend/hooks/use-device-configuration'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import type {
@@ -423,9 +424,9 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
     return (
       <div aria-label='EtherCAT device editor container' className='flex h-full w-full items-center justify-center p-4'>
         <div className='text-center'>
-          <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>Device not found</h2>
+          <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>{tr('Device not found')}</h2>
           <p className='mt-2 text-sm text-neutral-600 dark:text-neutral-400'>
-            The EtherCAT device could not be found. It may have been removed from the bus configuration.
+            {tr('The EtherCAT device could not be found. It may have been removed from the bus configuration.')}
           </p>
         </div>
       </div>
@@ -454,19 +455,23 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
               follows (now showing the aggregate across all configured
               modules). */}
           {device.isModularCoupler === true && (
-            <TabItem value='modules' label='Modules' isActive={activeTab === 'modules'} />
+            <TabItem value='modules' label={tr('Modules')} isActive={activeTab === 'modules'} />
           )}
           {!isSoftMotion && (
-            <TabItem value='channel-mappings' label='Channel Mappings' isActive={activeTab === 'channel-mappings'} />
+            <TabItem
+              value='channel-mappings'
+              label={tr('Channel Mappings')}
+              isActive={activeTab === 'channel-mappings'}
+            />
           )}
-          {device.cia402 && <TabItem value='axis' label='SoftMotion Axis' isActive={activeTab === 'axis'} />}
-          <TabItem value='info' label='Device Info' isActive={activeTab === 'info'} />
-          <TabItem value='configuration' label='Configuration' isActive={activeTab === 'configuration'} />
-          <TabItem value='process-data' label='Process Data' isActive={activeTab === 'process-data'} />
+          {device.cia402 && <TabItem value='axis' label={tr('SoftMotion Axis')} isActive={activeTab === 'axis'} />}
+          <TabItem value='info' label={tr('Device Info')} isActive={activeTab === 'info'} />
+          <TabItem value='configuration' label={tr('Configuration')} isActive={activeTab === 'configuration'} />
+          <TabItem value='process-data' label={tr('Process Data')} isActive={activeTab === 'process-data'} />
           {device.isModularCoupler === true && (
-            <TabItem value='diagnostics' label='Diagnostics' isActive={activeTab === 'diagnostics'} />
+            <TabItem value='diagnostics' label={tr('Diagnostics')} isActive={activeTab === 'diagnostics'} />
           )}
-          <TabItem value='startup-params' label='Startup Parameters' isActive={activeTab === 'startup-params'} />
+          <TabItem value='startup-params' label={tr('Startup Parameters')} isActive={activeTab === 'startup-params'} />
         </Tabs.List>
 
         {/* SoftMotion Axis (CiA 402) Tab */}
@@ -489,39 +494,39 @@ const EtherCATDeviceEditor = ({ busName: propBusName, deviceId: propDeviceId }: 
           <div className='flex-1 overflow-auto p-4'>
             <div className='grid grid-cols-2 gap-x-6 gap-y-3 text-xs'>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Vendor</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Vendor')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.vendor.name || 'Unknown'}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Vendor ID</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Vendor ID')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.vendorId}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Product Code</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Product Code')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.productCode}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Revision</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Revision')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{device.revisionNo}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>ESI File</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('ESI File')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{repoItem?.filename || 'Not found'}</span>
               </div>
               {esiDevice?.groupName && (
                 <div className='flex flex-col gap-0.5'>
-                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>Group</span>
+                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Group')}</span>
                   <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.groupName}</span>
                 </div>
               )}
               {esiDevice && (
                 <>
                   <div className='flex flex-col gap-0.5'>
-                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>Input Channels</span>
+                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Input Channels')}</span>
                     <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.inputChannelCount}</span>
                   </div>
                   <div className='flex flex-col gap-0.5'>
-                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>Output Channels</span>
+                    <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Output Channels')}</span>
                     <span className='text-neutral-700 dark:text-neutral-300'>{esiDevice.outputChannelCount}</span>
                   </div>
                 </>

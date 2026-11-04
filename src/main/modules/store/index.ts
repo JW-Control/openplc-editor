@@ -14,6 +14,9 @@ export const store = new Store<TStoreType>({
     theme: {
       type: 'string',
     },
+    language: {
+      type: 'string',
+    },
     window: {
       type: 'object',
       properties: {

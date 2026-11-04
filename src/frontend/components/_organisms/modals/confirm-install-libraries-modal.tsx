@@ -11,6 +11,7 @@
  * event the IPC handler fires.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import { useState } from 'react'
 
 import type { CatalogInstallItem } from '../../../../middleware/shared/ports/library-port'
@@ -81,7 +82,7 @@ const ConfirmInstallLibrariesModal = () => {
       <ModalContent className='flex max-h-[min(600px,92vh)] w-[520px] select-none flex-col rounded-lg p-6'>
         {phase === 'ready' && (
           <>
-            <ModalTitle className='mb-2 text-xl font-semibold'>Install libraries</ModalTitle>
+            <ModalTitle className='mb-2 text-xl font-semibold'>{tr('Install libraries')}</ModalTitle>
             <p className='mb-4 text-sm text-neutral-600 dark:text-neutral-400'>
               {selection.length === 1
                 ? 'The following library will be downloaded and installed:'
@@ -109,14 +110,14 @@ const ConfirmInstallLibrariesModal = () => {
                 onClick={handleCancel}
                 className='cursor-pointer rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
               <button
                 type='button'
                 onClick={() => void handleConfirm()}
                 className='cursor-pointer rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
               >
-                Confirm install
+                {tr('Confirm install')}
               </button>
             </div>
           </>
@@ -133,7 +134,7 @@ const ConfirmInstallLibrariesModal = () => {
 
         {phase === 'error' && (
           <>
-            <ModalTitle className='mb-2 text-xl font-semibold'>Install failed</ModalTitle>
+            <ModalTitle className='mb-2 text-xl font-semibold'>{tr('Install failed')}</ModalTitle>
             <p className='mb-4 text-sm text-red-600 dark:text-red-400'>{error}</p>
             <div className='flex justify-end gap-3'>
               <button
@@ -141,14 +142,14 @@ const ConfirmInstallLibrariesModal = () => {
                 onClick={handleCancel}
                 className='cursor-pointer rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
               >
-                Close
+                {tr('Close')}
               </button>
               <button
                 type='button'
                 onClick={() => void handleConfirm()}
                 className='cursor-pointer rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
               >
-                Retry
+                {tr('Retry')}
               </button>
             </div>
           </>
@@ -199,7 +200,7 @@ const ConfirmInstallLibrariesModal = () => {
                 onClick={handleClose}
                 className='cursor-pointer rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
               >
-                Done
+                {tr('Done')}
               </button>
             </div>
           </>

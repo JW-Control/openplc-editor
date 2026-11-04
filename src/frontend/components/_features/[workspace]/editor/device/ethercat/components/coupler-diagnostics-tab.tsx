@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { ConfiguredEtherCATDevice } from '@root/middleware/shared/ports/esi-types'
 import type { DiagnosticsSnapshot } from '@root/middleware/shared/ports/ethercat-diagnostics-port'
 import { useEtherCATDiagnostics } from '@root/middleware/shared/providers/platform-context'
@@ -18,7 +19,7 @@ export const CouplerDiagnosticsTab = ({ device, busName }: CouplerDiagnosticsTab
 
   const poll = useCallback(async () => {
     if (diagnosticsPort === undefined) {
-      setError('Diagnostics are not available on this platform.')
+      setError(tr('Diagnostics are not available on this platform.'))
       return
     }
     setIsPolling(true)
@@ -78,20 +79,21 @@ export const CouplerDiagnosticsTab = ({ device, busName }: CouplerDiagnosticsTab
 
       {snapshot !== null && statusWord === null && (
         <div className='rounded-md border border-neutral-300 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'>
-          The coupler status could not be read.
+          {tr('The coupler status could not be read.')}
         </div>
       )}
 
       {coupler?.ioConfigurationError === true && (
         <div className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'>
-          I/O configuration error: the modules on the station do not match the project configuration.
+          {tr('I/O configuration error: the modules on the station do not match the project configuration.')}
         </div>
       )}
 
       {coupler?.masterConfigurationError === true && (
         <div className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'>
-          Master configuration error: the coupler refused the configuration written at startup. Check the module list
-          and rebuild.
+          {tr(
+            'Master configuration error: the coupler refused the configuration written at startup. Check the module list and rebuild.',
+          )}
         </div>
       )}
 
@@ -100,16 +102,16 @@ export const CouplerDiagnosticsTab = ({ device, busName }: CouplerDiagnosticsTab
           <thead className='bg-neutral-50 dark:bg-neutral-900'>
             <tr>
               <th className='px-2 py-1.5 text-left text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                Slot
+                {tr('Slot')}
               </th>
               <th className='px-2 py-1.5 text-left text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                Ident
+                {tr('Ident')}
               </th>
               <th className='px-2 py-1.5 text-left text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                Name
+                {tr('Name')}
               </th>
               <th className='px-2 py-1.5 text-left text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                State
+                {tr('State')}
               </th>
             </tr>
           </thead>
@@ -117,7 +119,7 @@ export const CouplerDiagnosticsTab = ({ device, busName }: CouplerDiagnosticsTab
             {sorted.length === 0 ? (
               <tr>
                 <td colSpan={4} className='px-2 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400'>
-                  No modules configured on this coupler.
+                  {tr('No modules configured on this coupler.')}
                 </td>
               </tr>
             ) : (

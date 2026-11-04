@@ -1,4 +1,5 @@
 import { hasHmiDisplay, isHmiVendorScreen } from '@root/backend/shared/compile/jwplc-hmi'
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { projectCapabilities } from '../../../../middleware/shared/ports/types'
@@ -154,7 +155,7 @@ const Project = () => {
 
     const validationError = validateProjectName(trimmed)
     if (validationError) {
-      toast({ title: 'Invalid project name', description: validationError, variant: 'warn' })
+      toast({ title: tr('Invalid project name'), description: validationError, variant: 'warn' })
       setInputValue(name)
       return
     }
@@ -169,7 +170,7 @@ const Project = () => {
 
     if (!result.success) {
       toast({
-        title: 'Failed to rename project',
+        title: tr('Failed to rename project'),
         description: result.error ?? 'The project could not be renamed.',
         variant: 'fail',
       })
@@ -214,7 +215,7 @@ const Project = () => {
             <span
               id='project-name'
               className={`w-full cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium text-neutral-1000 dark:text-neutral-50`}
-              title='Edit name project'
+              title={tr('Edit name project')}
             >
               {name}
             </span>
@@ -418,7 +419,7 @@ const Project = () => {
                   elementType: { type: 'resource' },
                 })
                 setSelectedProjectTreeLeaf({
-                  label: 'Resource',
+                  label: tr('Resource'),
                   type: 'resource',
                 })
               }}
@@ -433,7 +434,7 @@ const Project = () => {
                   key='Configuration'
                   leafLang='devConfig'
                   leafType='device'
-                  label='Configuration'
+                  label={tr('Configuration')}
                   onClick={() =>
                     handleCreateTab({
                       name: 'Configuration',
@@ -447,7 +448,7 @@ const Project = () => {
                 <ProjectTreeLeaf
                   leafLang='devOrchestrators'
                   leafType='device'
-                  label='Edge Devices'
+                  label={tr('Edge Devices')}
                   onClick={() =>
                     handleCreateTab({
                       name: 'Edge Devices',
@@ -462,7 +463,7 @@ const Project = () => {
                   key='Runtime Status'
                   leafLang='devConfig'
                   leafType='device'
-                  label='Runtime Status'
+                  label={tr('Runtime Status')}
                   onClick={() =>
                     handleCreateTab({
                       name: 'Runtime Status',
@@ -477,7 +478,7 @@ const Project = () => {
                   key='Persistent Storage'
                   leafLang='persistentStorage'
                   leafType='persistent-storage'
-                  label='Persistent Storage'
+                  label={tr('Persistent Storage')}
                   onClick={() =>
                     handleCreateTab({
                       name: 'Persistent Storage',
@@ -492,7 +493,7 @@ const Project = () => {
                   key='User Management'
                   leafLang='userManagement'
                   leafType='user-management'
-                  label='User Management'
+                  label={tr('User Management')}
                   onClick={() =>
                     handleCreateTab({
                       name: 'User Management',

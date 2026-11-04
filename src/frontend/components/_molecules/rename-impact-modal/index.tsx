@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import type { ReactNode } from 'react'
 
 import type { ReferenceImpactAnalysis } from '../../../utils/variable-references/types'
@@ -62,20 +64,24 @@ export const RenameImpactModal = ({
               <p className='mb-2'>{description}</p>
             ) : hasMultipleChanges ? (
               <>
-                <p className='mb-2 font-medium'>The following variable changes will affect:</p>
+                <p className='mb-2 font-medium'>{tr('The following variable changes will affect:')}</p>
                 <ul className='mb-2 list-inside list-disc space-y-1'>
                   {changes.map((change, idx) => (
                     <li key={idx}>
                       {change.newName ? (
                         <>
-                          Rename <span className='font-semibold'>{change.oldName}</span> to{' '}
-                          <span className='font-semibold'>{change.newName}</span>
+                          {trRich('Rename {{oldName}} to {{newName}}', {
+                            oldName: <span className='font-semibold'>{change.oldName}</span>,
+                            newName: <span className='font-semibold'>{change.newName}</span>,
+                          })}
                         </>
                       ) : (
                         <>
-                          Change type of <span className='font-semibold'>{change.oldName}</span> from{' '}
-                          <span className='font-semibold'>{change.oldType}</span> to{' '}
-                          <span className='font-semibold'>{change.newType}</span>
+                          {trRich('Change type of {{name}} from {{oldType}} to {{newType}}', {
+                            name: <span className='font-semibold'>{change.oldName}</span>,
+                            oldType: <span className='font-semibold'>{change.oldType}</span>,
+                            newType: <span className='font-semibold'>{change.newType}</span>,
+                          })}
                         </>
                       )}
                     </li>
@@ -86,28 +92,34 @@ export const RenameImpactModal = ({
               <p className='mb-2'>
                 {singleChange.newName ? (
                   <>
-                    Renaming <span className='font-semibold'>{singleChange.oldName}</span> to{' '}
-                    <span className='font-semibold'>{singleChange.newName}</span> will affect:
+                    {trRich('Renaming {{oldName}} to {{newName}} will affect:', {
+                      oldName: <span className='font-semibold'>{singleChange.oldName}</span>,
+                      newName: <span className='font-semibold'>{singleChange.newName}</span>,
+                    })}
                   </>
                 ) : (
                   <>
-                    Changing type of <span className='font-semibold'>{singleChange.oldName}</span> from{' '}
-                    <span className='font-semibold'>{singleChange.oldType}</span> to{' '}
-                    <span className='font-semibold'>{singleChange.newType}</span> will affect:
+                    {trRich('Changing type of {{name}} from {{oldType}} to {{newType}} will affect:', {
+                      name: <span className='font-semibold'>{singleChange.oldName}</span>,
+                      oldType: <span className='font-semibold'>{singleChange.oldType}</span>,
+                      newType: <span className='font-semibold'>{singleChange.newType}</span>,
+                    })}
                   </>
                 )}
               </p>
             ) : (
               <p className='mb-2'>
-                Renaming <span className='font-semibold'>{oldName}</span> to{' '}
-                <span className='font-semibold'>{newName}</span> will affect:
+                {trRich('Renaming {{oldName}} to {{newName}} will affect:', {
+                  oldName: <span className='font-semibold'>{oldName}</span>,
+                  newName: <span className='font-semibold'>{newName}</span>,
+                })}
               </p>
             )}
           </div>
 
           <div className='rounded-md border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800'>
             <div className='mb-3 text-xs font-semibold text-neutral-950 dark:text-white'>
-              Total References: {impact.totalReferences}
+              {tr('Total References: {{totalReferences}}', { totalReferences: impact.totalReferences })}
             </div>
 
             {impact.byPou.size > 0 && (
@@ -140,7 +152,7 @@ export const RenameImpactModal = ({
           </div>
 
           <div className='text-xs text-neutral-600 dark:text-neutral-50'>
-            <p className='font-medium'>What would you like to do?</p>
+            <p className='font-medium'>{tr('What would you like to do?')}</p>
             <ul className='mt-2 list-inside list-disc space-y-1'>
               <li>
                 <span className='font-semibold'>{confirmLabel}:</span> {confirmDescription}

@@ -1,5 +1,6 @@
 import { DiffEditor, Editor } from '@monaco-editor/react'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@root/frontend/components/_organisms/panel'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import { ArrowLeftRight, Check, Minus } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
@@ -118,17 +119,17 @@ export function TextConflictResolver({
             onClick={() => onChange(sourceContent)}
             disabled={isResolved}
             className='flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-[11px] text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
-            title='Replace resolution with source content'
+            title={tr('Replace resolution with source content')}
           >
-            Use source
+            {tr('Use source')}
           </button>
           <button
             onClick={() => onChange(targetContent)}
             disabled={isResolved}
             className='flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-[11px] text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
-            title='Replace resolution with target content'
+            title={tr('Replace resolution with target content')}
           >
-            Use target
+            {tr('Use target')}
           </button>
           {isResolved ? (
             <button
@@ -136,7 +137,7 @@ export function TextConflictResolver({
               className='flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-[11px] text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
             >
               <Minus className='h-3 w-3' />
-              Unresolve
+              {tr('Unresolve')}
             </button>
           ) : (
             <button
@@ -150,7 +151,7 @@ export function TextConflictResolver({
               }
             >
               <Check className='h-3 w-3' />
-              Mark as resolved
+              {tr('Mark as resolved')}
             </button>
           )}
         </div>
@@ -204,7 +205,7 @@ export function TextConflictResolver({
         <ResizablePanel id='resolution-pane' order={2} defaultSize={55} minSize={20}>
           <div className='flex h-full flex-col'>
             <div className='flex shrink-0 items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-1 text-[10px] font-medium text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400'>
-              <span>YOUR RESOLUTION (edit freely)</span>
+              <span>{tr('YOUR RESOLUTION (edit freely)')}</span>
               {hasMarkers && (
                 <span className='text-amber-500'>
                   ⚠ Remove all `&lt;&lt;&lt;&lt;&lt;&lt;&lt;`, `=======`, `&gt;&gt;&gt;&gt;&gt;&gt;&gt;` markers to

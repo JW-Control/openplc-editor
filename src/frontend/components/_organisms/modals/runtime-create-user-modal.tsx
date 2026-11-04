@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useRef } from 'react'
 
 import { useRuntime } from '../../../../middleware/shared/providers'
@@ -77,9 +78,9 @@ const RuntimeCreateUserModal = () => {
       open={isOpen}
       onOpenChange={handleOpenChange}
       mode='bootstrap'
-      title='Create First User'
-      description='This OpenPLC Runtime has no users registered. Please create the first user account.'
-      submitLabel='Create User'
+      title={tr('Create First User')}
+      description={tr('This OpenPLC Runtime has no users registered. Please create the first user account.')}
+      submitLabel={tr('Create User')}
       onSubmit={handleSubmit}
     />
   )

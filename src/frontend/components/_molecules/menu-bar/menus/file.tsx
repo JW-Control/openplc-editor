@@ -1,4 +1,5 @@
 import * as MenuPrimitive from '@radix-ui/react-menubar'
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { useAppUpdate, useCapabilities, useProject } from '../../../../../middleware/shared/providers'
@@ -177,7 +178,7 @@ export const FileMenu = () => {
               onCheckedChange={handleToggleAutoCheck}
               onSelect={(event) => event.preventDefault()}
             >
-              <span>Check for Updates Automatically</span>
+              <span>{tr('Check for Updates Automatically')}</span>
               <MenuPrimitive.ItemIndicator className={ACCELERATOR}>✓</MenuPrimitive.ItemIndicator>
             </MenuPrimitive.CheckboxItem>
           )}

@@ -26,6 +26,7 @@ import { PackageManagerModule } from '../backend/editor/package-manager'
 import { clearCloudBuildRoot } from '../backend/editor/project/cloud-build-workspace'
 import { logger, PouService, ProjectService, UserService } from '../backend/editor/services'
 import { resolveHtmlPath } from '../backend/editor/utils'
+import { tr } from '../frontend/locales/tr'
 import { getErrorMessage } from '../frontend/utils/get-error-message'
 import type { EdgeOAuthProviderId } from '../middleware/shared/ports/edge-account-port'
 import { VENDOR_DOCUMENT_SCHEME } from '../middleware/shared/vendor-document/document-url'
@@ -35,6 +36,7 @@ import MainProcessBridge from './modules/ipc/main'
 import { installBundledVpp } from './modules/jwplc-bundled-vpp'
 import { createQuitCoordinator } from './modules/lifecycle/quit-coordinator'
 import { store } from './modules/store'
+import { applyUiLanguage, readSavedUiLanguage } from './modules/ui-language'
 import { createElectronUpdateService } from './modules/updater'
 import { createVendorDocumentHandler, leavesVendorDocument } from './modules/vendor-document/serve'
 
@@ -375,7 +377,7 @@ const createMainWindow = async () => {
 
   // Handles the creation of the menu
   const menuBuilder = new MenuBuilder(mainWindow, updateService)
-  void menuBuilder.buildMenu()
+  void applyUiLanguage(readSavedUiLanguage()).finally(() => void menuBuilder.buildMenu())
 
   /**
    * Creates a singleton instance for project service, which will be used across the entire application
@@ -594,8 +596,8 @@ async function installCliShimOnFirstRun(): Promise<void> {
         logger.info(`[cli-shim] ${message}`)
         void dialog.showMessageBox({
           type: 'info',
-          title: 'Command line tool not installed',
-          message: 'The openplc-cli command could not be installed',
+          title: tr('Command line tool not installed'),
+          message: tr('The openplc-cli command could not be installed'),
           detail: message,
           buttons: ['OK'],
         })

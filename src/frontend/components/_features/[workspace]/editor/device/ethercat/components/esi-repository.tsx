@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { ESIRepositoryItemLight } from '@root/middleware/shared/ports/esi-types'
 import { useEsi } from '@root/middleware/shared/providers/platform-context'
 import { useCallback, useState } from 'react'
@@ -117,7 +118,7 @@ const ESIRepository = ({ repository, onRepositoryChange, projectPath, isLoading 
               onClick={() => setUploadErrors([])}
               className='text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300'
             >
-              Dismiss
+              {tr('Dismiss')}
             </button>
           </div>
           {errorsExpanded && (

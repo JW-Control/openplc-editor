@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { IconStyles } from '../../../data/constants/icon-styles'
 import { cn } from '../../../utils/cn'
 import { IIconProps } from '../Types/iconTypes'
@@ -13,7 +15,7 @@ export const DarkThemeIcon = (props: IIconProps) => {
       className={cn(`${sizeClasses}`, className)}
       {...res}
     >
-      <title>Dark Theme Icon</title>
+      <title>{tr('Dark Theme Icon')}</title>
       <g clipPath='url(#clip0_1958_12610)'>
         <rect width='44' height='24' rx='12' fill='#0464FB' />
         <g filter='url(#filter0_dd_1958_12610)'>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 /**
  * The ⟷ badge that marks a `VAR_IN_OUT` pin, drawn after the pin name (`State ⟷`).
  *
@@ -19,7 +20,7 @@ const InOutPinMarker = () => (
     // deliberately `aria-hidden`.
     role='img'
     aria-label='in-out parameter'
-    title='VAR_IN_OUT — passed by reference: the block writes back to this variable'
+    title={tr('VAR_IN_OUT — passed by reference: the block writes back to this variable')}
     className='pointer-events-none ml-1 inline-flex w-3 shrink-0 select-none items-center align-middle'
   >
     <svg viewBox='0 0 12 9' fill='none' className='h-[9px] w-3' aria-hidden='true'>

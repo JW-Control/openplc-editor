@@ -75,6 +75,8 @@ import { discoverJwplcDevices } from '@root/backend/shared/network/jwplc-device-
 import type { SnapshotMetadata } from '@root/backend/shared/project/project-snapshot-archive'
 import { PlcRuntimeState } from '@root/backend/shared/simulator/types'
 import { PLCProjectData } from '@root/backend/shared/types/PLC/open-plc'
+import { isUiLanguage } from '@root/frontend/locales/language'
+import { tr } from '@root/frontend/locales/tr'
 import { getErrorMessage } from '@root/frontend/utils/get-error-message'
 import type { CompileProgramIpcArgs } from '@root/middleware/adapters/editor/compile-program-flow'
 import type { CompileLibraryIpcArgs } from '@root/middleware/adapters/editor/compiler-adapter'
@@ -171,6 +173,7 @@ import {
 } from '../../../backend/shared/utils/vpp/screen-actions'
 import { describeDebugEndpoint } from '../../../middleware/shared/utils/debug-endpoint'
 import { hmiDesignerHost } from '../hmi-designer'
+import { applyUiLanguage, saveUiLanguage } from '../ui-language'
 
 const EditSessionClientSchema = z.object({
   kind: z.literal('desktop'),
@@ -976,6 +979,7 @@ class MainProcessBridge implements MainIpcModule {
     // Theme and store handlers
     this.ipcMain.on('system:update-theme', this.mainIpcEventHandlers.handleUpdateTheme)
     this.ipcMain.handle('system:get-theme', this.mainIpcEventHandlers.handleGetTheme)
+    this.ipcMain.on('system:set-language', this.mainIpcEventHandlers.handleSetUiLanguage)
     // this.ipcMain.handle('app:store-get', this.mainIpcEventHandlers.getStoreValue)
 
     // ===================== COMPILER SERVICE =====================
@@ -1354,11 +1358,11 @@ class MainProcessBridge implements MainIpcModule {
   handleLibrariesInstallFromFile = async () => {
     if (!this.mainWindow) return { success: false, error: 'No main window' }
     const result = await dialog.showOpenDialog(this.mainWindow, {
-      title: 'Install Library',
+      title: tr('Install Library'),
       filters: [
-        { name: 'Library files', extensions: ['stlib', 'lib', 'library'] },
+        { name: tr('Library files'), extensions: ['stlib', 'lib', 'library'] },
         { name: 'STruC++ archive', extensions: ['stlib'] },
-        { name: 'CODESYS library', extensions: ['lib', 'library'] },
+        { name: tr('CODESYS library'), extensions: ['lib', 'library'] },
       ],
       properties: ['openFile'],
     })
@@ -2290,8 +2294,8 @@ class MainProcessBridge implements MainIpcModule {
   handlePackagesImportFromFile = async () => {
     if (!this.mainWindow) return { success: false, error: 'No main window' }
     const result = await dialog.showOpenDialog(this.mainWindow, {
-      title: 'Import Board Package',
-      filters: [{ name: 'VPP Package', extensions: ['vpp'] }],
+      title: tr('Import Board Package'),
+      filters: [{ name: tr('VPP Package'), extensions: ['vpp'] }],
       properties: ['openFile'],
     })
     if (result.canceled || result.filePaths.length === 0) {
@@ -3564,6 +3568,13 @@ class MainProcessBridge implements MainIpcModule {
       const appStore = this.store as unknown as { get: (key: string) => unknown }
       const stored = appStore.get('theme')
       return stored === 'light' || stored === 'dark' || stored === 'nineties' ? stored : null
+    },
+    handleSetUiLanguage: (_event: unknown, language: unknown) => {
+      if (!isUiLanguage(language)) return
+      saveUiLanguage(language)
+      void applyUiLanguage(language)
+        .then(() => this.menuBuilder.buildMenu())
+        .catch((error) => logger.error('Failed to apply UI language: ' + getErrorMessage(error)))
     },
     createPou: () => this.mainWindow?.webContents.send('pou:createPou', { ok: true }),
   }

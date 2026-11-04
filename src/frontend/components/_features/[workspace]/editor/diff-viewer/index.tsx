@@ -20,6 +20,7 @@
  * change instead of diffing against a stale snapshot.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useMemo } from 'react'
 
 import { useVersionControl } from '../../../../../../middleware/shared/providers'
@@ -36,10 +37,10 @@ export { GraphicalDiffViewer } from './graphical-diff-viewer'
 type FileStatus = 'A' | 'M' | 'D' | 'U'
 
 const FILE_STATUS_CONFIG: Record<FileStatus, { label: string; badge: string }> = {
-  A: { label: 'Added', badge: 'bg-green-500/10 text-green-500' },
-  M: { label: 'Modified', badge: 'bg-yellow-500/10 text-yellow-500' },
-  D: { label: 'Deleted', badge: 'bg-red-500/10 text-red-500' },
-  U: { label: 'Unchanged', badge: 'bg-neutral-500/10 text-neutral-400' },
+  A: { label: tr('Added'), badge: 'bg-green-500/10 text-green-500' },
+  M: { label: tr('Modified'), badge: 'bg-yellow-500/10 text-yellow-500' },
+  D: { label: tr('Deleted'), badge: 'bg-red-500/10 text-red-500' },
+  U: { label: tr('Unchanged'), badge: 'bg-neutral-500/10 text-neutral-400' },
 }
 
 function deriveStatus(original: string, current: string): FileStatus {
@@ -156,7 +157,7 @@ export function DiffViewerEditor() {
             <div className='flex h-full items-center justify-center'>
               <div className='flex flex-col items-center gap-3'>
                 <div className='h-5 w-5 animate-spin rounded-full border-2 border-brand-light border-t-transparent' />
-                <p className='text-xs text-neutral-500 dark:text-neutral-400'>Loading diff…</p>
+                <p className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Loading diff…')}</p>
               </div>
             </div>
           ) : (

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import type { RuntimeUserRole } from '../../../../middleware/shared/ports/runtime-port'
@@ -110,27 +111,27 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
     const roleChanged = showRole ? role !== initialRole : false
 
     if (!usernameTrimmed) {
-      setError('Username is required')
+      setError(tr('Username is required'))
       return
     }
 
     if (passwordChanged) {
       if (!password) {
-        setError('Password is required')
+        setError(tr('Password is required'))
         return
       }
       if (password !== confirmPassword) {
-        setError('Passwords do not match')
+        setError(tr('Passwords do not match'))
         return
       }
       if (requireCurrentPassword && !currentPassword) {
-        setError('Your current password is required to change the password')
+        setError(tr('Your current password is required to change the password'))
         return
       }
     }
 
     if (isEdit && !usernameChanged && !passwordChanged && !roleChanged) {
-      setError('No changes to save')
+      setError(tr('No changes to save'))
       return
     }
 
@@ -174,7 +175,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
         >
           <div>
             <Label htmlFor='runtime-user-name' className='mb-2 block text-sm'>
-              Username
+              {tr('Username')}
             </Label>
             <input
               id='runtime-user-name'
@@ -185,7 +186,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
               spellCheck={false}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder='Enter username'
+              placeholder={tr('Enter username')}
               className={inputClass}
               disabled={isLoading}
             />
@@ -194,7 +195,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
           {showRole && (
             <div>
               <Label htmlFor='runtime-user-role' className='mb-2 block text-sm'>
-                Role
+                {tr('Role')}
               </Label>
               <select
                 id='runtime-user-role'
@@ -203,8 +204,8 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
                 className={inputClass}
                 disabled={isLoading}
               >
-                <option value='admin'>Admin</option>
-                <option value='user'>User</option>
+                <option value='admin'>{tr('Admin')}</option>
+                <option value='user'>{tr('User')}</option>
               </select>
             </div>
           )}
@@ -221,7 +222,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
               value={password}
               onFocus={beginPasswordEdit}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder='Enter password'
+              placeholder={tr('Enter password')}
               className={inputClass}
               disabled={isLoading}
             />
@@ -229,7 +230,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
 
           <div>
             <Label htmlFor='runtime-user-pass-confirm' className='mb-2 block text-sm'>
-              Confirm password
+              {tr('Confirm password')}
             </Label>
             <input
               id='runtime-user-pass-confirm'
@@ -239,7 +240,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
               value={confirmPassword}
               onFocus={beginPasswordEdit}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder='Confirm password'
+              placeholder={tr('Confirm password')}
               className={inputClass}
               disabled={isLoading}
             />
@@ -251,7 +252,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
           {isEdit && requireCurrentPassword && passwordTouched && (
             <div>
               <Label htmlFor='runtime-user-current-pass' className='mb-2 block text-sm'>
-                Current password
+                {tr('Current password')}
               </Label>
               <input
                 id='runtime-user-current-pass'
@@ -260,7 +261,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
                 autoComplete='off'
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder='Enter your current password'
+                placeholder={tr('Enter your current password')}
                 className={inputClass}
                 disabled={isLoading}
               />
@@ -283,7 +284,7 @@ const RuntimeUserModal = (props: RuntimeUserModalProps) => {
               disabled={isLoading}
               className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </form>

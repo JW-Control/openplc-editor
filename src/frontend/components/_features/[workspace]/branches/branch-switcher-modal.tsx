@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { Branch } from '../../../../../middleware/shared/ports/version-control-port'
@@ -66,7 +67,7 @@ export function BranchSwitcherModal({
             type='text'
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder='Search branches...'
+            placeholder={tr('Search branches...')}
             autoFocus
             className='w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs text-neutral-900 placeholder-neutral-400 outline-none focus:border-blue-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder-neutral-500'
           />
@@ -75,11 +76,13 @@ export function BranchSwitcherModal({
         {/* Branch list */}
         <div className='max-h-56 overflow-y-auto py-1'>
           {isLoading && (
-            <p className='px-4 py-3 text-center text-xs text-neutral-500 dark:text-neutral-400'>Loading...</p>
+            <p className='px-4 py-3 text-center text-xs text-neutral-500 dark:text-neutral-400'>{tr('Loading...')}</p>
           )}
 
           {!isLoading && filtered.length === 0 && (
-            <p className='px-4 py-3 text-center text-xs text-neutral-500 dark:text-neutral-400'>No branches found</p>
+            <p className='px-4 py-3 text-center text-xs text-neutral-500 dark:text-neutral-400'>
+              {tr('No branches found')}
+            </p>
           )}
 
           {filtered.map((branch) => {
@@ -146,7 +149,7 @@ export function BranchSwitcherModal({
             <svg className='h-3.5 w-3.5' viewBox='0 0 16 16' fill='currentColor'>
               <path d='M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z' />
             </svg>
-            Create new branch
+            {tr('Create new branch')}
           </button>
         </div>
       </div>

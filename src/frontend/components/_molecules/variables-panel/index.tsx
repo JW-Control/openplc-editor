@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -284,7 +285,7 @@ const VariablesPanel = ({
       valueBuffer = encodeForceValue(forceValue, variableType, pendingForceContext.enumValues)
     } catch (error) {
       toast({
-        title: 'Cannot force value',
+        title: tr('Cannot force value'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'fail',
       })
@@ -424,7 +425,7 @@ const VariablesPanel = ({
       <div className='flex h-full w-full min-w-52 flex-col gap-2 overflow-hidden rounded-lg border-[0.75px] border-neutral-200 bg-white p-2 text-cp-sm font-medium text-neutral-1000 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-50'>
         <div className='flex h-7 w-[90px] select-none items-center gap-1 rounded-lg bg-neutral-100 p-1 text-cp-sm dark:bg-brand-dark'>
           <ZapIcon className='h-4 w-4' />
-          <p>Variables</p>
+          <p>{tr('Variables')}</p>
         </div>
         {variableTree && variableTree.size > 0 ? renderTreeView() : renderFlatView()}
       </div>
@@ -437,20 +438,20 @@ const VariablesPanel = ({
                 className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                 onClick={(e) => void handleForceTrue(e)}
               >
-                <p>Force True</p>
+                <p>{tr('Force True')}</p>
               </div>
               <div
                 className='flex w-full cursor-pointer items-center gap-2 px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                 onClick={(e) => void handleForceFalse(e)}
               >
-                <p>Force False</p>
+                <p>{tr('Force False')}</p>
               </div>
               {isForced && (
                 <div
                   className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                   onClick={(e) => void handleReleaseForce(e)}
                 >
-                  <p>Release Force</p>
+                  <p>{tr('Release Force')}</p>
                 </div>
               )}
             </>
@@ -460,14 +461,14 @@ const VariablesPanel = ({
                 className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                 onClick={(e) => void handleForceValue(e)}
               >
-                <p>Force Value</p>
+                <p>{tr('Force Value')}</p>
               </div>
               {isForced && (
                 <div
                   className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                   onClick={(e) => void handleReleaseForce(e)}
                 >
-                  <p>Release Force</p>
+                  <p>{tr('Release Force')}</p>
                 </div>
               )}
             </>
@@ -477,7 +478,7 @@ const VariablesPanel = ({
 
       <Modal open={forceValueModalOpen} onOpenChange={handleForceValueModalChange}>
         <ModalContent className='flex h-fit min-h-0 w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>
-          <ModalTitle className='mb-4 text-lg font-semibold'>Force Value</ModalTitle>
+          <ModalTitle className='mb-4 text-lg font-semibold'>{tr('Force Value')}</ModalTitle>
 
           <p className='mb-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
             Enter the value to force for {pendingForceContext?.compositeKey.split(':')[1] || 'this variable'}
@@ -486,7 +487,7 @@ const VariablesPanel = ({
           <div className='flex w-full flex-col gap-4'>
             <div>
               <Label htmlFor='force-value-input' className='mb-2 block text-sm'>
-                Value
+                {tr('Value')}
               </Label>
               <input
                 id='force-value-input'
@@ -494,7 +495,7 @@ const VariablesPanel = ({
                 value={forceValue}
                 onChange={(e) => setForceValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void handleForceValueConfirm()}
-                placeholder='Enter value'
+                placeholder={tr('Enter value')}
                 className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
                 autoFocus
               />
@@ -511,7 +512,7 @@ const VariablesPanel = ({
                 onClick={handleForceValueCancel}
                 className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
             </div>
           </div>

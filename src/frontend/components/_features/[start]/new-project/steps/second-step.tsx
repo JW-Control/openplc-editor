@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 import { SubmitHandler, useForm } from 'react-hook-form'
 
@@ -112,7 +113,7 @@ const Step2 = ({ onNext, onPrev, isFinalStep = false, onFinish, onClose }: Step2
         {/* Project Name */}
         <div className='flex flex-col items-center justify-center'>
           <h2 className='mb-2 select-none text-center text-lg font-semibold text-neutral-1000 dark:text-white'>
-            Give a name for the project: *
+            {tr('Give a name for the project: *')}
           </h2>
           <div className='relative h-10 w-64'>
             <input
@@ -120,7 +121,7 @@ const Step2 = ({ onNext, onPrev, isFinalStep = false, onFinish, onClose }: Step2
               className={`flex w-64 truncate bg-inherit px-2 py-0 text-sm font-medium leading-tight text-neutral-950 outline-none dark:text-white ${inputStyle}`}
               {...register('name', { required: true })}
               autoFocus
-              placeholder='Project Name'
+              placeholder={tr('Project Name')}
             />
           </div>
         </div>
@@ -129,7 +130,7 @@ const Step2 = ({ onNext, onPrev, isFinalStep = false, onFinish, onClose }: Step2
         {capabilities.hasNativeFileDialogs && (
           <div className='flex flex-col items-center'>
             <h2 className='mb-2 select-none text-center text-lg font-semibold text-neutral-1000 dark:text-white'>
-              Choose a parent directory for your project: *
+              {tr('Choose a parent directory for your project: *')}
             </h2>
             <div className='relative h-20 w-64'>
               {' '}
@@ -166,7 +167,7 @@ const Step2 = ({ onNext, onPrev, isFinalStep = false, onFinish, onClose }: Step2
             )}
             onClick={onPrev}
           >
-            Prev
+            {tr('Prev')}
           </button>
           <button
             type='submit'

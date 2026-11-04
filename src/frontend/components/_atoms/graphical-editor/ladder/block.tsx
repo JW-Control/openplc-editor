@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { FocusEvent, memo, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -172,7 +173,7 @@ export const BlockNodeElement = <T extends object>({
 
     if (!libraryBlock) {
       setBlockNameValue(validBlockNameValue)
-      toast({ title: 'Invalid name', description: 'The name could not be changed', variant: 'fail' })
+      toast({ title: tr('Invalid name'), description: tr('The name could not be changed'), variant: 'fail' })
       return
     }
 
@@ -189,8 +190,8 @@ export const BlockNodeElement = <T extends object>({
     if (libraryBlock && pou.pouType === 'function' && (libraryBlock as BlockVariant).type !== 'function') {
       setWrongName(true)
       toast({
-        title: 'Can not add block',
-        description: 'You can not add a function block to a function POU',
+        title: tr('Can not add block'),
+        description: tr('You can not add a function block to a function POU'),
         variant: 'fail',
       })
       return
@@ -617,7 +618,7 @@ const Block = <T extends object>(block: BlockProps<T>) => {
     })
 
     if (!rung || !node) {
-      toast({ title: 'Error', description: 'Could not find the related rung or node', variant: 'fail' })
+      toast({ title: tr('Error'), description: tr('Could not find the related rung or node'), variant: 'fail' })
       return
     }
 
@@ -920,7 +921,7 @@ const Block = <T extends object>(block: BlockProps<T>) => {
                 <RefreshIcon />
               </TooltipTrigger>
               <TooltipContent side='top' className='text-xs'>
-                Update node
+                {tr('Update node')}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

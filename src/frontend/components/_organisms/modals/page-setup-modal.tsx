@@ -5,6 +5,8 @@
  * (unlike the wizard's selection, this one is not reset on close).
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import { useOpenPLCStore } from '../../../store'
 import { Modal, ModalContent, ModalTitle } from '../../_molecules/modal'
 import { PageSetupFields } from '../../_molecules/page-setup-fields'
@@ -18,7 +20,7 @@ const PageSetupModal = () => {
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && close()}>
       <ModalContent className='flex h-fit w-[400px] select-none flex-col rounded-lg p-6'>
-        <ModalTitle className='mb-4 text-xl font-semibold'>Page Setup</ModalTitle>
+        <ModalTitle className='mb-4 text-xl font-semibold'>{tr('Page Setup')}</ModalTitle>
 
         <PageSetupFields />
 
@@ -28,7 +30,7 @@ const PageSetupModal = () => {
             onClick={close}
             className='flex-1 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
           >
-            Done
+            {tr('Done')}
           </button>
         </div>
       </ModalContent>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 
 import type { SystemLibrary, UserLibrary } from '../../../../middleware/shared/ports/library-types'
@@ -104,7 +105,7 @@ const Library = ({
               isSearchActive ? 'ml-0 w-0 opacity-0' : 'ml-1 w-[60px] opacity-100'
             }`}
           >
-            Library
+            {tr('Library')}
           </span>
         </div>
 
@@ -123,7 +124,7 @@ const Library = ({
               <InputWithRef
                 id='Search-File'
                 type='text'
-                placeholder='Search'
+                placeholder={tr('Search')}
                 className='h-8 w-full bg-neutral-100 px-2 font-caption text-xs font-medium focus:outline-none dark:bg-brand-dark'
                 value={filterText}
                 onChange={handleFilterChange}
@@ -191,7 +192,7 @@ const Library = ({
         </LibraryRoot>
         {filteredUserLibraries.length > 0 && (
           <LibraryRoot>
-            <LibraryFolder label='User-defined POUs' initiallyOpen={true}>
+            <LibraryFolder label={tr('User-defined POUs')} initiallyOpen={true}>
               {filteredUserLibraries
                 .filter((userLibrary) => userLibrary.name.toLowerCase().includes(filterText))
                 .map((userLibrary) => (

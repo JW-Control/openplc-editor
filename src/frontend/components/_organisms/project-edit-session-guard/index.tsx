@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import type { EditSessionSummary } from '../../../../middleware/shared/ports/edit-session-port'
@@ -195,7 +197,7 @@ export function ConflictDialog({
         <div className='flex flex-col items-center gap-3 text-center'>
           <WarningIcon className='h-14 w-14 stroke-amber-500' />
           <ModalTitle className='text-base font-bold text-gray-700 dark:text-neutral-100'>
-            This project is open in more than one place
+            {tr('This project is open in more than one place')}
           </ModalTitle>
         </div>
 
@@ -204,12 +206,15 @@ export function ConflictDialog({
             <strong>{projectName || 'This project'}</strong> is open in {total} places with your account.
           </p>
           <p>
-            Every save replaces the whole project, so two open copies would overwrite each other: what you save in one
-            place could undo work saved in the other, and could even bring back files that were deleted there.
+            {tr(
+              'Every save replaces the whole project, so two open copies would overwrite each other: what you save in one place could undo work saved in the other, and could even bring back files that were deleted there.',
+            )}
           </p>
           <p>
-            To keep your work safe, <strong>saving is paused</strong> until only one session is left. Choose the session
-            you want to close.
+            {trRich(
+              'To keep your work safe, {{paused}} until only one session is left. Choose the session you want to close.',
+              { paused: <strong>{tr('saving is paused')}</strong> },
+            )}
           </p>
         </div>
 
@@ -218,7 +223,7 @@ export function ConflictDialog({
             label={current.label}
             kind={current.kind}
             detail='This window'
-            actionLabel='Close this one'
+            actionLabel={tr('Close this one')}
             busy={busySessionId === currentSessionId}
             disabled={busy}
             onAction={onCloseThis}
@@ -229,7 +234,7 @@ export function ConflictDialog({
               label={session.clientLabel}
               kind={session.clientKind}
               detail={`Opened ${formatRelative(session.openedAt)}`}
-              actionLabel='Close'
+              actionLabel={tr('Close')}
               busy={busySessionId === session.id}
               disabled={busy}
               onAction={() => onCloseOther(session.id)}
@@ -244,7 +249,7 @@ export function ConflictDialog({
             className='flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950'
           >
             <p className='text-sm text-red-700 dark:text-red-300'>
-              This window has changes that were not saved. Closing it discards them.
+              {tr('This window has changes that were not saved. Closing it discards them.')}
             </p>
             <div className='flex justify-end gap-2'>
               <button
@@ -252,14 +257,14 @@ export function ConflictDialog({
                 onClick={onCancelCloseThis}
                 className='cursor-pointer rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800'
               >
-                Keep this window
+                {tr('Keep this window')}
               </button>
               <button
                 type='button'
                 onClick={onCloseThis}
                 className='cursor-pointer rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700'
               >
-                Close and discard changes
+                {tr('Close and discard changes')}
               </button>
             </div>
           </div>
@@ -267,12 +272,14 @@ export function ConflictDialog({
 
         {failed && (
           <p role='alert' className='text-sm text-red-600 dark:text-red-400'>
-            That session could not be closed. Try again in a moment.
+            {tr('That session could not be closed. Try again in a moment.')}
           </p>
         )}
 
         <p className='text-xs text-gray-500 dark:text-neutral-400'>
-          Changes that were not saved in the session you close are lost. The session you keep can save normally again.
+          {tr(
+            'Changes that were not saved in the session you close are lost. The session you keep can save normally again.',
+          )}
         </p>
       </ModalContent>
     </Modal>
@@ -336,19 +343,21 @@ export function StaleCopyDialog({ projectName, reloading, failed, onReload }: St
         <div className='flex flex-col items-center gap-3 text-center'>
           <WarningIcon className='h-14 w-14 stroke-amber-500' />
           <ModalTitle className='text-base font-bold text-gray-700 dark:text-neutral-100'>
-            This project changed in another place
+            {tr('This project changed in another place')}
           </ModalTitle>
         </div>
         <div id={descriptionId} className='flex flex-col gap-3 text-center text-sm text-gray-600 dark:text-neutral-300'>
           <p>
-            While this window was away, <strong>{projectName || 'this project'}</strong> was saved from another place.
-            This copy is out of date, so saving it is blocked: it would overwrite that work.
+            {trRich(
+              'While this window was away, {{project}} was saved from another place. This copy is out of date, so saving it is blocked: it would overwrite that work.',
+              { project: <strong>{projectName || tr('this project')}</strong> },
+            )}
           </p>
-          <p>Reload to get the latest version. Changes made here that were not saved will be lost.</p>
+          <p>{tr('Reload to get the latest version. Changes made here that were not saved will be lost.')}</p>
         </div>
         {failed && (
           <p role='alert' className='text-center text-sm text-red-600 dark:text-red-400'>
-            The project could not be reloaded. Try again in a moment.
+            {tr('The project could not be reloaded. Try again in a moment.')}
           </p>
         )}
         <button
@@ -383,22 +392,24 @@ export function ClosedElsewhereDialog({ projectName, onLeave }: { projectName: s
         <div className='flex flex-col items-center gap-3 text-center'>
           <WarningIcon className='h-14 w-14 stroke-amber-500' />
           <ModalTitle className='text-base font-bold text-gray-700 dark:text-neutral-100'>
-            This project was closed here
+            {tr('This project was closed here')}
           </ModalTitle>
         </div>
         <div id={descriptionId} className='flex flex-col gap-3 text-center text-sm text-gray-600 dark:text-neutral-300'>
           <p>
-            You chose to keep editing <strong>{projectName || 'this project'}</strong> in another place, so this copy
-            was closed to protect the work there.
+            {trRich(
+              'You chose to keep editing {{project}} in another place, so this copy was closed to protect the work there.',
+              { project: <strong>{projectName || tr('this project')}</strong> },
+            )}
           </p>
-          <p>Changes made in this window after its last save were not kept.</p>
+          <p>{tr('Changes made in this window after its last save were not kept.')}</p>
         </div>
         <button
           type='button'
           onClick={onLeave}
           className='w-full cursor-pointer rounded-lg bg-brand px-4 py-2 text-center text-sm font-medium text-white hover:bg-brand-medium-dark'
         >
-          Leave project
+          {tr('Leave project')}
         </button>
       </ModalContent>
     </Modal>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import * as monaco from 'monaco-editor'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -51,7 +52,7 @@ export const AICodeBlock = ({ code, language, onInsertAtCursor }: AICodeBlockPro
               onClick={() => onInsertAtCursor(code)}
               className='rounded px-1.5 py-0.5 hover:bg-neutral-200 dark:hover:bg-neutral-700'
             >
-              Insert
+              {tr('Insert')}
             </button>
           )}
         </div>

@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import type { BillingErrorPayload } from '../../../../../middleware/shared/ports/types'
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../../../_molecules/modal'
 
@@ -99,7 +101,7 @@ export const AcuExhaustionModal = ({
           )}
         {isRateLimit && resetLabel && (
           <p className='text-[12px] text-neutral-500 dark:text-neutral-400'>
-            Your usage window resets on {resetLabel}.
+            {tr('Your usage window resets on {{resetLabel}}.', { resetLabel })}
           </p>
         )}
         <div className='mt-2 flex items-center justify-end gap-2'>
@@ -108,7 +110,7 @@ export const AcuExhaustionModal = ({
             onClick={onDismiss}
             className='rounded px-3 py-1.5 text-[13px] text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.06] dark:hover:text-white'
           >
-            Dismiss
+            {tr('Dismiss')}
           </button>
           <a
             href={ctaUrl}

@@ -1,6 +1,7 @@
 import * as PrimitivePopover from '@radix-ui/react-popover'
 import { useAliasRegistry } from '@root/frontend/hooks/use-alias-registry'
 import { useProjectAliasBindings } from '@root/frontend/hooks/use-project-alias-bindings'
+import { tr } from '@root/frontend/locales/tr'
 import { isLiteralLocation } from '@root/middleware/shared/utils/iec-address/registry'
 import type { CellContext, RowData } from '@tanstack/react-table'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -94,7 +95,7 @@ const EditableNameCell = ({
 
     const [isNameLegal, reason] = isLegalIdentifier(newName)
     if (isNameLegal === false) {
-      toast({ title: 'Error', description: `'${newName}' ${reason}`, variant: 'fail' })
+      toast({ title: tr('Error'), description: `'${newName}' ${reason}`, variant: 'fail' })
       setCellValue(oldName)
       setIsEditing(false)
       return
@@ -103,7 +104,7 @@ const EditableNameCell = ({
     if (isResourceGlobal) {
       const collision = elementNameCollision(store.getState(), newName, 'resource-global', oldName)
       if (collision) {
-        toast({ title: 'Variable already exists', description: collision, variant: 'fail' })
+        toast({ title: tr('Variable already exists'), description: collision, variant: 'fail' })
         setCellValue(oldName)
         setIsEditing(false)
         return
@@ -399,10 +400,10 @@ const EditableLocationCell = ({
     const vendorGroups = buildVendorIoOptionGroups(id, vendorIoEntries)
 
     return [
-      { label: 'Analog Inputs', options: ainPins },
-      { label: 'Analog Outputs', options: aoutPins },
-      { label: 'Digital Inputs', options: dinPins },
-      { label: 'Digital Outputs', options: doutPins },
+      { label: tr('Analog Inputs'), options: ainPins },
+      { label: tr('Analog Outputs'), options: aoutPins },
+      { label: tr('Digital Inputs'), options: dinPins },
+      { label: tr('Digital Outputs'), options: doutPins },
       ...remoteGroups,
       ...vendorGroups,
     ]

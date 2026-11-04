@@ -1,6 +1,7 @@
 /**
  * This need to be refactored!!!!
  */
+import { tr } from '@root/frontend/locales/tr'
 import { startCase } from 'lodash'
 import { GitBranch as SourceControlIcon } from 'lucide-react'
 import { ComponentProps, useCallback, useMemo } from 'react'
@@ -362,7 +363,7 @@ export const NavigationPanelBreadcrumbs = ({
             value={selectedInstanceKey || ''}
             onChange={(e) => onInstanceChange?.(e.target.value)}
             className='h-5 cursor-pointer rounded border border-neutral-300 bg-white px-1 font-caption text-[10px] font-medium text-neutral-850 outline-none focus:border-brand focus:ring-1 focus:ring-brand dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
-            title='Select FB instance to debug'
+            title={tr('Select FB instance to debug')}
           >
             {fbInstances.map((inst) => (
               <option key={inst.key} value={inst.key}>

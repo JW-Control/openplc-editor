@@ -1,4 +1,5 @@
 import { getDeviceSummary } from '@root/backend/shared/ethercat/esi-parser'
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type { ESIDevice, ESIFile } from '@root/middleware/shared/ports/esi-types'
 
@@ -21,10 +22,10 @@ const ESIDeviceInfo = ({ esiFile, selectedDeviceIndex, onSelectDevice }: ESIDevi
     <div className='flex flex-col gap-4'>
       {/* Vendor Information */}
       <div className='rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-900'>
-        <h4 className='mb-2 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>Vendor</h4>
+        <h4 className='mb-2 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>{tr('Vendor')}</h4>
         <div className='grid grid-cols-2 gap-2 text-sm'>
           <div>
-            <span className='text-neutral-500 dark:text-neutral-400'>Name: </span>
+            <span className='text-neutral-500 dark:text-neutral-400'>{tr('Name:')} </span>
             <span className='font-medium text-neutral-700 dark:text-neutral-300'>{esiFile.vendor.name}</span>
           </div>
           <div>
@@ -37,7 +38,7 @@ const ESIDeviceInfo = ({ esiFile, selectedDeviceIndex, onSelectDevice }: ESIDevi
       {/* Device Selector (if multiple devices) */}
       {esiFile.devices.length > 1 && (
         <div className='flex flex-col gap-2'>
-          <label className='text-xs font-medium text-neutral-950 dark:text-white'>Select Device</label>
+          <label className='text-xs font-medium text-neutral-950 dark:text-white'>{tr('Select Device')}</label>
           <div className='flex flex-wrap gap-2'>
             {esiFile.devices.map((device, index) => (
               <button
@@ -75,23 +76,23 @@ const ESIDeviceInfo = ({ esiFile, selectedDeviceIndex, onSelectDevice }: ESIDevi
           {/* Device Details Grid */}
           <div className='grid grid-cols-2 gap-x-4 gap-y-2 text-xs md:grid-cols-4'>
             <div>
-              <span className='text-neutral-500 dark:text-neutral-400'>Product Code</span>
+              <span className='text-neutral-500 dark:text-neutral-400'>{tr('Product Code')}</span>
               <p className='font-mono font-medium text-neutral-700 dark:text-neutral-300'>
                 {selectedDevice.type.productCode}
               </p>
             </div>
             <div>
-              <span className='text-neutral-500 dark:text-neutral-400'>Revision</span>
+              <span className='text-neutral-500 dark:text-neutral-400'>{tr('Revision')}</span>
               <p className='font-mono font-medium text-neutral-700 dark:text-neutral-300'>
                 {selectedDevice.type.revisionNo}
               </p>
             </div>
             <div>
-              <span className='text-neutral-500 dark:text-neutral-400'>Physics</span>
+              <span className='text-neutral-500 dark:text-neutral-400'>{tr('Physics')}</span>
               <p className='font-medium text-neutral-700 dark:text-neutral-300'>{selectedDevice.physics || 'N/A'}</p>
             </div>
             <div>
-              <span className='text-neutral-500 dark:text-neutral-400'>CoE Support</span>
+              <span className='text-neutral-500 dark:text-neutral-400'>{tr('CoE Support')}</span>
               <p className='font-medium text-neutral-700 dark:text-neutral-300'>{summary?.hasCoe ? 'Yes' : 'No'}</p>
             </div>
           </div>
@@ -99,27 +100,29 @@ const ESIDeviceInfo = ({ esiFile, selectedDeviceIndex, onSelectDevice }: ESIDevi
           {/* I/O Summary */}
           {summary && (
             <div className='mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-700'>
-              <h4 className='mb-2 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>I/O Summary</h4>
+              <h4 className='mb-2 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
+                {tr('I/O Summary')}
+              </h4>
               <div className='grid grid-cols-2 gap-4 md:grid-cols-4'>
                 <div className='rounded-md bg-green-50 p-2 dark:bg-green-900/20'>
                   <p className='text-lg font-bold text-green-700 dark:text-green-400'>{summary.inputChannelCount}</p>
-                  <p className='text-xs text-green-600 dark:text-green-500'>Input Channels</p>
+                  <p className='text-xs text-green-600 dark:text-green-500'>{tr('Input Channels')}</p>
                 </div>
                 <div className='rounded-md bg-blue-50 p-2 dark:bg-blue-900/20'>
                   <p className='text-lg font-bold text-blue-700 dark:text-blue-400'>{summary.outputChannelCount}</p>
-                  <p className='text-xs text-blue-600 dark:text-blue-500'>Output Channels</p>
+                  <p className='text-xs text-blue-600 dark:text-blue-500'>{tr('Output Channels')}</p>
                 </div>
                 <div className='rounded-md bg-neutral-100 p-2 dark:bg-neutral-800'>
                   <p className='text-lg font-bold text-neutral-700 dark:text-neutral-300'>
                     {summary.totalInputBytes} B
                   </p>
-                  <p className='text-xs text-neutral-500 dark:text-neutral-400'>Input Size</p>
+                  <p className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Input Size')}</p>
                 </div>
                 <div className='rounded-md bg-neutral-100 p-2 dark:bg-neutral-800'>
                   <p className='text-lg font-bold text-neutral-700 dark:text-neutral-300'>
                     {summary.totalOutputBytes} B
                   </p>
-                  <p className='text-xs text-neutral-500 dark:text-neutral-400'>Output Size</p>
+                  <p className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Output Size')}</p>
                 </div>
               </div>
             </div>
@@ -129,7 +132,7 @@ const ESIDeviceInfo = ({ esiFile, selectedDeviceIndex, onSelectDevice }: ESIDevi
           {selectedDevice.syncManagers.length > 0 && (
             <div className='mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-700'>
               <h4 className='mb-2 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
-                Sync Managers
+                {tr('Sync Managers')}
               </h4>
               <div className='flex flex-wrap gap-2'>
                 {selectedDevice.syncManagers.map((sm) => (
@@ -152,7 +155,9 @@ const ESIDeviceInfo = ({ esiFile, selectedDeviceIndex, onSelectDevice }: ESIDevi
           {/* Description */}
           {selectedDevice.description && (
             <div className='mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-700'>
-              <h4 className='mb-1 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>Description</h4>
+              <h4 className='mb-1 text-xs font-medium uppercase text-neutral-500 dark:text-neutral-400'>
+                {tr('Description')}
+              </h4>
               <p className='text-xs text-neutral-600 dark:text-neutral-400'>{selectedDevice.description}</p>
             </div>
           )}

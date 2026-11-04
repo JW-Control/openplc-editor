@@ -1,4 +1,5 @@
 import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
 import { ReactNode, useEffect, useState } from 'react'
 
 import { ArrowIcon } from '../../../assets/icons/interface/Arrow'
@@ -60,7 +61,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
       >
         <div id='project-filter-dropdown-label'>
           <span className='cursor-default whitespace-nowrap font-caption text-base font-normal text-neutral-700 dark:text-neutral-500'>
-            Order by
+            {tr('Order by')}
           </span>
         </div>
         <PrimitiveDropdown.Root>
@@ -99,7 +100,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
               }}
               className='select-none bg-white outline-none hover:cursor-pointer hover:bg-neutral-50 aria-selected:bg-neutral-100 dark:bg-neutral-900 hover:dark:bg-neutral-700 dark:aria-selected:bg-neutral-800'
             >
-              <span>Recent</span>
+              <span>{tr('Recent')}</span>
             </PrimitiveDropdown.Item>
             <PrimitiveDropdown.Item
               id='project-filter-dropdown-item-name'
@@ -109,7 +110,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
               }}
               className='select-none bg-white outline-none hover:cursor-pointer hover:bg-neutral-50 aria-selected:bg-neutral-100 dark:bg-neutral-900 hover:dark:bg-neutral-700 dark:aria-selected:bg-neutral-800'
             >
-              <span>Name</span>
+              <span>{tr('Name')}</span>
             </PrimitiveDropdown.Item>
           </PrimitiveDropdown.Content>
         </PrimitiveDropdown.Root>
@@ -124,7 +125,7 @@ const ProjectFilterBar: React.FC<ProjectFilterBarProps> = ({ setSearchFilterValu
         <InputWithRef
           id='project-filter-search-input'
           type='text'
-          placeholder='Search for a project'
+          placeholder={tr('Search for a project')}
           className='h-full w-full bg-inherit text-black outline-none placeholder:select-none placeholder:font-caption placeholder:font-normal dark:text-white'
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchFilterValue(e.target.value)}
         />

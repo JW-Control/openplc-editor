@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { PLCDataType } from '../../../../../middleware/shared/ports/types'
@@ -123,7 +124,7 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
   const rejectBuffer = (message: string): boolean => {
     setParseError(message)
     lastRejectedCodeRef.current = editorCode
-    toast({ title: 'Syntax error', description: message, variant: 'fail' })
+    toast({ title: tr('Syntax error'), description: message, variant: 'fail' })
     return false
   }
 
@@ -187,9 +188,9 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
       const result = await rename(dataTypeName, dataType.name)
       if (result.ok) return { committed: true, name: dataType.name }
       // A declined impact modal is a user choice, not a failure.
-      if (!result.cancelled) toast({ title: 'Rename failed', description: result.message, variant: 'fail' })
+      if (!result.cancelled) toast({ title: tr('Rename failed'), description: result.message, variant: 'fail' })
     } catch (error) {
-      toast({ title: 'Rename failed', description: getErrorMessage(error), variant: 'fail' })
+      toast({ title: tr('Rename failed'), description: getErrorMessage(error), variant: 'fail' })
     }
     return { committed: true, name: dataTypeName }
   }
@@ -318,14 +319,14 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
             setEditorContent((prevContent) => (prevContent ? { ...prevContent, name: dataTypeName } : prevContent))
             // A declined impact modal is a user choice, not a failure.
             if (!result.cancelled) {
-              toast({ title: 'Rename failed', description: result.message, variant: 'fail' })
+              toast({ title: tr('Rename failed'), description: result.message, variant: 'fail' })
             }
           }
           setIsEditing(false)
         })
         .catch((error: unknown) => {
           setEditorContent((prevContent) => (prevContent ? { ...prevContent, name: dataTypeName } : prevContent))
-          toast({ title: 'Rename failed', description: getErrorMessage(error), variant: 'fail' })
+          toast({ title: tr('Rename failed'), description: getErrorMessage(error), variant: 'fail' })
           setIsEditing(false)
         })
     }
@@ -347,7 +348,7 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
             htmlFor='data-type-name'
             className='text-start font-caption text-xs font-medium text-neutral-950 dark:text-white'
           >
-            Name:
+            {tr('Name:')}
           </label>
           <div
             aria-label='Data type name input container'
@@ -377,9 +378,9 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
         <ViewModeToggle
           display={display}
           onDisplayChange={handleVisualizationTypeChange}
-          containerLabel='Data type visualization switch container'
-          tableLabel='Data type table visualization'
-          codeLabel='Data type code visualization'
+          containerLabel={tr('Data type visualization switch container')}
+          tableLabel={tr('Data type table visualization')}
+          codeLabel={tr('Data type code visualization')}
           className='ml-auto'
         />
       </div>
@@ -401,7 +402,9 @@ const DataTypeEditor = ({ dataTypeName, ...rest }: DatatypeEditorProps) => {
                 cursorPosition={codeCursorPosition}
               />
             </div>
-            {parseError && <p className='mt-2 shrink-0 text-xs text-red-500'>Error: {parseError}</p>}
+            {parseError && (
+              <p className='mt-2 shrink-0 text-xs text-red-500'>{tr('Error: {{parseError}}', { parseError })}</p>
+            )}
           </>
         )}
       </div>

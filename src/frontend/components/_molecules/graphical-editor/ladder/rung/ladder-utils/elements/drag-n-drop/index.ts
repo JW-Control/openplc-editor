@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type { RungLadderState } from '@root/frontend/store/slices'
 import { toast } from '@root/frontend/utils/toast'
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
@@ -309,7 +310,7 @@ export const onElementDrop = (rung: RungLadderState, oldStateRung: RungLadderSta
   // 5. Dispatch to the appropriate handler
   switch (action.type) {
     case 'blocked':
-      toast({ variant: 'warn', title: 'Action not supported', description: action.reason })
+      toast({ variant: 'warn', title: tr('Action not supported'), description: action.reason })
       return fallback
 
     case 'restore':

@@ -5,6 +5,8 @@ import { enrichDeviceData } from '@root/backend/shared/ethercat/enrich-device-da
 import type { EtherCATMasterConfig } from '@root/backend/shared/types/PLC/open-plc'
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { Modal, ModalContent, ModalTitle } from '@root/frontend/components/_molecules/modal'
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import type { OpenPLCStore } from '@root/frontend/store'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { elementNameCollision } from '@root/frontend/store/slices/shared/name-collision'
@@ -263,7 +265,7 @@ const EtherCATEditor = () => {
   const fetchInterfaces = useCallback(async () => {
     if (!isConnectedToRuntime) {
       setInterfaces([])
-      setInterfaceError('Not connected to runtime')
+      setInterfaceError(tr('Not connected to runtime'))
       return
     }
 
@@ -301,7 +303,7 @@ const EtherCATEditor = () => {
   const scanDevices = useCallback(async () => {
     if (isAddingRef.current) return
     if (!isConnectedToRuntime || !selectedInterface) {
-      setScanError('Please select a network interface')
+      setScanError(tr('Please select a network interface'))
       return
     }
 
@@ -324,7 +326,7 @@ const EtherCATEditor = () => {
         setScanTimeMs(result.data.scan_time_ms)
 
         if (result.data.status !== 'success') {
-          setScanError(`Scan completed with status: ${result.data.status}`)
+          setScanError(tr('Scan completed with status: {{status}}', { status: result.data.status }))
         }
       } else {
         setScanError(!result.success ? (result.error ?? 'Failed') : 'Scan failed')
@@ -536,7 +538,7 @@ const EtherCATEditor = () => {
         setUnmatchedAddAttempt(unmatched)
       }
     } catch (error) {
-      toast({ title: 'Failed to add EtherCAT devices', description: String(error), variant: 'fail' })
+      toast({ title: tr('Failed to add EtherCAT devices'), description: String(error), variant: 'fail' })
     } finally {
       isAddingRef.current = false
       setAddProgress(null)
@@ -599,7 +601,7 @@ const EtherCATEditor = () => {
         const { fileActions } = store.getState()
         fileActions.addFile({ name: newDevice.name, type: 'ethercat-device', filePath: deviceName })
       } catch (error) {
-        toast({ title: 'Failed to add EtherCAT device', description: String(error), variant: 'fail' })
+        toast({ title: tr('Failed to add EtherCAT device'), description: String(error), variant: 'fail' })
       } finally {
         isAddingRef.current = false
         setAddProgress(null)
@@ -630,8 +632,10 @@ const EtherCATEditor = () => {
     <div aria-label='EtherCAT editor container' className='flex h-full w-full flex-col overflow-hidden p-4'>
       {/* Header */}
       <div className='mb-4 shrink-0'>
-        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>EtherCAT Bus: {deviceName}</h2>
-        <p className='text-sm text-neutral-600 dark:text-neutral-400'>EtherCAT Master Configuration</p>
+        <h2 className='text-lg font-semibold text-neutral-1000 dark:text-neutral-100'>
+          {tr('EtherCAT Bus: {{deviceName}}', { deviceName })}
+        </h2>
+        <p className='text-sm text-neutral-600 dark:text-neutral-400'>{tr('EtherCAT Master Configuration')}</p>
       </div>
 
       {/* Tabs */}
@@ -641,9 +645,9 @@ const EtherCATEditor = () => {
         className='flex min-h-0 flex-1 flex-col overflow-hidden'
       >
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='scan-bus' label='Bus' isActive={activeTab === 'scan-bus'} />
-          <TabItem value='repository' label='Repository' isActive={activeTab === 'repository'} />
-          <TabItem value='advanced' label='Advanced' isActive={activeTab === 'advanced'} />
+          <TabItem value='scan-bus' label={tr('Bus')} isActive={activeTab === 'scan-bus'} />
+          <TabItem value='repository' label={tr('Repository')} isActive={activeTab === 'repository'} />
+          <TabItem value='advanced' label={tr('Advanced')} isActive={activeTab === 'advanced'} />
         </Tabs.List>
 
         {/* Scan Bus Tab */}
@@ -715,7 +719,7 @@ const EtherCATEditor = () => {
           onClose={() => setUnmatchedAddAttempt([])}
           className='!inset-x-0 !bottom-auto !top-1/2 !h-auto max-h-[80vh] w-[540px] !-translate-y-1/2 p-6'
         >
-          <ModalTitle>Missing ESI XML for some devices</ModalTitle>
+          <ModalTitle>{tr('Missing ESI XML for some devices')}</ModalTitle>
           <p className='text-sm text-neutral-700 dark:text-neutral-300'>
             {unmatchedAddAttempt.length === 1
               ? 'The device below could not be added because its ESI XML is not in the repository.'
@@ -727,16 +731,16 @@ const EtherCATEditor = () => {
               <thead className='sticky top-0 bg-neutral-100 dark:bg-neutral-900'>
                 <tr>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Pos
+                    {tr('Pos')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Name
+                    {tr('Name')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Vendor
+                    {tr('Vendor')}
                   </th>
                   <th className='px-3 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Product
+                    {tr('Product')}
                   </th>
                 </tr>
               </thead>
@@ -758,11 +762,13 @@ const EtherCATEditor = () => {
           </div>
 
           <div className='rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200'>
-            <p className='mb-1 font-medium'>How to fix</p>
+            <p className='mb-1 font-medium'>{tr('How to fix')}</p>
             <ol className='list-decimal pl-4'>
               <li>Download the ESI XML for each device from the manufacturer&apos;s website.</li>
               <li>
-                Open the <strong>Repository</strong> tab and import the XML files there.
+                {trRich('Open the {{tab}} tab and import the XML files there.', {
+                  tab: <strong>{tr('Repository')}</strong>,
+                })}
               </li>
               <li>Re-run the scan and click &quot;Add Selected&quot; again.</li>
             </ol>
@@ -776,7 +782,7 @@ const EtherCATEditor = () => {
               }}
               className='h-8 rounded-md border border-neutral-300 bg-white px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
             >
-              Go to Repository
+              {tr('Go to Repository')}
             </button>
             <button
               onClick={() => setUnmatchedAddAttempt([])}

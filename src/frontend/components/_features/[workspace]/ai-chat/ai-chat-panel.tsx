@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useQueryClient } from '@tanstack/react-query'
 import * as monaco from 'monaco-editor'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -266,7 +267,7 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
     async (userMessage: string) => {
       // Guard only: the composer is disabled in this state.
       if (!ai) {
-        setAIError('AI is not available on this platform.')
+        setAIError(tr('AI is not available on this platform.'))
         return
       }
 
@@ -510,7 +511,7 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
             setBillingError(error.billing)
           }
         } else if (!(error instanceof Error) || error.name !== 'AbortError') {
-          setAIError('An unexpected error occurred.')
+          setAIError(tr('An unexpected error occurred.'))
         }
       }
 
@@ -614,7 +615,9 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
   return (
     <div className='flex h-full w-full flex-col overflow-hidden rounded-[10px] border border-neutral-200 bg-white dark:border-neutral-850 dark:bg-neutral-950'>
       <header className='flex h-10 items-center gap-2 border-b border-neutral-100 pl-3 pr-2 dark:border-white/5'>
-        <span className='text-[13px] font-semibold tracking-[0.01em] text-neutral-900 dark:text-white'>AI Chat</span>
+        <span className='text-[13px] font-semibold tracking-[0.01em] text-neutral-900 dark:text-white'>
+          {tr('AI Chat')}
+        </span>
         <AITierBadge />
         <div className='flex-1' />
         {messages.length > 0 && (
@@ -622,9 +625,9 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
             type='button'
             onClick={handleClear}
             className='rounded px-2 py-1 text-[12px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-white'
-            title='Clear conversation'
+            title={tr('Clear conversation')}
           >
-            Clear
+            {tr('Clear')}
           </button>
         )}
         {ai?.conversations && (
@@ -640,7 +643,7 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
           type='button'
           onClick={() => setChatOpen(false)}
           className='grid h-[26px] w-[26px] place-items-center rounded text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-white'
-          title='Close chat'
+          title={tr('Close chat')}
         >
           <svg
             width='15'
@@ -684,10 +687,10 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
                 </svg>
               </div>
               <div className='mb-1.5 text-[17px] font-semibold text-neutral-900 dark:text-white'>
-                Ask about your project
+                {tr('Ask about your project')}
               </div>
               <p className='mx-auto max-w-[320px] text-[12.5px] leading-[1.55] text-neutral-500 dark:text-neutral-400'>
-                The AI can create POUs, add variables, explain code, and edit your project.
+                {tr('The AI can create POUs, add variables, explain code, and edit your project.')}
               </p>
             </div>
           ) : (
@@ -710,17 +713,17 @@ export const AIChatPanel = ({ transpileProject }: AIChatPanelProps = {}) => {
               type='button'
               onClick={handleKeepChanges}
               className='rounded-md bg-brand px-3.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-brand-medium-dark'
-              title='Save the project with AI changes'
+              title={tr('Save the project with AI changes')}
             >
-              Keep changes
+              {tr('Keep changes')}
             </button>
             <button
               type='button'
               onClick={handleUndoAIChanges}
               className='rounded-md border border-neutral-300 bg-transparent px-3.5 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/20 dark:text-white dark:hover:bg-white/[0.08]'
-              title='Revert all changes made by the AI in this turn'
+              title={tr('Revert all changes made by the AI in this turn')}
             >
-              Undo changes
+              {tr('Undo changes')}
             </button>
           </div>
         )}

@@ -28,6 +28,7 @@ import { MagnifierIcon } from '@root/frontend/assets/icons/interface/Magnifier'
 import { RefreshIcon } from '@root/frontend/assets/icons/interface/Refresh'
 import { TrashCanIcon } from '@root/frontend/assets/icons/interface/TrashCan'
 import { APP_VERSION } from '@root/frontend/data/constants/app-version'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore } from '@root/frontend/store'
 import { compareSemver, isCompatibleEditorVersion } from '@root/frontend/utils/semver'
 import type { RemoteCatalogEntry, RemoteVersionEntry } from '@root/middleware/shared/ports/types'
@@ -140,7 +141,7 @@ const CatalogBrowser = ({ installedVersions, onInstalled }: CatalogBrowserProps)
   if (!packages) {
     return (
       <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-        Package management is not available on this platform.
+        {tr('Package management is not available on this platform.')}
       </div>
     )
   }
@@ -158,7 +159,7 @@ const CatalogBrowser = ({ installedVersions, onInstalled }: CatalogBrowserProps)
             type='text'
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder='Search packages by name, vendor, or tag...'
+            placeholder={tr('Search packages by name, vendor, or tag...')}
             className='w-full rounded-md border border-neutral-200 bg-white py-2 pl-10 pr-3 font-caption text-cp-sm text-neutral-950 placeholder:text-neutral-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand dark:border-neutral-700 dark:bg-neutral-950 dark:text-white dark:placeholder:text-neutral-500'
             aria-label='Search remote catalog'
           />
@@ -168,7 +169,7 @@ const CatalogBrowser = ({ installedVersions, onInstalled }: CatalogBrowserProps)
           aria-label='Refresh catalog'
           onClick={() => void fetchCatalog()}
           disabled={isLoading}
-          title='Refresh catalog'
+          title={tr('Refresh catalog')}
           className='rounded-md p-2 hover:bg-neutral-100 disabled:opacity-30 dark:hover:bg-neutral-900'
         >
           <RefreshIcon size='sm' className='!fill-brand' />
@@ -179,7 +180,7 @@ const CatalogBrowser = ({ installedVersions, onInstalled }: CatalogBrowserProps)
       <div className='flex-1 overflow-y-auto px-4 py-3'>
         {isLoading ? (
           <div className='flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400'>
-            Loading catalog...
+            {tr('Loading catalog...')}
           </div>
         ) : error ? (
           <div className='flex h-full flex-col items-center justify-center gap-3 text-sm'>
@@ -189,7 +190,7 @@ const CatalogBrowser = ({ installedVersions, onInstalled }: CatalogBrowserProps)
               onClick={() => void fetchCatalog()}
               className='rounded-md border border-neutral-200 px-3 py-1.5 font-caption text-cp-sm text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900'
             >
-              Try again
+              {tr('Try again')}
             </button>
           </div>
         ) : filteredEntries.length === 0 ? (
@@ -248,14 +249,14 @@ function computeTriggerState(
   latestCompatible: RemoteVersionEntry | null,
 ): TriggerState {
   if (!latestCompatible) {
-    return { kind: 'incompatible', label: 'Editor outdated' }
+    return { kind: 'incompatible', label: tr('Editor outdated') }
   }
   if (!installedVersion) {
-    return { kind: 'install', label: 'Install' }
+    return { kind: 'install', label: tr('Install') }
   }
   const cmp = compareSemver(latestCompatible.version, installedVersion)
-  if (cmp > 0) return { kind: 'update', label: 'Update' }
-  return { kind: 'installed', label: 'Installed' }
+  if (cmp > 0) return { kind: 'update', label: tr('Update') }
+  return { kind: 'installed', label: tr('Installed') }
 }
 
 const CatalogCard = ({
@@ -330,18 +331,18 @@ const CatalogCard = ({
       {isExpanded && (
         <div className='border-t border-neutral-100 px-3 pb-3 pt-2 dark:border-neutral-800'>
           <div className='grid grid-cols-2 gap-x-4 gap-y-2'>
-            <DetailRow label='Package ID' value={entry.packageId} />
-            <DetailRow label='License' value={entry.license ?? '—'} />
+            <DetailRow label={tr('Package ID')} value={entry.packageId} />
+            <DetailRow label={tr('License')} value={entry.license ?? '—'} />
             <DetailRow
-              label='Latest version'
+              label={tr('Latest version')}
               value={`v${latestVersion.version}${latestVersion.minEditorVersion ? ` · requires editor ${latestVersion.minEditorVersion}+` : ''}`}
             />
             <DetailRow
-              label='Latest published'
+              label={tr('Latest published')}
               value={latestVersion.publishedAt ? new Date(latestVersion.publishedAt).toLocaleDateString() : '—'}
             />
-            {entry.vendor.url && <DetailRow label='Vendor' value={entry.vendor.url} />}
-            {installedVersion && <DetailRow label='Currently installed' value={`v${installedVersion}`} />}
+            {entry.vendor.url && <DetailRow label={tr('Vendor')} value={entry.vendor.url} />}
+            {installedVersion && <DetailRow label={tr('Currently installed')} value={`v${installedVersion}`} />}
           </div>
         </div>
       )}
@@ -396,7 +397,7 @@ const ActionMenuButton = ({
             className='z-50 min-w-[220px] rounded-lg border border-neutral-100 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-950'
           >
             <DropdownMenu.Label className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400'>
-              Available versions
+              {tr('Available versions')}
             </DropdownMenu.Label>
             {entry.versions.map((v) => {
               const compatible = isCompatibleEditorVersion(v.minEditorVersion, APP_VERSION)
@@ -432,7 +433,7 @@ const ActionMenuButton = ({
                   className='flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 font-caption text-[11px] font-medium text-red-600 outline-none data-[highlighted]:bg-red-50 dark:text-red-400 dark:data-[highlighted]:bg-red-950/30'
                 >
                   <TrashCanIcon className='h-3.5 w-3.5 stroke-current' />
-                  Uninstall
+                  {tr('Uninstall')}
                 </DropdownMenu.Item>
               </>
             )}

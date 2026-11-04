@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { cn } from '@root/frontend/utils/cn'
 import type {
   EtherCATMasterStatus,
@@ -185,7 +186,7 @@ function RuntimeStatusPanel({ ipAddress, jwtToken, isConnected, masterName }: Ru
     return (
       <div className='flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900'>
         <StatusDot color='gray' />
-        <span className='text-xs text-neutral-500 dark:text-neutral-400'>Not connected to runtime</span>
+        <span className='text-xs text-neutral-500 dark:text-neutral-400'>{tr('Not connected to runtime')}</span>
       </div>
     )
   }
@@ -195,7 +196,7 @@ function RuntimeStatusPanel({ ipAddress, jwtToken, isConnected, masterName }: Ru
       <div className='flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900'>
         <StatusDot color='gray' />
         <span className='text-xs text-neutral-500 dark:text-neutral-400'>
-          EtherCAT plugin not active - start PLC with EtherCAT configuration
+          {tr('EtherCAT plugin not active - start PLC with EtherCAT configuration')}
         </span>
       </div>
     )
@@ -212,7 +213,7 @@ function RuntimeStatusPanel({ ipAddress, jwtToken, isConnected, masterName }: Ru
           onClick={() => void fetchStatus()}
           className='text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300'
         >
-          Retry
+          {tr('Retry')}
         </button>
       </div>
     )
@@ -272,11 +273,11 @@ function RuntimeStatusPanel({ ipAddress, jwtToken, isConnected, masterName }: Ru
           <table className='w-full text-xs'>
             <thead>
               <tr className='border-b border-neutral-200 text-left text-[10px] uppercase text-neutral-500 dark:border-neutral-700 dark:text-neutral-400'>
-                <th className='px-2 py-1'>Pos</th>
-                <th className='px-2 py-1'>Name</th>
-                <th className='px-2 py-1'>State</th>
-                <th className='px-2 py-1'>AL Status</th>
-                <th className='px-2 py-1'>Errors</th>
+                <th className='px-2 py-1'>{tr('Pos')}</th>
+                <th className='px-2 py-1'>{tr('Name')}</th>
+                <th className='px-2 py-1'>{tr('State')}</th>
+                <th className='px-2 py-1'>{tr('AL Status')}</th>
+                <th className='px-2 py-1'>{tr('Errors')}</th>
               </tr>
             </thead>
             <tbody>

@@ -1,4 +1,5 @@
 import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
 import type { CellContext } from '@tanstack/react-table'
 import _ from 'lodash'
 import { useEffect, useState } from 'react'
@@ -309,7 +310,7 @@ const SelectableTypeCell = ({
                       <div className='sticky top-0 z-10 bg-white p-2 dark:bg-neutral-950'>
                         <InputWithRef
                           type='text'
-                          placeholder='Search...'
+                          placeholder={tr('Search...')}
                           className='w-full rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700 outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500'
                           value={filterText}
                           onChange={(e) =>
@@ -353,7 +354,9 @@ const SelectableTypeCell = ({
               }}
               className='flex h-8 w-full cursor-pointer items-center justify-center py-1 outline-none hover:bg-neutral-100 data-[state=open]:bg-neutral-100 dark:hover:bg-neutral-900 data-[state=open]:dark:bg-neutral-900'
             >
-              <span className='font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>Array</span>
+              <span className='font-caption text-xs font-normal text-neutral-700 dark:text-neutral-500'>
+                {tr('Array')}
+              </span>
             </PrimitiveDropdown.Item>
 
             {availableLibraryTypes.map((scope) => {
@@ -376,7 +379,7 @@ const SelectableTypeCell = ({
                       <div className='sticky top-0 z-10 bg-white p-2 dark:bg-neutral-950'>
                         <InputWithRef
                           type='text'
-                          placeholder='Search...'
+                          placeholder={tr('Search...')}
                           className='w-full rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700 outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500'
                           value={libraryFilter}
                           onChange={(e) => setLibraryFilter(e.target.value)}
@@ -555,8 +558,8 @@ const NO_FLAG = '__none__'
  *  stays empty and the accessible name says what the option means. */
 const VARIABLE_FLAGS: Array<{ value: string; label: string; a11yLabel: string }> = [
   { value: NO_FLAG, label: '', a11yLabel: 'No flag' },
-  { value: 'constant', label: 'Constant', a11yLabel: 'Constant' },
-  { value: 'retain', label: 'Retain', a11yLabel: 'Retain' },
+  { value: 'constant', label: tr('Constant'), a11yLabel: 'Constant' },
+  { value: 'retain', label: tr('Retain'), a11yLabel: 'Retain' },
 ]
 
 const SelectableFlagCell = ({

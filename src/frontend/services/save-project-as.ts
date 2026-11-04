@@ -11,6 +11,8 @@
  * the retrieved case is simply the one where it is not optional.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import type { PlatformCapabilities } from '../../middleware/shared/ports/platform-capabilities'
 import type { ProjectPort } from '../../middleware/shared/ports/project-port'
 import type { OpenPLCStore } from '../store'
@@ -43,8 +45,8 @@ export async function executeSaveProjectAs(
 ): Promise<SaveProjectAsResult> {
   if (!projectPort.pickPath) {
     toast({
-      title: 'Save As is not available here',
-      description: 'This platform cannot choose a folder to save into.',
+      title: tr('Save As is not available here'),
+      description: tr('This platform cannot choose a folder to save into.'),
       variant: 'fail',
     })
     return { success: false }
@@ -92,8 +94,8 @@ export async function executeSaveProjectAs(
     // its pre-edit body, so writing it and calling the project saved would be a
     // lie about work the user can see on screen.
     toast({
-      title: 'Some diagrams could not be saved',
-      description: 'Fix the reported diagram errors, then try Save As again.',
+      title: tr('Some diagrams could not be saved'),
+      description: tr('Fix the reported diagram errors, then try Save As again.'),
       variant: 'fail',
     })
     return { success: false }
@@ -102,7 +104,7 @@ export async function executeSaveProjectAs(
   const written = await projectPort.saveProject(files)
   if (!written.success) {
     toast({
-      title: 'Could not save the project there',
+      title: tr('Could not save the project there'),
       description: written.error ?? 'The files could not be written to that folder.',
       variant: 'fail',
     })
@@ -129,8 +131,8 @@ export async function executeSaveProjectAs(
   })
 
   toast({
-    title: 'Project saved',
-    description: `Saved to ${picked.path}.`,
+    title: tr('Project saved'),
+    description: tr('Saved to {{path}}.', { path: picked.path }),
     variant: 'default',
   })
   return { success: true, projectPath: picked.path }

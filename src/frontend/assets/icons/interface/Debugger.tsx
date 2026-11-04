@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { cn } from '../../../utils/cn'
@@ -26,7 +27,7 @@ export const DebuggerIcon = ({ className, variant = 'default', size = 'sm', ...r
       className={cn(`${SizeClasses[size]}`, className)}
       {...res}
     >
-      <title>Debugger Icon</title>
+      <title>{tr('Debugger Icon')}</title>
       <path
         fillRule='evenodd'
         clipRule='evenodd'

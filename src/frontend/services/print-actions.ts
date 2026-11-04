@@ -13,6 +13,7 @@
  * engine never imports Monaco/LSP/DOM, so it can run in a Worker.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import * as monaco from 'monaco-editor'
 
 import type { ColoredLine, PrintPou, PrintRequest, PrintVar, TextRun } from '../../middleware/shared/ports/print-types'
@@ -243,7 +244,7 @@ export async function executeExportPdf(
 
     if (!exportResult.success) {
       toast({
-        title: 'Error exporting PDF',
+        title: tr('Error exporting PDF'),
         description: exportResult.error ?? 'Failed to save the exported file.',
         variant: 'fail',
       })
@@ -251,14 +252,14 @@ export async function executeExportPdf(
     }
 
     toast({
-      title: 'Project exported',
-      description: `"${fileName}" was exported successfully.`,
+      title: tr('Project exported'),
+      description: tr('"{{fileName}}" was exported successfully.', { fileName }),
       variant: 'default',
     })
     return { success: true }
   } catch (err) {
     toast({
-      title: 'Error exporting PDF',
+      title: tr('Error exporting PDF'),
       description: err instanceof Error ? err.message : 'An unexpected error occurred while exporting.',
       variant: 'fail',
     })

@@ -9,6 +9,7 @@
  * "what you previewed is what you get" is structural, not a promise.
  */
 
+import { tr } from '@root/frontend/locales/tr'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
@@ -323,7 +324,7 @@ const PdfPreviewViewer = ({
         >
           {docState.status === 'loading' && (
             <div className='flex h-full items-center justify-center text-sm text-neutral-600 dark:text-neutral-400'>
-              Opening the preview…
+              {tr('Opening the preview…')}
             </div>
           )}
           {docState.status === 'error' && (
@@ -359,7 +360,7 @@ const PdfPreviewViewer = ({
               ‹
             </button>
             <span className='px-2'>
-              Page {currentPage} of {docState.numPages}
+              {tr('Page {{currentPage}} of {{numPages}}', { currentPage, numPages: docState.numPages })}
             </span>
             <button
               type='button'
@@ -494,7 +495,7 @@ const ExportPdfModal = () => {
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && close()}>
       <ModalContent className='flex h-[92vh] w-[92vw] select-none flex-col rounded-lg p-6'>
-        <ModalTitle className='mb-4 text-xl font-semibold'>Export to PDF</ModalTitle>
+        <ModalTitle className='mb-4 text-xl font-semibold'>{tr('Export to PDF')}</ModalTitle>
 
         {step === 'select' && (
           <div className='flex min-h-0 flex-1 flex-col gap-3'>
@@ -511,7 +512,7 @@ const ExportPdfModal = () => {
                     allSelected ? printActions.clearPouSelection() : printActions.selectAllPous(allNames)
                   }
                 />
-                Select all
+                {tr('Select all')}
               </label>
               <span className='text-sm text-neutral-600 dark:text-neutral-400'>
                 {selectedCount} of {allNames.length} selected
@@ -520,23 +521,23 @@ const ExportPdfModal = () => {
 
             <div className='min-h-0 flex-1 overflow-auto rounded-md border border-neutral-200 dark:border-neutral-800'>
               {allNames.length === 0 ? (
-                <p className='p-4 text-sm text-neutral-500'>No printable POUs in this project.</p>
+                <p className='p-4 text-sm text-neutral-500'>{tr('No printable POUs in this project.')}</p>
               ) : (
                 <>
                   <PouGroup
-                    title='Functions'
+                    title={tr('Functions')}
                     pous={functions}
                     selected={print.selectedPouNames}
                     onToggle={printActions.togglePou}
                   />
                   <PouGroup
-                    title='Function Blocks'
+                    title={tr('Function Blocks')}
                     pous={functionBlocks}
                     selected={print.selectedPouNames}
                     onToggle={printActions.togglePou}
                   />
                   <PouGroup
-                    title='Programs'
+                    title={tr('Programs')}
                     pous={programs}
                     selected={print.selectedPouNames}
                     onToggle={printActions.togglePou}
@@ -551,7 +552,9 @@ const ExportPdfModal = () => {
           <div className='flex min-h-0 flex-1 flex-col gap-4 overflow-auto'>
             {selectedCount >= 2 && (
               <fieldset className='flex flex-col gap-1'>
-                <legend className='text-sm font-medium text-neutral-850 dark:text-neutral-300'>Page sharing</legend>
+                <legend className='text-sm font-medium text-neutral-850 dark:text-neutral-300'>
+                  {tr('Page sharing')}
+                </legend>
                 <label className='flex items-center gap-2 text-sm text-neutral-850 dark:text-neutral-300'>
                   <input
                     type='radio'
@@ -559,7 +562,7 @@ const ExportPdfModal = () => {
                     checked={print.pagePolicy === 'new-page-per-pou'}
                     onChange={() => printActions.setPagePolicy('new-page-per-pou')}
                   />
-                  Start each POU on a new page
+                  {tr('Start each POU on a new page')}
                 </label>
                 <label className='flex items-center gap-2 text-sm text-neutral-850 dark:text-neutral-300'>
                   <input
@@ -568,7 +571,7 @@ const ExportPdfModal = () => {
                     checked={print.pagePolicy === 'may-share-page'}
                     onChange={() => printActions.setPagePolicy('may-share-page')}
                   />
-                  Let short POUs share a page
+                  {tr('Let short POUs share a page')}
                 </label>
               </fieldset>
             )}
@@ -580,7 +583,7 @@ const ExportPdfModal = () => {
           <div className='flex min-h-0 flex-1 flex-col gap-2'>
             {renderState.status === 'loading' && (
               <div className='flex flex-1 items-center justify-center text-sm text-neutral-600 dark:text-neutral-400'>
-                Rendering preview…
+                {tr('Rendering preview…')}
               </div>
             )}
             {renderState.status === 'error' && (
@@ -600,18 +603,18 @@ const ExportPdfModal = () => {
 
         {step === 'exporting' && (
           <div className='flex flex-1 items-center justify-center text-sm text-neutral-600 dark:text-neutral-400'>
-            Exporting…
+            {tr('Exporting…')}
           </div>
         )}
 
         <div className='mt-4 flex items-center justify-between gap-3'>
           <div className='flex gap-3'>
             <button type='button' onClick={close} disabled={step === 'exporting'} className={SECONDARY_BUTTON}>
-              Cancel
+              {tr('Cancel')}
             </button>
             {(step === 'options' || step === 'preview') && (
               <button type='button' onClick={handleBack} className={SECONDARY_BUTTON}>
-                Back
+                {tr('Back')}
               </button>
             )}
           </div>
@@ -622,12 +625,12 @@ const ExportPdfModal = () => {
               disabled={selectedCount === 0}
               className={PRIMARY_BUTTON}
             >
-              Next
+              {tr('Next')}
             </button>
           )}
           {step === 'options' && (
             <button type='button' onClick={() => setStep('preview')} className={PRIMARY_BUTTON}>
-              Next
+              {tr('Next')}
             </button>
           )}
           {step === 'preview' && (
@@ -637,7 +640,7 @@ const ExportPdfModal = () => {
               disabled={renderState.status !== 'ready'}
               className={PRIMARY_BUTTON}
             >
-              Export
+              {tr('Export')}
             </button>
           )}
         </div>

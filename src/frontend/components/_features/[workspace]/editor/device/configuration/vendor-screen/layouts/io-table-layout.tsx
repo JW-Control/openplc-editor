@@ -1,4 +1,5 @@
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { getSectionPersistenceKey, isDeviceSetupIoTable } from '@root/frontend/utils/vpp/persistence-keys'
 import { resolveModuleChannels, type ResolverModuleDef } from '@root/frontend/utils/vpp/resolve-module-channels'
@@ -43,7 +44,7 @@ function AliasInputCell({ value, onCommit }: { value: string; onCommit: (next: s
       onBlur={() => {
         if (local !== value) onCommit(local)
       }}
-      placeholder='Alias...'
+      placeholder={tr('Alias...')}
       className='h-[26px] w-full rounded border border-neutral-100 bg-white px-2 font-caption text-cp-sm text-neutral-850 outline-none placeholder:text-neutral-400 focus:border-brand-medium-dark dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300 dark:placeholder:text-neutral-600'
     />
   )
@@ -277,7 +278,7 @@ function ManifestIoTable({ section, moduleSystem }: IoTableLayoutProps) {
   if (entries.length === 0) {
     return (
       <div className='flex items-center justify-center p-8 text-sm text-neutral-500 dark:text-neutral-400'>
-        No modules configured. Assign modules in Backplane Configuration to generate I/O mappings.
+        {tr('No modules configured. Assign modules in Backplane Configuration to generate I/O mappings.')}
       </div>
     )
   }
@@ -316,7 +317,7 @@ function ManifestIoTable({ section, moduleSystem }: IoTableLayoutProps) {
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
                 </svg>
                 <span className='font-caption text-cp-sm font-semibold text-neutral-950 dark:text-white'>
-                  Slot {slot}
+                  {tr('Slot {{slot}}', { slot })}
                 </span>
                 <span className='font-caption text-cp-sm font-medium text-neutral-600 dark:text-neutral-400'>
                   {group.moduleName}
@@ -332,16 +333,16 @@ function ManifestIoTable({ section, moduleSystem }: IoTableLayoutProps) {
                 <thead>
                   <tr className='border-t border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-950'>
                     <th className='px-4 py-1.5 font-caption text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                      Channel
+                      {tr('Channel')}
                     </th>
                     <th className='px-3 py-1.5 font-caption text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                      Type
+                      {tr('Type')}
                     </th>
                     <th className='px-3 py-1.5 font-caption text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                      IEC Address
+                      {tr('IEC Address')}
                     </th>
                     <th className='px-3 py-1.5 font-caption text-[11px] font-medium text-neutral-500 dark:text-neutral-400'>
-                      Alias
+                      {tr('Alias')}
                     </th>
                   </tr>
                 </thead>

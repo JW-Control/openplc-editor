@@ -20,6 +20,7 @@
  */
 
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import type { DeviceLicenseReport } from '@root/middleware/shared/ports/device-port'
 import { useState } from 'react'
 
@@ -98,7 +99,7 @@ function describeOutcome(report: DeviceLicenseReport): {
   switch (report.outcome.state) {
     case 'licensed':
       return {
-        label: 'Licensed',
+        label: tr('Licensed'),
         Icon: ShieldLicensedIcon,
         negative: false,
         detail:
@@ -108,7 +109,7 @@ function describeOutcome(report: DeviceLicenseReport): {
       }
     case 'unlicensed':
       return {
-        label: 'Not licensed',
+        label: tr('Not licensed'),
         Icon: ShieldUnlicensedIcon,
         negative: true,
         detail: report.outcome.entitlementChecked
@@ -122,7 +123,7 @@ function describeOutcome(report: DeviceLicenseReport): {
       // hardware limitation and cost a debugging session on a NodeMCU that stores
       // licences fine — the image was simply built without the backend.
       return {
-        label: 'Storage missing',
+        label: tr('Storage missing'),
         Icon: ShieldUnknownIcon,
         negative: false,
         detail:
@@ -131,7 +132,7 @@ function describeOutcome(report: DeviceLicenseReport): {
       }
     case 'check-failed':
       return {
-        label: 'Licence check failed',
+        label: tr('Licence check failed'),
         Icon: ShieldUnknownIcon,
         negative: false,
         detail: `${report.outcome.error}\n\nThis is not the same as having no licence. Nothing on the device has changed.`,
@@ -156,7 +157,7 @@ export function DeviceLicenseStatus({
   if (!report) {
     return isChecking ? (
       <span className='font-caption text-cp-xs font-medium text-neutral-500 dark:text-neutral-500'>
-        Checking licence…
+        {tr('Checking licence…')}
       </span>
     ) : null
   }
@@ -249,7 +250,7 @@ export function DeviceLicenseStatus({
 
           {deviceId ? (
             <div className='flex flex-col gap-1'>
-              <span className='font-caption text-cp-xs text-neutral-500 dark:text-neutral-500'>Device ID</span>
+              <span className='font-caption text-cp-xs text-neutral-500 dark:text-neutral-500'>{tr('Device ID')}</span>
               <div className='flex items-start gap-2'>
                 <code className='min-w-0 break-all font-mono text-cp-xs text-neutral-700 dark:text-neutral-300'>
                   {deviceId}
@@ -276,8 +277,9 @@ export function DeviceLicenseStatus({
 
           {awaitingPurchase ? (
             <p className='font-caption text-cp-sm text-neutral-600 dark:text-neutral-400'>
-              Waiting for the purchase to complete. OpenPLC keeps checking for up to ten minutes and writes the licence
-              to this device as soon as the purchase clears. You can keep working in the meantime.
+              {tr(
+                'Waiting for the purchase to complete. OpenPLC keeps checking for up to ten minutes and writes the licence to this device as soon as the purchase clears. You can keep working in the meantime.',
+              )}
             </p>
           ) : null}
 
@@ -292,12 +294,12 @@ export function DeviceLicenseStatus({
                   onClick={onRecheck}
                   className='font-caption text-cp-xs text-neutral-600 hover:underline disabled:opacity-50 dark:text-neutral-400'
                 >
-                  Check again
+                  {tr('Check again')}
                 </button>
               ) : null}
               {offerPurchase ? (
                 <button type='button' onClick={onBuy} className='font-caption text-cp-xs text-brand hover:underline'>
-                  Buy licence
+                  {tr('Buy licence')}
                 </button>
               ) : null}
               {awaitingPurchase ? (
@@ -306,7 +308,7 @@ export function DeviceLicenseStatus({
                   onClick={onCancelPurchaseWatch}
                   className='font-caption text-cp-xs text-neutral-600 hover:underline dark:text-neutral-400'
                 >
-                  Stop waiting
+                  {tr('Stop waiting')}
                 </button>
               ) : null}
             </div>

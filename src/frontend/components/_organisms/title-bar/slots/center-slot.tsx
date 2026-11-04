@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { useCapabilities } from '../../../../../middleware/shared/providers'
 import { OpenPLCIcon } from '../../../../assets/icons/oplc'
 import { useOpenPLCStore } from '../../../../store'
@@ -16,10 +18,10 @@ const TitleBarCenterSlot = () => {
       {caps.isNativeApplication ? (
         <>
           <OpenPLCIcon />
-          <span className='font-caption text-xs font-normal'>OpenPLC Editor</span>
+          <span className='font-caption text-xs font-normal'>{tr('OpenPLC Editor')}</span>
         </>
       ) : (
-        path === '' && <span className='font-caption text-xs font-normal'>OpenPLC Editor</span>
+        path === '' && <span className='font-caption text-xs font-normal'>{tr('OpenPLC Editor')}</span>
       )}
     </div>
   )

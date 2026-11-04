@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ColumnFiltersState } from '@tanstack/react-table'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -1034,7 +1035,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unexpected syntax error.'
       setParseError(message)
-      toast({ title: 'Syntax error', description: message, variant: 'fail' })
+      toast({ title: tr('Syntax error'), description: message, variant: 'fail' })
       return false
     }
   }
@@ -1124,7 +1125,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                       htmlFor='return-type'
                       className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
                     >
-                      Return type :
+                      {tr('Return type :')}
                     </label>
                     <Select value={returnType} onValueChange={handleReturnTypeChange}>
                       <SelectTrigger
@@ -1164,7 +1165,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                   htmlFor='description'
                   className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
                 >
-                  Description :
+                  {tr('Description :')}
                 </label>
                 <InputWithRef
                   id='description'
@@ -1183,7 +1184,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
                   htmlFor='class-filter'
                   className='w-fit text-nowrap text-xs font-medium text-neutral-1000 dark:text-neutral-300'
                 >
-                  Class Filter :
+                  {tr('Class Filter :')}
                 </label>
                 <Select value={editorVariables.classFilter} onValueChange={handleFilterChange}>
                   <SelectTrigger
@@ -1267,9 +1268,9 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
               onDisplayChange={(value) => {
                 void handleVisualizationTypeChange(value)
               }}
-              containerLabel='Variables visualization switch container'
-              tableLabel='Variables table visualization'
-              codeLabel='Variables code visualization'
+              containerLabel={tr('Variables visualization switch container')}
+              tableLabel={tr('Variables table visualization')}
+              codeLabel={tr('Variables code visualization')}
               className={cn({ 'absolute right-0': editorVariables.display === 'code' })}
             />
           </div>
@@ -1324,9 +1325,9 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
             onDisplayChange={(value) => {
               void handleVisualizationTypeChange(value)
             }}
-            containerLabel='Variables visualization switch container'
-            tableLabel='Variables table visualization'
-            codeLabel='Variables code visualization'
+            containerLabel={tr('Variables visualization switch container')}
+            tableLabel={tr('Variables table visualization')}
+            codeLabel={tr('Variables code visualization')}
             className={cn({ 'absolute right-0 top-0': editorVariables.display === 'code' })}
           />
         </div>
@@ -1362,7 +1363,7 @@ const VariablesEditor = ({ name: propName, isActive: _isActive = true }: Variabl
               pouName={editor.meta.name}
             />
 
-            {parseError && <p className='mt-2 text-xs text-red-500'>Error: {parseError}</p>}
+            {parseError && <p className='mt-2 text-xs text-red-500'>{tr('Error: {{parseError}}', { parseError })}</p>}
           </div>
         )}
       </div>
