@@ -528,18 +528,17 @@ const Project = () => {
                     }
                   />
                 ))}
+              {/* JWPLC HMI Designer — boards with an HMI display (JWPLC Basic). */}
+              {projectCaps.hasVendorScreens && capabilities.hasLocalSerialPorts && showHmiDesigner && (
+                <ProjectTreeLeaf
+                  key='hmi-designer'
+                  leafLang='hmiDesigner'
+                  leafType='hmi-designer'
+                  label={HMI_DESIGNER_TAB_NAME}
+                  onClick={() => openHmiDesignerTab(store)}
+                />
+              )}
             </ProjectTreeBranch>
-          )}
-
-          {/* JWPLC HMI Designer — boards with an HMI display (JWPLC Basic). */}
-          {projectCaps.hasVendorScreens && capabilities.hasLocalSerialPorts && showHmiDesigner && (
-            <ProjectTreeLeaf
-              key='hmi-designer'
-              leafLang='hmiDesigner'
-              leafType='hmi-designer'
-              label={HMI_DESIGNER_TAB_NAME}
-              onClick={() => openHmiDesignerTab(store)}
-            />
           )}
 
           {/* Project Servers tree branch — gated by project type only.
