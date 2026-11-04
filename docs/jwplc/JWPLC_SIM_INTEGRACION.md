@@ -26,17 +26,17 @@ el Modbus de la pantalla del VPP.
 
 El botón se muestra con `capabilities.hmiDisplay`, la marca que usa el editor para el JWPLC Basic.
 
-## Mejora pendiente: alias de E/S en el Sim
+## Alias de E/S
 
-Los proyectos con variables ligadas a alias de E/S (`AT M_Q0`, `AT RI0`) no compilan en el Sim. Dan «is an I/O alias,
-not an address». Se reprodujo con `PruebaMultibit` y la cadena 4.3.3 (PR #28 de `jwplc-sim`).
+Las variables ligadas a alias (`AT Out0`) compilan en el Sim desde `feature/alpha18-alias-openplc` de `jwplc-sim`. El
+editor resuelve los alias en el renderer, así que el Sim hace lo mismo con `resolveProjectAliases`, usando las
+direcciones guardadas en el proyecto.
 
-- **Causa:** el editor resuelve los alias en el renderer antes de compilar, con `getCompileReadyProjectData()`.
-  `cli/lib/openplc.mjs` del Sim solo reproduce la cadena del proceso principal, así que ese paso no se ejecuta.
-- **Datos:** los alias están en `vendorScreenData['io-mapping'].entries` de `devices/configuration.json`, cada uno con
-  su `iecAddress`.
-- **Arreglo:** en `jwplc-sim`, resolver `variable.location` antes de `runCompilePipeline`, sobre el PR #28. Conviene
-  reutilizar la lógica del editor (`buildAliasRegistry` y `resolveAlias`, en `src/middleware/shared/utils/iec-address/`)
-  en lugar de copiarla.
-- **Por comprobar:** con los alias resueltos, si el Sim simula las E/S remotas (`RI0`, `RQ0`) de un esclavo.
-- **Prueba de cierre:** `PruebaMultibit` compila con `jwsim-cli build`, y se agrega un fixture con alias a `tests/openplc/`.
+**Por comprobar:** `PruebaMultibit` ya compila, pero falta ver si el Sim simula las E/S remotas (`RI0`, `RQ0`) de un
+esclavo.
+
+## VPP y editor
+
+El VPP instalado debe ser de la misma línea que el editor. Con el editor 4.3.3 y un VPP alpha.16, la compilación falla
+con «expected unqualified-id before numeric constant» en `NUM_DISCRETE_INPUT`: el HAL viejo declara esa constante y el
+editor la genera como macro. El HAL de alpha.17 ya la renombró a `JWPLC_NUM_DISCRETE_INPUT`.
