@@ -1,5 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Pencil1Icon, TrashIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
 import type { ModbusIOGroup, ModbusIOPoint } from '@root/middleware/shared/ports/types'
 import { useRuntime } from '@root/middleware/shared/providers/platform-context'
 import { Download, Upload } from 'lucide-react'
@@ -189,7 +190,7 @@ const SerialPortCombobox = ({
       showChevron
       triggerClassName={SERIAL_PORT_TRIGGER_CLASS}
       placeholder={placeholder}
-      customValueLabel='Use custom port'
+      customValueLabel={tr('Use custom port')}
       emptyMessage={isLoading ? 'Loading ports...' : 'No ports available. Type a custom value.'}
     />
   )
@@ -314,11 +315,11 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
         </ModalHeader>
         <div className='flex flex-col gap-3 py-2'>
           <div className='flex items-center gap-2'>
-            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Name</Label>
+            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Name')}</Label>
             <InputWithRef
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder='IO Group Name'
+              placeholder={tr('IO Group Name')}
               data-testid='io-group-name-input'
               maxLength={IO_GROUP_NAME_MAX_LENGTH}
               className={inputStyles}
@@ -333,11 +334,13 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
             </p>
           )}
           <div className='flex items-center gap-2'>
-            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Function Code</Label>
+            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+              {tr('Function Code')}
+            </Label>
             <Select value={functionCode} onValueChange={(v) => handleFunctionCodeChange(v as typeof functionCode)}>
               <SelectTrigger
                 withIndicator
-                placeholder='Select function code'
+                placeholder={tr('Select function code')}
                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
               />
               <SelectContent className='h-fit max-h-[200px] w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -359,7 +362,9 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
             </Select>
           </div>
           <div className='flex items-center gap-2'>
-            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Cycle Time (ms)</Label>
+            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+              {tr('Cycle Time (ms)')}
+            </Label>
             <InputWithRef
               type='number'
               value={cycleTime}
@@ -369,7 +374,7 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
             />
           </div>
           <div className='flex items-center gap-2'>
-            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Offset</Label>
+            <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Offset')}</Label>
             <InputWithRef
               value={offset}
               onChange={(e) => setOffset(e.target.value)}
@@ -379,7 +384,7 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
           </div>
           <div className='flex flex-col gap-1'>
             <div className='flex items-center gap-2'>
-              <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Length</Label>
+              <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Length')}</Label>
               <InputWithRef
                 type='number'
                 value={length}
@@ -418,11 +423,13 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
           </div>
           {isReadFunctionCode(functionCode) && (
             <div className='flex items-center gap-2'>
-              <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Error Handling</Label>
+              <Label className='w-28 whitespace-nowrap text-xs text-neutral-950 dark:text-white'>
+                {tr('Error Handling')}
+              </Label>
               <Select value={errorHandling} onValueChange={(v) => setErrorHandling(v as typeof errorHandling)}>
                 <SelectTrigger
                   withIndicator
-                  placeholder='Select error handling'
+                  placeholder={tr('Select error handling')}
                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-300 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                 />
                 <SelectContent className='h-fit w-[--radix-select-trigger-width] overflow-y-auto rounded-lg border border-neutral-300 bg-white outline-none drop-shadow-lg dark:border-brand-medium-dark dark:bg-neutral-950'>
@@ -450,7 +457,7 @@ const IOGroupModal = ({ isOpen, onClose, onSubmit, editingGroup, otherGroupNames
             onClick={onClose}
             className='rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -519,7 +526,7 @@ const IOGroupRow = ({ ioGroup, isExpanded, onToggleExpand, onEdit, onDelete, onU
               type='button'
               onClick={onEdit}
               className='rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
-              title='Edit'
+              title={tr('Edit')}
               aria-label={`Edit ${ioGroup.name}`}
             >
               <Pencil1Icon className='h-4 w-4' />
@@ -528,7 +535,7 @@ const IOGroupRow = ({ ioGroup, isExpanded, onToggleExpand, onEdit, onDelete, onU
               type='button'
               onClick={onDelete}
               className='rounded p-1 text-neutral-500 hover:bg-red-100 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-900/30 dark:hover:text-red-400'
-              title='Delete'
+              title={tr('Delete')}
               aria-label={`Delete ${ioGroup.name}`}
             >
               <TrashIcon className='h-4 w-4' />
@@ -585,7 +592,7 @@ const IOPointRow = ({ ioPoint, offset, onUpdateAlias }: IOPointRowProps) => {
           value={alias}
           onChange={(e) => setAlias(e.target.value)}
           onBlur={handleBlur}
-          placeholder='Alias'
+          placeholder={tr('Alias')}
           className='h-6 w-full rounded border border-neutral-200 bg-white px-1 text-xs text-neutral-700 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
         />
       </td>
@@ -948,10 +955,12 @@ const RemoteDeviceEditor = () => {
 
     if (file.size > IO_GROUP_IMPORT_MAX_FILE_BYTES) {
       toast({
-        title: 'File too large',
-        description: `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB. The maximum is ${
-          IO_GROUP_IMPORT_MAX_FILE_BYTES / 1024 / 1024
-        } MB.`,
+        title: tr('File too large'),
+        description: tr('{{name}} is {{toFixed1}} MB. The maximum is {{value}} MB.', {
+          name: file.name,
+          toFixed1: (file.size / 1024 / 1024).toFixed(1),
+          value: IO_GROUP_IMPORT_MAX_FILE_BYTES / 1024 / 1024,
+        }),
         variant: 'fail',
       })
       return
@@ -968,7 +977,7 @@ const RemoteDeviceEditor = () => {
             : undefined,
       })
     } catch (error) {
-      toast({ title: 'Could not read file', description: getErrorMessage(error), variant: 'fail' })
+      toast({ title: tr('Could not read file'), description: getErrorMessage(error), variant: 'fail' })
     }
   }, [])
 
@@ -989,7 +998,7 @@ const RemoteDeviceEditor = () => {
         mode === 'replace' ? ' (existing groups replaced)' : ''
       }.`
       consoleActions.addLog({ level: 'info', message: `${summary} Source: ${importPreview?.fileName ?? 'file'}` })
-      toast({ title: 'Import complete', description: summary, variant: 'default' })
+      toast({ title: tr('Import complete'), description: summary, variant: 'default' })
       setImportPreview(null)
     },
     [deviceName, projectActions, sharedWorkspaceActions, consoleActions, importPreview],
@@ -1007,7 +1016,7 @@ const RemoteDeviceEditor = () => {
         </div>
         <div className='flex flex-1 items-center justify-center rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700'>
           <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-            Configuration for this protocol is not yet available.
+            {tr('Configuration for this protocol is not yet available.')}
           </p>
         </div>
       </div>
@@ -1037,9 +1046,9 @@ const RemoteDeviceEditor = () => {
       <div className='mb-6 flex flex-wrap gap-6'>
         {/* Transport Type Selector */}
         <div className='flex items-center gap-2'>
-          <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Transport</Label>
+          <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Transport')}</Label>
           <Select value={transport} onValueChange={(v) => handleTransportChange(v as 'tcp' | 'rtu')}>
-            <SelectTrigger withIndicator placeholder='Select transport' className={selectTriggerStyles} />
+            <SelectTrigger withIndicator placeholder={tr('Select transport')} className={selectTriggerStyles} />
             <SelectContent className={selectContentStyles}>
               {TRANSPORT_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
@@ -1056,7 +1065,7 @@ const RemoteDeviceEditor = () => {
         {transport === 'tcp' && (
           <>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>IP Address</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('IP Address')}</Label>
               <InputWithRef
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
@@ -1066,7 +1075,7 @@ const RemoteDeviceEditor = () => {
               />
             </div>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Port</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Port')}</Label>
               <InputWithRef
                 type='number'
                 value={port}
@@ -1083,19 +1092,19 @@ const RemoteDeviceEditor = () => {
         {transport === 'rtu' && (
           <>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Serial Port</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Serial Port')}</Label>
               <SerialPortCombobox
                 value={serialPort}
                 onValueChange={handleSerialPortChange}
                 options={serialPortOptions}
                 isLoading={isLoadingSerialPorts}
-                placeholder='/dev/ttyUSB0'
+                placeholder={tr('/dev/ttyUSB0')}
               />
             </div>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Baud Rate</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Baud Rate')}</Label>
               <Select value={baudRate} onValueChange={handleBaudRateChange}>
-                <SelectTrigger withIndicator placeholder='Select baud rate' className={selectTriggerStyles} />
+                <SelectTrigger withIndicator placeholder={tr('Select baud rate')} className={selectTriggerStyles} />
                 <SelectContent className={selectContentStyles}>
                   {BAUD_RATE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
@@ -1108,9 +1117,9 @@ const RemoteDeviceEditor = () => {
               </Select>
             </div>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Parity</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Parity')}</Label>
               <Select value={parity} onValueChange={(v) => handleParityChange(v as 'N' | 'E' | 'O')}>
-                <SelectTrigger withIndicator placeholder='Select parity' className={selectTriggerStyles} />
+                <SelectTrigger withIndicator placeholder={tr('Select parity')} className={selectTriggerStyles} />
                 <SelectContent className={selectContentStyles}>
                   {PARITY_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
@@ -1123,9 +1132,9 @@ const RemoteDeviceEditor = () => {
               </Select>
             </div>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Stop Bits</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Stop Bits')}</Label>
               <Select value={stopBits} onValueChange={handleStopBitsChange}>
-                <SelectTrigger withIndicator placeholder='Select stop bits' className={selectTriggerStyles} />
+                <SelectTrigger withIndicator placeholder={tr('Select stop bits')} className={selectTriggerStyles} />
                 <SelectContent className={selectContentStyles}>
                   {STOP_BITS_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
@@ -1138,9 +1147,9 @@ const RemoteDeviceEditor = () => {
               </Select>
             </div>
             <div className='flex items-center gap-2'>
-              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Data Bits</Label>
+              <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Data Bits')}</Label>
               <Select value={dataBits} onValueChange={handleDataBitsChange}>
-                <SelectTrigger withIndicator placeholder='Select data bits' className={selectTriggerStyles} />
+                <SelectTrigger withIndicator placeholder={tr('Select data bits')} className={selectTriggerStyles} />
                 <SelectContent className={selectContentStyles}>
                   {DATA_BITS_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className={selectItemStyles}>
@@ -1157,7 +1166,7 @@ const RemoteDeviceEditor = () => {
 
         {/* Common fields - Timeout and Slave ID */}
         <div className='flex items-center gap-2'>
-          <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Timeout (ms)</Label>
+          <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Timeout (ms)')}</Label>
           <InputWithRef
             type='number'
             value={timeout}
@@ -1168,7 +1177,7 @@ const RemoteDeviceEditor = () => {
           />
         </div>
         <div className='flex items-center gap-2'>
-          <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>Slave ID</Label>
+          <Label className='whitespace-nowrap text-xs text-neutral-950 dark:text-white'>{tr('Slave ID')}</Label>
           <InputWithRef
             type='number'
             value={slaveId}
@@ -1184,7 +1193,7 @@ const RemoteDeviceEditor = () => {
 
       <div className='flex flex-1 flex-col overflow-hidden'>
         <div className='mb-2 flex items-center justify-between'>
-          <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>IO Tag Mapping</h3>
+          <h3 className='text-sm font-medium text-neutral-950 dark:text-neutral-100'>{tr('IO Tag Mapping')}</h3>
           <div className='flex items-center gap-1'>
             {SHOW_JWPLC_BASIC_REMOTE_IO_PRESET && (
               <button
@@ -1198,7 +1207,7 @@ const RemoteDeviceEditor = () => {
                 }
                 className='hover:bg-brand/10 rounded-md border border-brand px-2 py-1 font-caption text-xs font-medium text-brand disabled:cursor-not-allowed disabled:border-neutral-400 disabled:text-neutral-400 disabled:hover:bg-transparent dark:disabled:border-neutral-700 dark:disabled:text-neutral-600'
               >
-                JWPLC Basic Remote I/O
+                {tr('JWPLC Basic Remote I/O')}
               </button>
             )}
             <input
@@ -1217,10 +1226,10 @@ const RemoteDeviceEditor = () => {
               data-testid='io-group-import-button'
               onClick={() => importInputRef.current?.click()}
               className={TOOLBAR_BUTTON_CLASS}
-              title='Import IO groups from a CSV or JSON file'
+              title={tr('Import IO groups from a CSV or JSON file')}
             >
               <Upload className='h-3.5 w-3.5' />
-              Import
+              {tr('Import')}
             </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild disabled={ioGroups.length === 0}>
@@ -1232,7 +1241,7 @@ const RemoteDeviceEditor = () => {
                   title={ioGroups.length === 0 ? 'Add IO groups to enable export' : 'Export IO groups'}
                 >
                   <Download className='h-3.5 w-3.5' />
-                  Export
+                  {tr('Export')}
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
@@ -1278,28 +1287,28 @@ const RemoteDeviceEditor = () => {
                 <tr>
                   <th className='w-8 px-2 py-2'></th>
                   <th className='w-[14%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Name
+                    {tr('Name')}
                   </th>
                   <th className='w-[18%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Type
+                    {tr('Type')}
                   </th>
                   <th className='w-[15%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Address
+                    {tr('Address')}
                   </th>
                   <th className='w-[7%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Offset
+                    {tr('Offset')}
                   </th>
                   <th className='w-[7%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Length
+                    {tr('Length')}
                   </th>
                   <th className='w-[17%] px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Function Code
+                    {tr('Function Code')}
                   </th>
                   <th className='px-2 py-2 text-left text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Alias
+                    {tr('Alias')}
                   </th>
                   <th className='w-20 px-2 py-2 text-right text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                    Actions
+                    {tr('Actions')}
                   </th>
                 </tr>
               </thead>
@@ -1307,7 +1316,7 @@ const RemoteDeviceEditor = () => {
                 {ioGroups.length === 0 ? (
                   <tr>
                     <td colSpan={9} className='px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400'>
-                      No IO groups configured. Click the + button to add one, or Import a CSV / JSON file.
+                      {tr('No IO groups configured. Click the + button to add one, or Import a CSV / JSON file.')}
                     </td>
                   </tr>
                 ) : (

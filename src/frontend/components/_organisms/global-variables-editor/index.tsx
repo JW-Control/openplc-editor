@@ -1,4 +1,5 @@
 // import * as PrimitiveSwitch from '@radix-ui/react-switch'
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { PLCGlobalVariable, PLCVariable } from '../../../../middleware/shared/ports/types'
@@ -406,7 +407,7 @@ const GlobalVariablesEditor = () => {
     <div ref={containerRef} aria-label='Variables editor container' className='flex  w-full flex-col gap-4'>
       <div aria-label='Variables editor actions' className='relative flex h-8 w-full min-w-[1035px]'>
         <div aria-label='Variables editor table actions container' className='flex h-full w-full justify-between'>
-          <span className='select-none'>Global Variables</span>
+          <span className='select-none'>{tr('Global Variables')}</span>
 
           {editorVariables.display === 'table' && (
             <div
@@ -455,9 +456,9 @@ const GlobalVariablesEditor = () => {
         <ViewModeToggle
           display={editorVariables.display}
           onDisplayChange={handleVisualizationTypeChange}
-          containerLabel='Variables visualization switch container'
-          tableLabel='Variables table visualization'
-          codeLabel='Variables code visualization'
+          containerLabel={tr('Variables visualization switch container')}
+          tableLabel={tr('Variables table visualization')}
+          codeLabel={tr('Variables code visualization')}
           className={cn('flex-1', { 'absolute right-0': editorVariables.display === 'code' })}
         />
       </div>
@@ -490,7 +491,7 @@ const GlobalVariablesEditor = () => {
         }}
       >
         <ModalContent className='flex h-fit min-h-0 w-[440px] select-none flex-col items-center justify-start rounded-lg p-6'>
-          <ModalTitle className='mb-4 text-lg font-semibold'>Delete global variable?</ModalTitle>
+          <ModalTitle className='mb-4 text-lg font-semibold'>{tr('Delete global variable?')}</ModalTitle>
           <p className='mb-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
             <span className='font-medium'>{pendingGlobalDelete?.variable.name}</span> is used as an external variable in{' '}
             {pendingGlobalDelete?.pous.join(', ')}. Deleting it will also remove{' '}
@@ -504,13 +505,13 @@ const GlobalVariablesEditor = () => {
               onClick={confirmGlobalDelete}
               className='flex-1 rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600'
             >
-              Delete
+              {tr('Delete')}
             </button>
             <button
               onClick={() => setPendingGlobalDelete(null)}
               className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </ModalContent>

@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@root/
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { Modal, ModalContent, ModalTitle } from '@root/frontend/components/_molecules/modal'
 import { boardSelectors } from '@root/frontend/hooks/use-store-selectors'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { allocateModuleSlots } from '@root/frontend/utils/vpp/allocate-module-slots'
 import { evalVisible, type VisibleCondition } from '@root/frontend/utils/vpp/eval-visible'
@@ -221,7 +222,7 @@ const ModuleSlotPicker = ({
       showChevron
       triggerClassName={MODULE_PICKER_TRIGGER_CLASS}
       placeholder={`Search modules… (slot ${slotNumber})`}
-      emptyMessage='No modules available'
+      emptyMessage={tr('No modules available')}
     />
   )
 }
@@ -598,7 +599,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
     const plan = planDiscovery(discovery.detected)
     setDiscovery(null)
     if (!plan.ok) {
-      toast({ title: 'Modules not applied', description: plan.error, variant: 'fail' })
+      toast({ title: tr('Modules not applied'), description: plan.error, variant: 'fail' })
       return
     }
     // The dialog showed one plan; a different one now means the project changed under it.
@@ -607,8 +608,8 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
       JSON.stringify([shown.slots, shown.slotsConfig, shown.changes])
     ) {
       toast({
-        title: 'Modules not applied',
-        description: 'The module configuration changed while confirmation was open. Run detection again.',
+        title: tr('Modules not applied'),
+        description: tr('The module configuration changed while confirmation was open. Run detection again.'),
         variant: 'fail',
       })
       return
@@ -752,8 +753,11 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
       const conflicts = conflictingSlotsForField(fieldId, value, slotIndex + 1)
       if (conflicts.length > 0) {
         toast({
-          title: `${fieldDef.label} already in use`,
-          description: `Value ${String(value)} is already assigned to Slot ${conflicts.join(', ')}. Each module on this backplane must use a unique value.`,
+          title: tr('{{label}} already in use', { label: fieldDef.label }),
+          description: tr(
+            'Value {{Stringvalue}} is already assigned to Slot {{value}}. Each module on this backplane must use a unique value.',
+            { Stringvalue: String(value), value: conflicts.join(', ') },
+          ),
           variant: 'fail',
         })
         return
@@ -958,7 +962,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
         <SlotDetailPane>
           {stackable && populatedCount === 0 ? (
             <div className='flex flex-1 flex-col items-center justify-center text-center text-sm text-neutral-500 dark:text-neutral-400'>
-              <p>No modules configured.</p>
+              <p>{tr('No modules configured.')}</p>
               <p className='mt-1 text-xs'>Use &quot;+ Add module&quot; in the slot list to start a backplane.</p>
             </div>
           ) : (
@@ -987,7 +991,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                     return (
                       <div className='mb-4 flex items-center gap-3'>
                         <Label className='w-20 shrink-0 text-xs font-medium text-neutral-950 dark:text-white'>
-                          Module
+                          {tr('Module')}
                         </Label>
                         <ModuleSlotPicker
                           slotNumber={selectedSlot + 1}
@@ -1003,7 +1007,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                             onClick={() => setRemoveModalOpen(true)}
                             className='cursor-pointer rounded-md border border-neutral-200 px-3 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
                           >
-                            Remove module
+                            {tr('Remove module')}
                           </button>
                         )}
                       </div>
@@ -1019,8 +1023,9 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                   {(selectedModule as { configScreen?: string }).configScreen &&
                     !(selectedModule as { configScreenDefinition?: unknown }).configScreenDefinition && (
                       <p className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300'>
-                        This module ships a configuration screen but it could not be loaded. Reinstall the vendor
-                        package to pick up the latest assets.
+                        {tr(
+                          'This module ships a configuration screen but it could not be loaded. Reinstall the vendor package to pick up the latest assets.',
+                        )}
                       </p>
                     )}
 
@@ -1030,7 +1035,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                     <TooltipProvider>
                       <section>
                         <h4 className='mb-2 font-caption text-sm font-semibold text-neutral-950 dark:text-white'>
-                          Configuration
+                          {tr('Configuration')}
                         </h4>
                         <div className='flex flex-col gap-3'>
                           {configFields.map((field) => {
@@ -1098,7 +1103,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                                       <Select value={String(current ?? '')} onValueChange={(v) => setValue(v)}>
                                         <SelectTrigger
                                           aria-label={field.label}
-                                          placeholder='Select...'
+                                          placeholder={tr('Select...')}
                                           withIndicator
                                           className='flex h-[30px] w-64 items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none data-[state=open]:border-brand-medium-dark dark:border-neutral-850 dark:bg-neutral-950 dark:text-neutral-300'
                                         />
@@ -1205,7 +1210,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                 /* Empty-slot state: nothing else to show — the always-
                 visible Module picker above is the only action. */
                 <p className='py-4 text-xs italic text-neutral-500 dark:text-neutral-400'>
-                  This slot is empty. Pick a module above to populate it.
+                  {tr('This slot is empty. Pick a module above to populate it.')}
                 </p>
               )}
             </>
@@ -1236,14 +1241,14 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                 }}
                 className='w-full rounded-lg bg-red-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-red-700'
               >
-                Remove module
+                {tr('Remove module')}
               </button>
               <button
                 type='button'
                 onClick={() => setRemoveModalOpen(false)}
                 className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
             </div>
           </ModalContent>
@@ -1268,7 +1273,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
               className='flex max-h-60 w-full flex-col gap-1 overflow-y-auto rounded-md border border-neutral-200 p-2 text-xs text-neutral-700 dark:border-neutral-700 dark:text-neutral-300'
             >
               {discovery.plan.changes.length === 0 ? (
-                <li className='italic'>No modules were found on the device.</li>
+                <li className='italic'>{tr('No modules were found on the device.')}</li>
               ) : (
                 discovery.plan.changes.map((change) => (
                   <li key={change.slot}>
@@ -1285,7 +1290,7 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
                 onClick={applyDiscovery}
                 className='w-full rounded-lg bg-red-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-red-700'
               >
-                Replace configuration
+                {tr('Replace configuration')}
               </button>
             )}
             <button
@@ -1305,11 +1310,12 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
       <Modal open={clearAllModalOpen} onOpenChange={setClearAllModalOpen}>
         <ModalContent className='flex w-[420px] select-none flex-col items-center justify-evenly gap-5 rounded-lg p-6'>
           <ModalTitle className='text-center font-caption text-base font-semibold text-neutral-950 dark:text-white'>
-            Clear all slots?
+            {tr('Clear all slots?')}
           </ModalTitle>
           <p className='text-center text-sm text-neutral-600 dark:text-neutral-300'>
-            Every module will be removed from the backplane and the slot configuration cleared. I/O addresses allocated
-            to those modules will be released.
+            {tr(
+              'Every module will be removed from the backplane and the slot configuration cleared. I/O addresses allocated to those modules will be released.',
+            )}
           </p>
           <div className='flex w-full flex-col gap-2'>
             <button
@@ -1320,14 +1326,14 @@ function ModuleSlotsLayout({ section, moduleSystem }: ModuleSlotsLayoutProps) {
               }}
               className='w-full rounded-lg bg-red-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-red-700'
             >
-              Clear all slots
+              {tr('Clear all slots')}
             </button>
             <button
               type='button'
               onClick={() => setClearAllModalOpen(false)}
               className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </ModalContent>

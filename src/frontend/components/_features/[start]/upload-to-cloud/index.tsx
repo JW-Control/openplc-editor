@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { CloudUpload, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -95,7 +96,7 @@ const UploadToCloudModal = ({ open, onOpenChange, projectPath, projectName, onUp
     }
 
     if (!project.uploadProjectToCloud) {
-      setError('This build of the editor cannot publish to Autonomy Edge.')
+      setError(tr('This build of the editor cannot publish to Autonomy Edge.'))
 
       return
     }
@@ -133,39 +134,39 @@ const UploadToCloudModal = ({ open, onOpenChange, projectPath, projectName, onUp
           <CloudUpload className='size-5' />
         </span>
         <ModalTitle className='text-center text-xl font-normal text-neutral-900 dark:text-neutral-100'>
-          Upload to Autonomy Edge
+          {tr('Upload to Autonomy Edge')}
         </ModalTitle>
         <p className='mb-5 mt-1 text-center text-sm text-neutral-600 dark:text-neutral-400'>
-          This project stays on your computer. A copy is created on Autonomy Edge.
+          {tr('This project stays on your computer. A copy is created on Autonomy Edge.')}
         </p>
 
         {folders === null ? (
           <div className='flex items-center justify-center gap-2 py-8 text-sm text-neutral-500'>
             <Loader2 className='size-4 animate-spin' />
-            Loading your folders...
+            {tr('Loading your folders...')}
           </div>
         ) : folders.status === 'signed-out' ? (
           <p className='py-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
-            Sign in to your Autonomy Edge account to publish this project.
+            {tr('Sign in to your Autonomy Edge account to publish this project.')}
           </p>
         ) : folders.status === 'unreachable' ? (
           <div className='flex flex-col items-center gap-3 py-6'>
             <p className='text-center text-sm text-neutral-600 dark:text-neutral-400'>
-              Autonomy Edge could not be reached. Your project on this computer is unaffected.
+              {tr('Autonomy Edge could not be reached. Your project on this computer is unaffected.')}
             </p>
             <button
               type='button'
               onClick={() => void loadFolders()}
               className='cursor-pointer text-sm font-medium text-brand hover:underline'
             >
-              Try again
+              {tr('Try again')}
             </button>
           </div>
         ) : (
           <div className='flex flex-col gap-4'>
             <fieldset className='flex flex-col gap-1.5'>
               <legend className='mb-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300'>
-                Destination folder
+                {tr('Destination folder')}
               </legend>
               {/* Native radios underneath, visually hidden, for arrow-key nav and screen-reader semantics for free. */}
               <div className='max-h-[220px] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1.5 dark:border-neutral-700 dark:bg-neutral-900'>
@@ -206,7 +207,7 @@ const UploadToCloudModal = ({ open, onOpenChange, projectPath, projectName, onUp
             </fieldset>
 
             <label className='flex flex-col gap-1.5'>
-              <span className='text-xs font-medium text-neutral-700 dark:text-neutral-300'>Project name</span>
+              <span className='text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Project name')}</span>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -215,7 +216,9 @@ const UploadToCloudModal = ({ open, onOpenChange, projectPath, projectName, onUp
             </label>
 
             <fieldset className='flex flex-col gap-1.5'>
-              <legend className='mb-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Visibility</legend>
+              <legend className='mb-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300'>
+                {tr('Visibility')}
+              </legend>
               {/* Private first, and selected: publishing someone's control program to the
                   world is not a default anyone should get by pressing Enter. */}
               {(['private', 'public'] as const).map((option) => (
@@ -251,7 +254,7 @@ const UploadToCloudModal = ({ open, onOpenChange, projectPath, projectName, onUp
             disabled={busy}
             className='cursor-pointer rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             type='button'

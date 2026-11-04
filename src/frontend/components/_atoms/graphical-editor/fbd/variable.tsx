@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PLCVariable } from '../../../../../middleware/shared/ports/types'
@@ -348,7 +349,7 @@ const VariableElement = (block: VariableProps) => {
       valueBuffer = encodeForceValue(forceValue, varType)
     } catch (error) {
       toast({
-        title: 'Cannot force value',
+        title: tr('Cannot force value'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'fail',
       })
@@ -588,20 +589,20 @@ const VariableElement = (block: VariableProps) => {
                             className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                             onClick={(e) => void handleForceTrue(e)}
                           >
-                            <p>Force True</p>
+                            <p>{tr('Force True')}</p>
                           </div>
                           <div
                             className='flex w-full cursor-pointer items-center gap-2 px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                             onClick={(e) => void handleForceFalse(e)}
                           >
-                            <p>Force False</p>
+                            <p>{tr('Force False')}</p>
                           </div>
                           {isForced && (
                             <div
                               className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                               onClick={(e) => void handleReleaseForce(e)}
                             >
-                              <p>Release Force</p>
+                              <p>{tr('Release Force')}</p>
                             </div>
                           )}
                         </>
@@ -611,14 +612,14 @@ const VariableElement = (block: VariableProps) => {
                             className='flex w-full cursor-pointer items-center gap-2 rounded-t-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                             onClick={handleForceValue}
                           >
-                            <p>Force Value</p>
+                            <p>{tr('Force Value')}</p>
                           </div>
                           {isForced && (
                             <div
                               className='flex w-full cursor-pointer items-center gap-2 rounded-b-lg px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900'
                               onClick={(e) => void handleReleaseForce(e)}
                             >
-                              <p>Release Force</p>
+                              <p>{tr('Release Force')}</p>
                             </div>
                           )}
                         </>
@@ -648,7 +649,7 @@ const VariableElement = (block: VariableProps) => {
 
       <Modal open={forceValueModalOpen} onOpenChange={handleForceValueModalChange}>
         <ModalContent className='flex h-fit min-h-0 w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>
-          <ModalTitle className='mb-4 text-lg font-semibold'>Force Value</ModalTitle>
+          <ModalTitle className='mb-4 text-lg font-semibold'>{tr('Force Value')}</ModalTitle>
 
           <p className='mb-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
             Enter the value to force for {data.variable?.name || 'this variable'}
@@ -657,7 +658,7 @@ const VariableElement = (block: VariableProps) => {
           <div className='flex w-full flex-col gap-4'>
             <div>
               <Label htmlFor='force-value-input' className='mb-2 block text-sm'>
-                Value
+                {tr('Value')}
               </Label>
               <input
                 id='force-value-input'
@@ -665,7 +666,7 @@ const VariableElement = (block: VariableProps) => {
                 value={forceValue}
                 onChange={(e) => setForceValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void handleForceValueConfirm()}
-                placeholder='Enter value'
+                placeholder={tr('Enter value')}
                 className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
                 autoFocus
               />
@@ -682,7 +683,7 @@ const VariableElement = (block: VariableProps) => {
                 onClick={handleForceValueCancel}
                 className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Cancel
+                {tr('Cancel')}
               </button>
             </div>
           </div>

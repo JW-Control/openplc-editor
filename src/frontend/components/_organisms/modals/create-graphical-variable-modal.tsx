@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useEffect, useMemo, useState } from 'react'
 
 import { baseTypeEnum } from '../../../../middleware/shared/ports/plc-schemas'
@@ -98,16 +100,18 @@ const CreateGraphicalVariableModal = ({
         }}
         className='w-[420px] select-none flex-col gap-4 px-8 py-6'
       >
-        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>New variable</ModalTitle>
+        <ModalTitle className='text-xl font-medium text-neutral-950 dark:text-white'>{tr('New variable')}</ModalTitle>
         <p className='text-xs text-neutral-700 dark:text-neutral-400'>
-          The <span className='font-medium'>{data.pinType.toUpperCase()}</span> pin accepts more than one data type, so
-          the editor cannot pick one for you. Confirm the variable before it is created.
+          {trRich(
+            'The {{pin}} pin accepts more than one data type, so the editor cannot pick one for you. Confirm the variable before it is created.',
+            { pin: <span className='font-medium'>{data.pinType.toUpperCase()}</span> },
+          )}
         </p>
 
         <div className='flex flex-col gap-4'>
           <div>
             <Label htmlFor='new-graphical-variable-name' className='mb-2 block text-sm'>
-              Name
+              {tr('Name')}
             </Label>
             <input
               id='new-graphical-variable-name'
@@ -121,7 +125,7 @@ const CreateGraphicalVariableModal = ({
 
           <div>
             <Label htmlFor='new-graphical-variable-class' className='mb-2 block text-sm'>
-              Class
+              {tr('Class')}
             </Label>
             <select
               id='new-graphical-variable-class'
@@ -139,7 +143,7 @@ const CreateGraphicalVariableModal = ({
 
           <div>
             <Label htmlFor='new-graphical-variable-type' className='mb-2 block text-sm'>
-              Type
+              {tr('Type')}
             </Label>
             <select
               id='new-graphical-variable-type'
@@ -161,14 +165,14 @@ const CreateGraphicalVariableModal = ({
             className='h-full w-full items-center rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 hover:bg-neutral-300 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             onClick={handleCancel}
           >
-            Cancel
+            {tr('Cancel')}
           </button>
           <button
             className='h-full w-full items-center rounded-lg bg-brand text-center font-medium text-white enabled:hover:bg-brand-medium-dark disabled:cursor-not-allowed disabled:opacity-50'
             disabled={!name.trim()}
             onClick={handleConfirm}
           >
-            Create
+            {tr('Create')}
           </button>
         </div>
       </ModalContent>

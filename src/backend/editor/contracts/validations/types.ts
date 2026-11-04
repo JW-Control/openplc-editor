@@ -26,6 +26,8 @@ const StoreSchema = z.object({
     .optional(),
   // The update check when the editor opens (DOPE-486). Manual "Check for Updates" works either way.
   auto_update_check: z.boolean(),
+  // UI language chosen in Display > Language ('es' | 'en'); absent means the default.
+  language: z.string().optional(),
 })
 
 export { StoreSchema, ThemeSchema }

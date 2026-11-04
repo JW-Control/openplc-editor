@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import { toast } from './toast'
 
 /**
@@ -15,8 +17,8 @@ import { toast } from './toast'
  */
 export function notifyNoWritePermission(action: string): void {
   toast({
-    title: 'No write permission',
-    description: `You don't have permission to ${action} this project.`,
+    title: tr('No write permission'),
+    description: tr("You don't have permission to {{action}} this project.", { action }),
     variant: 'warn',
   })
 }

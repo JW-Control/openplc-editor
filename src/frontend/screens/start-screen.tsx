@@ -1,4 +1,5 @@
 import * as PrimitiveDropdown from '@radix-ui/react-dropdown-menu'
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { useCapabilities, useDevice, useProject, useSystem, useWindow } from '../../middleware/shared/providers'
@@ -98,14 +99,14 @@ const StartScreen = () => {
       <div className='flex h-full w-full items-center justify-center bg-neutral-950'>
         <div className='flex flex-col items-center gap-6 text-center'>
           <div className='flex flex-col items-center gap-2'>
-            <h1 className='text-2xl font-semibold text-neutral-100'>Welcome to OpenPLC Editor</h1>
+            <h1 className='text-2xl font-semibold text-neutral-100'>{tr('Welcome to OpenPLC Editor')}</h1>
             <p className='max-w-md text-neutral-400'>
-              No project is currently loaded. Please provide a project ID in the URL to load a project.
+              {tr('No project is currently loaded. Please provide a project ID in the URL to load a project.')}
             </p>
           </div>
           <div className='rounded-lg border border-neutral-800 bg-neutral-900 p-4'>
             <p className='text-sm text-neutral-500'>
-              Example: <code className='text-brand'>?project_id=your-project-id</code>
+              {tr('Example:')} <code className='text-brand'>?project_id=your-project-id</code>
             </p>
           </div>
         </div>
@@ -119,14 +120,14 @@ const StartScreen = () => {
         <MenuRoot>
           <MenuSection id='1'>
             <MenuItem onClick={() => handleCreateProject()}>
-              <PlusIcon className='stroke-white' /> New Project
+              <PlusIcon className='stroke-white' /> {tr('New Project')}
             </MenuItem>
             <PrimitiveDropdown.Root>
               {/* `Button` does not forward a ref, and Radix anchors the menu on the ref; the div is that anchor. */}
               <PrimitiveDropdown.Trigger asChild>
                 <div className='w-fit'>
                   <MenuItem ghosted>
-                    <FolderIcon /> Open
+                    <FolderIcon /> {tr('Open')}
                   </MenuItem>
                 </div>
               </PrimitiveDropdown.Trigger>
@@ -140,20 +141,20 @@ const StartScreen = () => {
                   onSelect={() => void handleOpenProject()}
                   className='cursor-pointer select-none rounded px-3 py-2 outline-none hover:bg-neutral-50 focus:bg-neutral-100 dark:hover:bg-neutral-800 dark:focus:bg-neutral-800'
                 >
-                  Local project…
+                  {tr('Local project…')}
                 </PrimitiveDropdown.Item>
                 <PrimitiveDropdown.Item
                   disabled={!canOpenFromCloud}
                   onSelect={() => setOpenCloudOpen(true)}
                   className='cursor-pointer select-none rounded px-3 py-2 outline-none hover:bg-neutral-50 focus:bg-neutral-100 data-[disabled]:cursor-default data-[disabled]:opacity-50 dark:hover:bg-neutral-800 dark:focus:bg-neutral-800'
                 >
-                  Autonomy Edge project…
+                  {tr('Autonomy Edge project…')}
                 </PrimitiveDropdown.Item>
               </PrimitiveDropdown.Content>
             </PrimitiveDropdown.Root>
             <MenuItem ghosted onClick={handleOpenDocumentation}>
               {/* `shrink-0`: this label is the longest in the menu, and a flex row squeezed the icon to zero width. */}
-              <DocumentationIcon className='shrink-0' /> Documentation
+              <DocumentationIcon className='shrink-0' /> {tr('Documentation')}
             </MenuItem>
             {/* Above the divider with the actions; the account is not on the way out. */}
             <StartAccountSection />
@@ -163,7 +164,7 @@ const StartScreen = () => {
               <MenuDivider />
               <MenuSection id='2'>
                 <MenuItem onClick={handleExitAppRequest} ghosted>
-                  <StickArrowIcon className='rotate-180 stroke-brand' /> Exit
+                  <StickArrowIcon className='rotate-180 stroke-brand' /> {tr('Exit')}
                 </MenuItem>
               </MenuSection>
             </>

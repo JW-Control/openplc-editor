@@ -1,3 +1,6 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
+
 import { useOpenPLCStore } from '../../../store'
 import { toast } from '../../_features/[app]/toast/use-toast'
 import { RenameImpactModal } from '.'
@@ -16,13 +19,15 @@ export const DataTypeDeleteImpactModal = () => {
 
   const { name, impact } = pending
   const count = impact.totalReferences
-  const references = count === 1 ? '1 reference now points' : `${count} references now point`
 
   const handleConfirm = () => {
     respondToPendingDelete(true)
     toast({
-      title: 'Data type deleted',
-      description: `"${name}" was deleted. ${references} to a missing type.`,
+      title: tr('Data type deleted'),
+      description:
+        count === 1
+          ? tr('"{{name}}" was deleted. 1 reference now points to a missing type.', { name })
+          : tr('"{{name}}" was deleted. {{count}} references now point to a missing type.', { name, count }),
       variant: 'default',
     })
   }
@@ -30,19 +35,21 @@ export const DataTypeDeleteImpactModal = () => {
   return (
     <RenameImpactModal
       open
-      title='Data Type Delete: Impact Analysis'
+      title={tr('Data Type Delete: Impact Analysis')}
       impact={impact}
       description={
         <>
-          Deleting <span className='font-semibold'>{name}</span> will leave these references without a type:
+          {trRich('Deleting {{name}} will leave these references without a type:', {
+            name: <span className='font-semibold'>{name}</span>,
+          })}
         </>
       }
-      affectedListLabel='Affected locations:'
-      byKindLabel='By reference kind:'
-      confirmLabel='Yes, delete anyway'
-      confirmDescription='The data type is removed and the listed references keep its name until you retype them'
-      cancelLabel='No, keep data type'
-      cancelDescription='Nothing is changed'
+      affectedListLabel={tr('Affected locations:')}
+      byKindLabel={tr('By reference kind:')}
+      confirmLabel={tr('Yes, delete anyway')}
+      confirmDescription={tr('The data type is removed and the listed references keep its name until you retype them')}
+      cancelLabel={tr('No, keep data type')}
+      cancelDescription={tr('Nothing is changed')}
       onConfirm={handleConfirm}
       onCancel={() => respondToPendingDelete(false)}
     />

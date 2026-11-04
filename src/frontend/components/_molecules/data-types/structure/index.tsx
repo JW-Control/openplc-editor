@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import type { PLCStructureVariable } from '../../../../../middleware/shared/ports/types'
@@ -97,8 +98,8 @@ const StructureDataType = ({ dataTypeName }: StructureDataTypeProps) => {
 
     if (structureVariables.some((variable) => variable.name === '')) {
       toast({
-        title: 'Invalid name',
-        description: 'Name cannot be empty',
+        title: tr('Invalid name'),
+        description: tr('Name cannot be empty'),
         variant: 'fail',
       })
       return
@@ -194,7 +195,7 @@ const StructureDataType = ({ dataTypeName }: StructureDataTypeProps) => {
     >
       <div aria-label='Data type content actions container' className='flex h-8 w-full'>
         <div aria-label='Variables editor table actions container' className='flex h-full w-full justify-between'>
-          <span className='select-none'>Structure</span>
+          <span className='select-none'>{tr('Structure')}</span>
           <div
             aria-label='Variables editor table actions container'
             className='flex h-full w-28 items-center justify-evenly *:rounded-md *:p-1'

@@ -14,6 +14,8 @@
  * sidecars) since this is a plain export, not a compile.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+
 import { PlcopenXmlGenerator } from '../../backend/shared/utils/PLC/plcopen-xml-generator'
 import type { PLCProjectData as SchemaPLCProjectData } from '../../middleware/shared/ports/open-plc-types'
 import type { ProjectPort } from '../../middleware/shared/ports/project-port'
@@ -108,7 +110,7 @@ export async function executeExportPlcopen(
 
     if (!xmlResult.ok || !xmlResult.data) {
       toast({
-        title: 'Error exporting PLCopen XML',
+        title: tr('Error exporting PLCopen XML'),
         description: xmlResult.message || 'Failed to generate the PLCopen XML.',
         variant: 'fail',
       })
@@ -123,7 +125,7 @@ export async function executeExportPlcopen(
 
     if (!exportResult.success) {
       toast({
-        title: 'Error exporting PLCopen XML',
+        title: tr('Error exporting PLCopen XML'),
         description: exportResult.error ?? 'Failed to save the exported file.',
         variant: 'fail',
       })
@@ -131,14 +133,14 @@ export async function executeExportPlcopen(
     }
 
     toast({
-      title: 'Project exported',
-      description: `"${fileName}" was exported successfully.`,
+      title: tr('Project exported'),
+      description: tr('"{{fileName}}" was exported successfully.', { fileName }),
       variant: 'default',
     })
     return { success: true }
   } catch (err) {
     toast({
-      title: 'Error exporting PLCopen XML',
+      title: tr('Error exporting PLCopen XML'),
       description: err instanceof Error ? err.message : 'An unexpected error occurred while exporting.',
       variant: 'fail',
     })

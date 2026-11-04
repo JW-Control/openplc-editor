@@ -463,6 +463,7 @@ const rendererProcessBridge = {
   handleUpdateTheme: (callback: IpcRendererCallbacks) => subscribe('system:update-theme', callback),
   winHandleUpdateTheme: (theme?: 'light' | 'dark' | 'nineties') => ipcRenderer.send('system:update-theme', theme),
   winGetTheme: (): Promise<'light' | 'dark' | 'nineties' | null> => ipcRenderer.invoke('system:get-theme'),
+  setUiLanguage: (language: 'es' | 'en') => ipcRenderer.send('system:set-language', language),
 
   // ===================== COMPILER/BUILD METHODS =====================
   runCompileProgram: (compileProgramArgs: CompileProgramIpcArgs, callback: (args: CompilerPortMessage) => void) => {

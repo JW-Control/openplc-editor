@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { WarningIcon } from '../../../assets/icons/interface/Warning'
@@ -57,11 +58,11 @@ const ServerIpMismatchModal = ({ isOpen, ...rest }: ServerIpMismatchModalProps) 
       {...rest}
     >
       <ModalContent className='flex max-h-[min(600px,92vh)] w-[420px] select-none flex-col items-center justify-start rounded-lg p-6'>
-        <ModalTitle className='hidden'>Server IP Address Mismatch</ModalTitle>
+        <ModalTitle className='hidden'>{tr('Server IP Address Mismatch')}</ModalTitle>
         <div className='flex w-full select-none flex-col items-center gap-4'>
           <WarningIcon className='h-[60px] w-[60px] text-amber-500' />
           <div className='text-center'>
-            <p className='text-lg font-bold text-gray-600 dark:text-neutral-100'>Server IP Address Mismatch</p>
+            <p className='text-lg font-bold text-gray-600 dark:text-neutral-100'>{tr('Server IP Address Mismatch')}</p>
             <p className='mt-2 text-sm text-gray-500 dark:text-neutral-400'>
               The following servers are configured with IP addresses that don&apos;t exist on the target device:
             </p>
@@ -83,7 +84,7 @@ const ServerIpMismatchModal = ({ isOpen, ...rest }: ServerIpMismatchModalProps) 
           {data?.availableIps && data.availableIps.length > 0 && (
             <div className='w-full'>
               <p className='mb-1 text-xs font-medium text-gray-500 dark:text-neutral-400'>
-                Available interfaces on device:
+                {tr('Available interfaces on device:')}
               </p>
               <div className='flex flex-wrap gap-1'>
                 {data.availableIps.map((ip, index) => (
@@ -103,19 +104,19 @@ const ServerIpMismatchModal = ({ isOpen, ...rest }: ServerIpMismatchModalProps) 
               onClick={handleSwitchToAllInterfaces}
               className='hover:bg-brand/90 w-full rounded-lg bg-brand px-4 py-2 text-center font-medium text-white'
             >
-              Switch to All Interfaces (0.0.0.0)
+              {tr('Switch to All Interfaces (0.0.0.0)')}
             </button>
             <button
               onClick={handleContinue}
               className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             >
-              Continue Anyway
+              {tr('Continue Anyway')}
             </button>
             <button
               onClick={handleCancel}
               className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100 dark:hover:bg-neutral-800'
             >
-              Cancel Compilation
+              {tr('Cancel Compilation')}
             </button>
           </div>
         </div>

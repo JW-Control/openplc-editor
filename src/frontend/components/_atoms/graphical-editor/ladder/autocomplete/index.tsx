@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Node } from '@xyflow/react'
 import { ComponentPropsWithRef, forwardRef, useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
@@ -206,8 +207,8 @@ const VariablesBlockAutoComplete = forwardRef<HTMLDivElement, VariablesBlockAuto
         }
 
         toast({
-          title: 'Invalid variable name',
-          description: 'Variable name cannot be empty',
+          title: tr('Invalid variable name'),
+          description: tr('Variable name cannot be empty'),
           variant: 'fail',
         })
         return

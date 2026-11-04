@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { startCase } from 'lodash'
 import { Dispatch, ReactNode, SetStateAction, useState } from 'react'
 import { Controller, SubmitHandler, useForm } from 'react-hook-form'
@@ -182,13 +183,13 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
         message: pouWasCreated.message,
       })
       toast({
-        title: 'Invalid Pou',
+        title: tr('Invalid Pou'),
         description: pouWasCreated.message ?? "You can't create a Pou with this name.",
         variant: 'fail',
       })
       return
     }
-    toast({ title: 'Pou created successfully', description: 'The POU has been created', variant: 'default' })
+    toast({ title: tr('Pou created successfully'), description: tr('The POU has been created'), variant: 'default' })
     closeContainer((prev) => !prev)
     setIsOpen(false)
   }
@@ -202,15 +203,15 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
       // for a list that isn't there.
       globalVariableListSetError('name', { type: 'already-exists', message: created.message })
       toast({
-        title: 'Invalid global variable list',
+        title: tr('Invalid global variable list'),
         description: created.message ?? "You can't create a global variable list with this name.",
         variant: 'fail',
       })
       return
     }
     toast({
-      title: 'Global variable list created',
-      description: `${data.name} has been created`,
+      title: tr('Global variable list created'),
+      description: tr('{{name}} has been created', { name: data.name }),
       variant: 'default',
     })
     closeContainer((prev) => !prev)
@@ -232,7 +233,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
       // with nothing created and nothing said.
       datatypeSetError('name', { type: 'already-exists', message: created.message })
       toast({
-        title: 'Invalid data type',
+        title: tr('Invalid data type'),
         description: created.message ?? "You can't create a data type with this name.",
         variant: 'fail',
       })
@@ -247,13 +248,17 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
     if (!result.ok) {
       serverSetError('name', { type: 'already-exists', message: result.message })
       toast({
-        title: 'Server not created',
+        title: tr('Server not created'),
         description: result.message ?? "You can't create a server with this name.",
         variant: 'fail',
       })
       return
     }
-    toast({ title: 'Server created successfully', description: 'The server has been created', variant: 'default' })
+    toast({
+      title: tr('Server created successfully'),
+      description: tr('The server has been created'),
+      variant: 'default',
+    })
     closeContainer((prev) => !prev)
     setIsOpen(false)
   }
@@ -263,15 +268,15 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
     if (!result.ok) {
       remoteDeviceSetError('name', { type: 'already-exists', message: result.message })
       toast({
-        title: 'Remote device not created',
+        title: tr('Remote device not created'),
         description: result.message ?? "You can't create a remote device with this name.",
         variant: 'fail',
       })
       return
     }
     toast({
-      title: 'Remote device created successfully',
-      description: 'The remote device has been created',
+      title: tr('Remote device created successfully'),
+      description: tr('The remote device has been created'),
       variant: 'default',
     })
     closeContainer((prev) => !prev)
@@ -341,7 +346,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                         })}
                         id='data-type-name'
                         type='text'
-                        placeholder='Data type name'
+                        placeholder={tr('Data type name')}
                         className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                       />
                       {datatypeErrors.name?.type === 'already-exists' && (
@@ -376,7 +381,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                               <SelectTrigger
                                 withIndicator
                                 aria-label='data-type-derivation'
-                                placeholder='Select a derivation'
+                                placeholder={tr('Select a derivation')}
                                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                               />
                               <SelectContent
@@ -413,7 +418,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                           onClick={handleCancelCreateElement}
                         >
-                          Cancel
+                          {tr('Cancel')}
                         </button>
                       </Popover.Close>
                       <button
@@ -422,7 +427,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                         )}
                       >
-                        Create
+                        {tr('Create')}
                       </button>
                     </div>
                   </form>
@@ -437,7 +442,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                   <div className='flex w-full select-none items-center gap-2'>
                     {CreatePouSources[target]}
                     <p className='my-[2px] flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
-                      Global Variable List
+                      {tr('Global Variable List')}
                     </p>
                   </div>
                   <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
@@ -484,7 +489,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                           onClick={handleCancelCreateElement}
                         >
-                          Cancel
+                          {tr('Cancel')}
                         </button>
                       </Popover.Close>
                       <button
@@ -493,7 +498,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                         )}
                       >
-                        Create
+                        {tr('Create')}
                       </button>
                     </div>
                   </form>
@@ -513,10 +518,10 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                 {!(isRuntimeV4 || isSimulator || targetServesModbus) ? (
                   <div className='flex flex-col gap-2 py-2'>
                     <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-                      Server configuration is only available for OpenPLC Runtime v4 targets.
+                      {tr('Server configuration is only available for OpenPLC Runtime v4 targets.')}
                     </p>
                     <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-                      Please select OpenPLC Runtime v4 in the Device Configuration to enable this feature.
+                      {tr('Please select OpenPLC Runtime v4 in the Device Configuration to enable this feature.')}
                     </p>
                   </div>
                 ) : (
@@ -541,7 +546,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           })}
                           id='server-name'
                           type='text'
-                          placeholder='Server name'
+                          placeholder={tr('Server name')}
                           className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                         />
                         {serverErrors.name?.type === 'already-exists' && (
@@ -572,7 +577,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                                 <SelectTrigger
                                   withIndicator
                                   aria-label='server-protocol'
-                                  placeholder='Select a protocol'
+                                  placeholder={tr('Select a protocol')}
                                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                                 />
                                 <SelectContent
@@ -615,7 +620,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                             onClick={handleCancelCreateElement}
                           >
-                            Cancel
+                            {tr('Cancel')}
                           </button>
                         </Popover.Close>
                         <button
@@ -624,7 +629,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                           )}
                         >
-                          Create
+                          {tr('Create')}
                         </button>
                       </div>
                     </form>
@@ -640,7 +645,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                   <div className='flex w-full select-none items-center gap-2'>
                     {CreatePouSources[target]}
                     <p className='my-[2px] flex-1 text-start font-caption text-xs font-normal text-neutral-1000 dark:text-neutral-300'>
-                      Remote Device
+                      {tr('Remote Device')}
                     </p>
                   </div>
                   <div className='h-[1px] w-full bg-neutral-200 dark:!bg-neutral-850' />
@@ -648,10 +653,12 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                 {!supportsRemoteDevices ? (
                   <div className='flex flex-col gap-2 py-2'>
                     <p className='text-sm text-neutral-700 dark:text-neutral-300'>
-                      Remote device configuration is available for OpenPLC Runtime v4, Simulator and JWPLC targets.
+                      {tr(
+                        'Remote device configuration is available for OpenPLC Runtime v4, Simulator and JWPLC targets.',
+                      )}
                     </p>
                     <p className='text-xs text-neutral-500 dark:text-neutral-400'>
-                      Please select a compatible target in the Device Configuration to enable this feature.
+                      {tr('Please select a compatible target in the Device Configuration to enable this feature.')}
                     </p>
                   </div>
                 ) : (
@@ -676,7 +683,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           })}
                           id='remote-device-name'
                           type='text'
-                          placeholder='Device name'
+                          placeholder={tr('Device name')}
                           className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                         />
                         {remoteDeviceErrors.name?.type === 'already-exists' && (
@@ -707,7 +714,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                                 <SelectTrigger
                                   withIndicator
                                   aria-label='remote-device-protocol'
-                                  placeholder='Select a protocol'
+                                  placeholder={tr('Select a protocol')}
                                   className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                                 />
                                 <SelectContent
@@ -750,7 +757,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                             onClick={handleCancelCreateElement}
                           >
-                            Cancel
+                            {tr('Cancel')}
                           </button>
                         </Popover.Close>
                         <button
@@ -759,7 +766,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                             'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                           )}
                         >
-                          Create
+                          {tr('Create')}
                         </button>
                       </div>
                     </form>
@@ -799,7 +806,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                         })}
                         id='pou-name'
                         type='text'
-                        placeholder='POU name'
+                        placeholder={tr('POU name')}
                         className='mb-1 mt-[6px] h-[30px] w-full rounded-md border border-neutral-100 bg-white px-2 py-2 text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                       />
                       {pouErrors.name?.type === 'already-exists' && (
@@ -842,7 +849,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                               <SelectTrigger
                                 withIndicator
                                 aria-label='pou-language'
-                                placeholder='Select a language'
+                                placeholder={tr('Select a language')}
                                 className='flex h-[30px] w-full items-center justify-between gap-1 rounded-md border border-neutral-100 bg-white px-2 py-1 font-caption text-cp-sm font-medium text-neutral-850 outline-none dark:border-brand-medium-dark dark:bg-neutral-950 dark:text-neutral-300'
                               />
                               <SelectContent
@@ -891,7 +898,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           className='h-7 w-[88px] rounded-md bg-neutral-100 font-caption text-cp-sm font-medium  !text-neutral-1000 hover:bg-neutral-200 dark:bg-white dark:hover:bg-neutral-100'
                           onClick={handleCancelCreateElement}
                         >
-                          Cancel
+                          {tr('Cancel')}
                         </button>
                       </Popover.Close>
                       <button
@@ -900,7 +907,7 @@ const ElementCard = (props: ElementCardProps): ReactNode => {
                           'h-7 w-[88px] rounded-md bg-brand font-caption text-cp-sm font-medium !text-white hover:bg-brand-medium-dark focus:bg-brand-medium',
                         )}
                       >
-                        Create
+                        {tr('Create')}
                       </button>
                     </div>
                   </form>

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useState } from 'react'
 
 import { useRuntime } from '../../../../middleware/shared/providers'
@@ -23,7 +24,7 @@ const RuntimeLoginModal = () => {
     setError('')
 
     if (!username || !password) {
-      setError('Username and password are required')
+      setError(tr('Username and password are required'))
       return
     }
 
@@ -80,10 +81,10 @@ const RuntimeLoginModal = () => {
       }}
     >
       <ModalContent className='flex w-[400px] select-none flex-col items-center justify-start rounded-lg p-6'>
-        <ModalTitle className='mb-4 text-xl font-semibold'>Login to OpenPLC Runtime</ModalTitle>
+        <ModalTitle className='mb-4 text-xl font-semibold'>{tr('Login to OpenPLC Runtime')}</ModalTitle>
 
         <p className='mb-6 text-center text-sm text-neutral-600 dark:text-neutral-400'>
-          Please enter your credentials to connect to the runtime.
+          {tr('Please enter your credentials to connect to the runtime.')}
         </p>
 
         <form
@@ -96,7 +97,7 @@ const RuntimeLoginModal = () => {
         >
           <div>
             <Label htmlFor={`runtime-user-${deviceId}`} className='mb-2 block text-sm'>
-              Username
+              {tr('Username')}
             </Label>
             <input
               id={`runtime-user-${deviceId}`}
@@ -107,7 +108,7 @@ const RuntimeLoginModal = () => {
               spellCheck={false}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder='Enter username'
+              placeholder={tr('Enter username')}
               className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
               disabled={isLoading}
             />
@@ -115,7 +116,7 @@ const RuntimeLoginModal = () => {
 
           <div>
             <Label htmlFor={`runtime-pass-${deviceId}`} className='mb-2 block text-sm'>
-              Password
+              {tr('Password')}
             </Label>
             <input
               id={`runtime-pass-${deviceId}`}
@@ -124,7 +125,7 @@ const RuntimeLoginModal = () => {
               autoComplete='off'
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder='Enter password'
+              placeholder={tr('Enter password')}
               className='w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-850 outline-none focus:border-brand dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
               disabled={isLoading}
             />
@@ -146,7 +147,7 @@ const RuntimeLoginModal = () => {
               disabled={isLoading}
               className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </form>

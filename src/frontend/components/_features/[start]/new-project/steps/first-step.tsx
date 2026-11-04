@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-misused-promises */
 
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 import { SubmitHandler, useForm } from 'react-hook-form'
 
@@ -60,7 +61,7 @@ const Step1 = ({ onNext, onClose }: { onNext: () => void; onClose: () => void })
       <form onSubmit={handleSubmit(handleFormSubmit)} className='flex flex-grow flex-col justify-between'>
         <div>
           <h2 className='mb-8 select-none text-center text-lg font-semibold text-neutral-1000 dark:text-white'>
-            What type of project will you be working on? *
+            {tr('What type of project will you be working on? *')}
           </h2>
 
           <div className='flex w-full justify-around'>
@@ -73,7 +74,7 @@ const Step1 = ({ onNext, onClose }: { onNext: () => void; onClose: () => void })
               }`}
               onClick={() => handleSelectType('plc-project')}
             >
-              <FolderIcon className='mr-2' /> PLC Project
+              <FolderIcon className='mr-2' /> {tr('PLC Project')}
             </button>
 
             <button
@@ -85,7 +86,7 @@ const Step1 = ({ onNext, onClose }: { onNext: () => void; onClose: () => void })
               }`}
               onClick={() => handleSelectType('plc-library')}
             >
-              <BookIcon className='mr-2' /> Library
+              <BookIcon className='mr-2' /> {tr('Library')}
             </button>
           </div>
         </div>
@@ -98,7 +99,7 @@ const Step1 = ({ onNext, onClose }: { onNext: () => void; onClose: () => void })
               'h-8 w-52 items-center rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100',
             )}
           >
-            Cancel
+            {tr('Cancel')}
           </button>
 
           <button
@@ -108,7 +109,7 @@ const Step1 = ({ onNext, onClose }: { onNext: () => void; onClose: () => void })
             }`}
             disabled={!selected}
           >
-            Next
+            {tr('Next')}
           </button>
         </div>
       </form>

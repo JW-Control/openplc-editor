@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+
 import type { PlatformCapabilities } from '../../middleware/shared/ports/platform-capabilities'
 import type {
   ProjectPort,
@@ -291,8 +293,10 @@ const ENDED_SESSION_NO_RETURN = {
 function refusedForHavingNoLocation(store: OpenPLCStore, reason: SaveReason): boolean {
   if (!store.getState().workspace.isEphemeralProject || reason !== 'user') return false
   toast({
-    title: 'This project has no location yet',
-    description: 'It was retrieved from a device. Use Save As to choose where to keep it, then saving works as usual.',
+    title: tr('This project has no location yet'),
+    description: tr(
+      'It was retrieved from a device. Use Save As to choose where to keep it, then saving works as usual.',
+    ),
     variant: 'warn',
   })
   return true
@@ -316,8 +320,8 @@ async function fallBackToSaveAs(
   capabilities: PlatformCapabilities,
 ): Promise<boolean> {
   toast({
-    title: 'Autonomy Edge could not be reached',
-    description: 'Choose a folder to keep a local copy of the project, so nothing you did is lost.',
+    title: tr('Autonomy Edge could not be reached'),
+    description: tr('Choose a folder to keep a local copy of the project, so nothing you did is lost.'),
     variant: 'warn',
   })
   const saved = await executeSaveProjectAs(store, projectPort, capabilities)
@@ -336,7 +340,7 @@ export async function executeSaveProject(
   flushGlobalVariableListDrafts(store)
   const state = store.getState()
   if (!state.workspace.canEdit) {
-    notifyNoWritePermission('save changes to')
+    notifyNoWritePermission(tr('save changes to'))
     return { success: false }
   }
 
@@ -347,8 +351,10 @@ export async function executeSaveProject(
   if (reason === 'pre-build' && !state.workspace.autoSaveOnBuild) {
     if (staleFlows.length > 0) {
       toast({
-        title: 'Some changes are invalid',
-        description: `The graphical body of ${staleFlows.join(', ')} is invalid. Fix it before building.`,
+        title: tr('Some changes are invalid'),
+        description: tr('The graphical body of {{value}} is invalid. Fix it before building.', {
+          value: staleFlows.join(', '),
+        }),
         variant: 'fail',
       })
     }
@@ -363,8 +369,8 @@ export async function executeSaveProject(
   setEditingState('save-request')
   if (!capabilities.isNativeApplication) {
     toast({
-      title: 'Save changes',
-      description: 'Trying to save the changes in the project file.',
+      title: tr('Save changes'),
+      description: tr('Trying to save the changes in the project file.'),
       variant: 'warn',
     })
   }
@@ -435,7 +441,11 @@ export async function executeSaveProject(
     // JWPLC: the HMI Designer tab's design goes to hmi/ with the rest of the project.
     if (res.success && !(await saveHmiDesignerDesign())) {
       setEditingState('unsaved')
-      toast({ title: 'Error saving the HMI', description: 'No se pudo guardar el diseño del HMI.', variant: 'fail' })
+      toast({
+        title: tr('Error saving the HMI'),
+        description: tr('No se pudo guardar el diseño del HMI.'),
+        variant: 'fail',
+      })
       return { success: false }
     }
     if (res.success) {
@@ -486,14 +496,17 @@ export async function executeSaveProject(
 
       if (staleFlows.length > 0) {
         toast({
-          title: 'Some changes were not saved',
-          description: `The graphical body of ${staleFlows.join(', ')} is invalid and could not be written to disk. Every other file was saved.`,
+          title: tr('Some changes were not saved'),
+          description: tr(
+            'The graphical body of {{value}} is invalid and could not be written to disk. Every other file was saved.',
+            { value: staleFlows.join(', ') },
+          ),
           variant: 'fail',
         })
       } else if (!capabilities.isNativeApplication) {
         toast({
-          title: 'Changes saved!',
-          description: 'The project was saved successfully!',
+          title: tr('Changes saved!'),
+          description: tr('The project was saved successfully!'),
           variant: 'default',
         })
       }
@@ -507,8 +520,8 @@ export async function executeSaveProject(
 
       resumeSaveAfterEdgeSignIn(store, () => executeSaveProject(store, projectPort, capabilities))
       toast({
-        title: 'Not saved — your session ended',
-        description: 'Sign in again and this save finishes on its own. Everything you typed is still open here.',
+        title: tr('Not saved — your session ended'),
+        description: tr('Sign in again and this save finishes on its own. Everything you typed is still open here.'),
         variant: 'fail',
       })
     } else if (canFallBackToSaveAs(res, capabilities)) {
@@ -517,7 +530,7 @@ export async function executeSaveProject(
     } else {
       setEditingState('unsaved')
       toast({
-        title: 'Error in the save request!',
+        title: tr('Error in the save request!'),
         description: res.error ?? 'Save failed',
         variant: 'fail',
       })
@@ -527,8 +540,8 @@ export async function executeSaveProject(
   } catch {
     setEditingState('unsaved')
     toast({
-      title: 'Error in the save request!',
-      description: 'An unexpected error occurred while saving.',
+      title: tr('Error in the save request!'),
+      description: tr('An unexpected error occurred while saving.'),
       variant: 'fail',
     })
     return { success: false }
@@ -579,7 +592,7 @@ export async function executeSaveFile(
   const state = store.getState()
   // See executeSaveProject for rationale — same persist gate.
   if (!state.workspace.canEdit) {
-    notifyNoWritePermission('save changes to')
+    notifyNoWritePermission(tr('save changes to'))
     return { success: false }
   }
   // Same again: every caller of this is a person pressing Save.
@@ -591,7 +604,11 @@ export async function executeSaveFile(
 
   const file = files[fileName]
   if (!file) {
-    toast({ title: 'Error saving file', description: `File "${fileName}" not found.`, variant: 'fail' })
+    toast({
+      title: tr('Error saving file'),
+      description: tr('File "{{fileName}}" not found.', { fileName }),
+      variant: 'fail',
+    })
     return { success: false }
   }
 
@@ -601,7 +618,7 @@ export async function executeSaveFile(
   const fail = (description: string): { success: false } => {
     setEditingState('unsaved')
 
-    toast({ title: 'Error saving file', description, variant: 'fail' })
+    toast({ title: tr('Error saving file'), description, variant: 'fail' })
     return { success: false }
   }
 
@@ -620,8 +637,10 @@ export async function executeSaveFile(
         fileName,
       })
       toast({
-        title: 'Not saved — your session ended',
-        description: `Sign in again and "${fileName}" saves on its own. Everything you typed is still open here.`,
+        title: tr('Not saved — your session ended'),
+        description: tr('Sign in again and "{{fileName}}" saves on its own. Everything you typed is still open here.', {
+          fileName,
+        }),
         variant: 'fail',
       })
       return { success: false }
@@ -632,7 +651,7 @@ export async function executeSaveFile(
       return { success: await fallBackToSaveAs(store, projectPort, capabilities) }
     }
 
-    toast({ title: 'Error saving file', description: result.error ?? 'Save failed', variant: 'fail' })
+    toast({ title: tr('Error saving file'), description: result.error ?? 'Save failed', variant: 'fail' })
     return { success: false }
   }
 
@@ -793,7 +812,11 @@ export async function executeSaveFile(
 
     // See `executeSaveProject` for the capability-gated toast rationale.
     if (!capabilities.isNativeApplication) {
-      toast({ title: 'File saved', description: `"${fileName}" saved successfully.`, variant: 'default' })
+      toast({
+        title: tr('File saved'),
+        description: tr('"{{fileName}}" saved successfully.', { fileName }),
+        variant: 'default',
+      })
     }
     return { success: true }
   } catch {
@@ -821,7 +844,7 @@ export async function executeSaveActiveFile(
   // file and fell through to the save, which then failed looking for a file
   // called "available" — the discriminant is the field to test.
   if (editor.type === 'available' || !editor.meta.name) {
-    toast({ title: 'No file open', description: 'There is no file to save.', variant: 'fail' })
+    toast({ title: tr('No file open'), description: tr('There is no file to save.'), variant: 'fail' })
     return { success: false }
   }
 

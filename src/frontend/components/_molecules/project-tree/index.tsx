@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { Monitor } from 'lucide-react'
 import { ComponentPropsWithoutRef, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -307,7 +308,11 @@ const ProjectTreeExpandableLeaf = ({
     const res = renameRemoteDevice(label, renamed)
     if (!res.ok) {
       setNewLabel(label || '')
-      toast({ title: 'Rename failed', description: res.message ?? `"${label}" could not be renamed.`, variant: 'fail' })
+      toast({
+        title: tr('Rename failed'),
+        description: res.message ?? `"${label}" could not be renamed.`,
+        variant: 'fail',
+      })
       return
     }
     // Soft, unsaved change: renameElement flags the workspace dirty; the rename
@@ -591,8 +596,8 @@ const ProjectTreeLeaf = ({
   const handleLeafSelection = () => {
     if (!label) {
       toast({
-        title: 'Error',
-        description: 'Pou or datatype label is required to select.',
+        title: tr('Error'),
+        description: tr('Pou or datatype label is required to select.'),
         variant: 'fail',
       })
       return
@@ -613,8 +618,8 @@ const ProjectTreeLeaf = ({
     // the tree's own Rename entry a no-op.
     if (!isAPou && !isDatatype && !isGlobalVariableList && !isServer && !isRemoteDevice && !isEthercatDevice) {
       toast({
-        title: 'Error',
-        description: 'Only POU, datatype, global variable list, server, or remote device files can be renamed.',
+        title: tr('Error'),
+        description: tr('Only POU, datatype, global variable list, server, or remote device files can be renamed.'),
         variant: 'fail',
       })
       return
@@ -622,8 +627,8 @@ const ProjectTreeLeaf = ({
 
     if (!newLabel || !label) {
       toast({
-        title: 'Error',
-        description: 'Label is required to rename.',
+        title: tr('Error'),
+        description: tr('Label is required to rename.'),
         variant: 'fail',
       })
       return
@@ -640,7 +645,7 @@ const ProjectTreeLeaf = ({
       setNewLabel(label || '')
       if (res.cancelled) return
       toast({
-        title: 'Rename failed',
+        title: tr('Rename failed'),
         description: res.message ?? `"${label}" could not be renamed.`,
         variant: 'fail',
       })
@@ -724,8 +729,8 @@ const ProjectTreeLeaf = ({
   const handleDuplicateFile = () => {
     if (!isAPou && !isDatatype && !isGlobalVariableList && !isServer && !isRemoteDevice) {
       toast({
-        title: 'Error',
-        description: 'Only POU, datatype, global variable list, server, or remote device files can be duplicated.',
+        title: tr('Error'),
+        description: tr('Only POU, datatype, global variable list, server, or remote device files can be duplicated.'),
         variant: 'fail',
       })
       return
@@ -733,8 +738,8 @@ const ProjectTreeLeaf = ({
 
     if (!label) {
       toast({
-        title: 'Error',
-        description: 'Label is required to duplicate.',
+        title: tr('Error'),
+        description: tr('Label is required to duplicate.'),
         variant: 'fail',
       })
       return
@@ -756,7 +761,7 @@ const ProjectTreeLeaf = ({
 
     if (!duplicated.ok) {
       toast({
-        title: 'Duplicate failed',
+        title: tr('Duplicate failed'),
         description: duplicated.message ?? `"${label}" could not be duplicated.`,
         variant: 'fail',
       })
@@ -774,8 +779,8 @@ const ProjectTreeLeaf = ({
       !isEthercatModule
     ) {
       toast({
-        title: 'Error',
-        description: 'Only POU, datatype, global variable list, server, or remote device files can be deleted.',
+        title: tr('Error'),
+        description: tr('Only POU, datatype, global variable list, server, or remote device files can be deleted.'),
         variant: 'fail',
       })
       return
@@ -783,8 +788,8 @@ const ProjectTreeLeaf = ({
 
     if (!label) {
       toast({
-        title: 'Error',
-        description: 'Label is required to delete.',
+        title: tr('Error'),
+        description: tr('Label is required to delete.'),
         variant: 'fail',
       })
       return

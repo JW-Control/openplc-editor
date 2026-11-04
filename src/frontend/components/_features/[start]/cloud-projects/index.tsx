@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Cloud, Lock } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
@@ -39,7 +40,7 @@ export const CloudProjectsNotice = ({ cloud, onSignedIn }: CloudProjectsNoticePr
         // `blue-500`, not `brand`: the brand token is a hex `var()` and Tailwind 3 can't apply an opacity modifier to it.
         <div className='flex w-full flex-col items-center gap-2 rounded-lg border border-blue-500/25 bg-blue-500/5 px-4 py-3 text-center'>
           <h3 className='font-caption text-sm font-semibold text-neutral-1000 dark:text-white'>
-            Sign in with your Autonomy Edge account
+            {tr('Sign in with your Autonomy Edge account')}
           </h3>
           <div className='flex items-center gap-3'>
             <button
@@ -47,7 +48,7 @@ export const CloudProjectsNotice = ({ cloud, onSignedIn }: CloudProjectsNoticePr
               onClick={() => setSignInOpen(true)}
               className='cursor-pointer rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-medium-dark'
             >
-              Sign in
+              {tr('Sign in')}
             </button>
             {/* Opens Edge: signing up is an email round-trip, not something to do inline here. */}
             <a
@@ -56,13 +57,13 @@ export const CloudProjectsNotice = ({ cloud, onSignedIn }: CloudProjectsNoticePr
               rel='noreferrer'
               className='cursor-pointer text-sm font-medium text-brand hover:underline'
             >
-              Create an account
+              {tr('Create an account')}
             </a>
           </div>
         </div>
       ) : (
         <p className='max-w-xl text-base text-neutral-600 dark:text-neutral-400'>
-          Could not reach Autonomy Edge. Your local projects below are unaffected.
+          {tr('Could not reach Autonomy Edge. Your local projects below are unaffected.')}
         </p>
       )}
 
@@ -94,7 +95,7 @@ export const CloudProjectCard = ({ summary }: { summary: CloudProjectSummary }) 
     // Refused here rather than on the way back: Edge now answers 403 to every
     // write on this project, so opening it would only lead to a save that fails.
     if (summary.locked) {
-      toast({ title: 'This project is locked.', description: LOCKED_REASON, variant: 'fail' })
+      toast({ title: tr('This project is locked.'), description: LOCKED_REASON, variant: 'fail' })
 
       return
     }
@@ -108,7 +109,7 @@ export const CloudProjectCard = ({ summary }: { summary: CloudProjectSummary }) 
     }
 
     toast({
-      title: 'Cannot open the project.',
+      title: tr('Cannot open the project.'),
       description: result.error?.description ?? `${summary.name} could not be opened.`,
       variant: 'fail',
     })

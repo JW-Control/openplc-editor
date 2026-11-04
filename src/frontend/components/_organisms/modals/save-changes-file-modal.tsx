@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { useCapabilities, useProject } from '../../../../middleware/shared/providers'
@@ -60,7 +61,7 @@ const SaveChangesFileModal = ({ isOpen, data, ...rest }: SaveChangesFileModalPro
       {...rest}
     >
       <ModalContent className='flex h-[420px] w-[340px] select-none flex-col items-center justify-evenly rounded-lg'>
-        <ModalTitle className='hidden'>Save file changes</ModalTitle>
+        <ModalTitle className='hidden'>{tr('Save file changes')}</ModalTitle>
         <div className='flex h-[350px] select-none flex-col items-center gap-6'>
           <WarningIcon className='mr-2 mt-2 h-[73px] w-[73px]' />
           <div>
@@ -75,20 +76,20 @@ const SaveChangesFileModal = ({ isOpen, data, ...rest }: SaveChangesFileModalPro
                 onClick={() => void handleSave()}
                 className='w-full rounded-lg bg-brand px-4 py-2 text-center font-medium text-white'
               >
-                Save
+                {tr('Save')}
               </button>
               <button
                 onClick={() => void handleDontSave()}
                 className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Don't Save
+                {tr("Don't Save")}
               </button>
             </div>
             <button
               onClick={handleCancel}
               className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </div>

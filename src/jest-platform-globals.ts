@@ -35,3 +35,6 @@ if (typeof globalThis.crypto?.subtle === 'undefined') {
     configurable: true,
   })
 }
+
+// Unit tests assert the English UI texts; the app defaults to Spanish.
+process.env.OPENPLC_UI_LANGUAGE = 'en'

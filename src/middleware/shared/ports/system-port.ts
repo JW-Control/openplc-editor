@@ -66,4 +66,11 @@ export interface SystemPort {
    *         default. Web: its own env var (may be a same-origin prefix).
    */
   getEdgeFrontendUrl(): string
+
+  /**
+   * Tell the platform the UI language changed ('es' or 'en') so native parts
+   * (application menu, dialogs) follow it and it is kept across launches.
+   * Optional: a platform without native UI can omit it.
+   */
+  setUiLanguage?(language: 'es' | 'en'): void
 }

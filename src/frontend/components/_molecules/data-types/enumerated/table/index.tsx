@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import React, { useEffect, useRef } from 'react'
 
@@ -94,8 +95,8 @@ const EnumeratedTable = ({
         resetBorders()
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Row removed',
-          description: `The row was removed because the value was empty.`,
+          title: tr('Row removed'),
+          description: tr('The row was removed because the value was empty.'),
           variant: 'fail',
         })
         return newRows
@@ -110,8 +111,8 @@ const EnumeratedTable = ({
         resetBorders()
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Value already exists',
-          description: `The value already exists in the list.`,
+          title: tr('Value already exists'),
+          description: tr('The value already exists in the list.'),
           variant: 'fail',
         })
         return newRows
@@ -123,8 +124,8 @@ const EnumeratedTable = ({
         resetBorders()
         setArrayTable({ selectedRow: -1 })
         toast({
-          title: 'Invalid enumerated value',
-          description: `The enumerated value is invalid. Valid names: CamelCase, PascalCase or SnakeCase.`,
+          title: tr('Invalid enumerated value'),
+          description: tr('The enumerated value is invalid. Valid names: CamelCase, PascalCase or SnakeCase.'),
           variant: 'fail',
         })
         return newRows

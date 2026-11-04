@@ -1,0 +1,84 @@
+{
+  "file": {
+    "label": "Archivo",
+    "submenu": {
+      "newProject": "Nuevo proyecto",
+      "openProject": "Abrir proyecto",
+      "examples": {
+        "label": "Tutoriales y ejemplos",
+        "submenu": {
+          "arduino": "1: Arduino_Cloud",
+          "blink": "2: Blink",
+          "blinkP1AM": "3: Blink_P1AM",
+          "multiLanguage": "4: Multi_Language",
+          "randomGeneratorPragma": "5: Random_Generator_Pragma",
+          "tcpSocket": "6: TCP_Socket",
+          "trafficLightFBD": "7: Traffic_Light_FBD"
+        }
+      },
+      "save": "Guardar archivo",
+      "saveProject": "Guardar proyecto",
+      "retrieveProject": "Recuperar proyecto desde el PLC…",
+      "saveAs": "Guardar como",
+      "closeTab": "Cerrar pestaña",
+      "closeProject": "Cerrar proyecto",
+      "exportToPLCOpenXml": "Exportar a PLCopen XML",
+      "importFromPLCOpenXml": "Importar PLCopen XML",
+      "pageSetup": "Configurar página",
+      "preview": "Vista previa",
+      "print": "Imprimir",
+      "updates": "Buscar actualizaciones",
+      "quit": "Salir"
+    }
+  },
+  "edit": {
+    "label": "Editar",
+    "submenu": {
+      "undo": "Deshacer",
+      "redo": "Rehacer",
+      "cut": "Cortar",
+      "copy": "Copiar",
+      "paste": "Pegar",
+      "find": "Buscar",
+      "findNext": "Buscar siguiente",
+      "findPrevious": "Buscar anterior",
+      "findInProject": "Buscar en el proyecto",
+      "addElement": {
+        "label": "Agregar elemento",
+        "submenu": {
+          "function": "Función",
+          "functionBlock": "Bloque de función",
+          "program": "Programa",
+          "dataType": "Tipo de dato",
+          "cExtension": "Extensión C"
+        }
+      },
+      "selectAll": "Seleccionar todo",
+      "delete": "Eliminar",
+      "deletePou": "Eliminar POU/tipo de dato"
+    }
+  },
+  "display": {
+    "label": "Ver",
+    "submenu": {
+      "refresh": "Actualizar",
+      "clearErrors": "Borrar errores",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "switchPerspective": "Cambiar perspectiva",
+      "fullScreen": "Pantalla completa",
+      "resetPerspective": "Restablecer perspectiva",
+      "sortAlpha": "Ordenar alfabéticamente",
+      "theme": "Cambiar tema"
+    }
+  },
+  "help": {
+    "label": "Ayuda",
+    "submenu": {
+      "communitySupport": "Soporte de la comunidad",
+      "documentation": "Documentación",
+      "about": "Acerca de"
+    }
+  },
+  "recent": "Recientes"
+}

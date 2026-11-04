@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useState } from 'react'
 
 import type { PLCInstance } from '../../../../middleware/shared/ports/types'
@@ -239,13 +240,13 @@ const InstancesEditor = () => {
       }
 
       handleFileAndWorkspaceSavedState('Resource')
-      toast({ title: 'Update tables', description: 'Changes applied successfully.' })
+      toast({ title: tr('Update tables'), description: tr('Changes applied successfully.') })
       setParseError(null)
       return true
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unexpected syntax error.'
       setParseError(message)
-      toast({ title: 'Syntax error', description: message, variant: 'fail' })
+      toast({ title: tr('Syntax error'), description: message, variant: 'fail' })
       return false
     }
   }
@@ -313,9 +314,9 @@ const InstancesEditor = () => {
         <ViewModeToggle
           display={editorInstances.display}
           onDisplayChange={handleVisualizationTypeChange}
-          containerLabel='instances visualization switch container'
-          tableLabel='instances table visualization'
-          codeLabel='instances code visualization'
+          containerLabel={tr('instances visualization switch container')}
+          tableLabel={tr('instances table visualization')}
+          codeLabel={tr('instances code visualization')}
           className={cn('flex-1', { 'absolute right-0': editorInstances.display === 'code' })}
         />
       </div>

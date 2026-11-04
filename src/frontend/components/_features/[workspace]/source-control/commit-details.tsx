@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { ChevronDown, ChevronRight, File } from 'lucide-react'
 import { useState } from 'react'
 
@@ -76,7 +77,7 @@ export function CommitDetails({ commit, projectId }: CommitDetailsProps) {
     // Restore overwrites the working tree from a past commit — a backend
     // write.  No write permission ⇒ skip it and warn.
     if (!canEdit) {
-      notifyNoWritePermission('restore commits in')
+      notifyNoWritePermission(tr('restore commits in'))
       return
     }
 
@@ -89,10 +90,10 @@ export function CommitDetails({ commit, projectId }: CommitDetailsProps) {
       const result = await projectPort.openProjectByPath(effectiveProjectId)
       if (result.success && result.data) {
         sharedWorkspaceActions.handleOpenProjectResponse(result.data)
-        toast({ title: 'Restored to commit', description: commit.shortHash, variant: 'default' })
+        toast({ title: tr('Restored to commit'), description: commit.shortHash, variant: 'default' })
       }
     } catch {
-      toast({ title: 'Failed to restore commit', variant: 'fail' })
+      toast({ title: tr('Failed to restore commit'), variant: 'fail' })
     } finally {
       setIsRestoring(false)
     }
@@ -100,22 +101,22 @@ export function CommitDetails({ commit, projectId }: CommitDetailsProps) {
 
   return (
     <div className='border-t border-neutral-200 bg-neutral-50 px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900'>
-      <p className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>Commit Details</p>
+      <p className='mb-2 text-xs font-medium text-neutral-700 dark:text-neutral-300'>{tr('Commit Details')}</p>
       <div className='mb-3 space-y-1.5'>
         <div className='flex gap-2'>
-          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>Hash</span>
+          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>{tr('Hash')}</span>
           <span className='truncate font-mono text-xs text-blue-500 dark:text-blue-400'>{commit.hash}</span>
         </div>
         <div className='flex gap-2'>
-          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>Author</span>
+          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>{tr('Author')}</span>
           <span className='truncate text-xs text-neutral-700 dark:text-neutral-300'>{commit.author}</span>
         </div>
         <div className='flex gap-2'>
-          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>Date</span>
+          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>{tr('Date')}</span>
           <span className='text-xs text-neutral-700 dark:text-neutral-300'>{formattedDate}</span>
         </div>
         <div className='flex gap-2'>
-          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>Message</span>
+          <span className='w-14 shrink-0 text-xs text-neutral-500 dark:text-neutral-400'>{tr('Message')}</span>
           <span className='break-words text-xs text-neutral-700 dark:text-neutral-300'>{commit.message}</span>
         </div>
       </div>
@@ -141,7 +142,7 @@ export function CommitDetails({ commit, projectId }: CommitDetailsProps) {
               ))}
             </div>
           ) : files.length === 0 ? (
-            <p className='px-2 py-2 text-center text-xs text-neutral-400 dark:text-neutral-500'>No files</p>
+            <p className='px-2 py-2 text-center text-xs text-neutral-400 dark:text-neutral-500'>{tr('No files')}</p>
           ) : (
             <ul className='max-h-40 overflow-y-auto'>
               {files.map((file) => {
@@ -176,13 +177,13 @@ export function CommitDetails({ commit, projectId }: CommitDetailsProps) {
           onClick={handleViewFiles}
           className='w-full rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-blue-600'
         >
-          View All Files
+          {tr('View All Files')}
         </button>
         <button
           onClick={() => setShowRestoreModal(true)}
           className='w-full rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors duration-150 hover:bg-yellow-50 hover:text-yellow-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-yellow-900/30 dark:hover:text-yellow-400'
         >
-          Restore to This Version
+          {tr('Restore to This Version')}
         </button>
       </div>
 

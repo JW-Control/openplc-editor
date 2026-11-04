@@ -1,3 +1,5 @@
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { ComponentPropsWithoutRef } from 'react'
 
 import { useCapabilities, useNavigation, useProject, useWindow } from '../../../../middleware/shared/providers'
@@ -89,8 +91,8 @@ const SaveChangesModal = ({
         if (result) return
         restoreOpenProjectRoot(projectPort, openPath)
         toast({
-          title: 'Cannot open the project.',
-          description: 'The selected project could not be loaded.',
+          title: tr('Cannot open the project.'),
+          description: tr('The selected project could not be loaded.'),
           variant: 'fail',
         })
         return
@@ -147,12 +149,14 @@ const SaveChangesModal = ({
       {...rest}
     >
       <ModalContent className='flex h-[420px] w-[340px] select-none flex-col items-center justify-evenly rounded-lg'>
-        <ModalTitle className='hidden'>Save project changes</ModalTitle>
+        <ModalTitle className='hidden'>{tr('Save project changes')}</ModalTitle>
         <div className='flex h-[350px] select-none flex-col items-center gap-6'>
           <WarningIcon className='mr-2 mt-2 h-[73px] w-[73px]' />
           <div>
             <p className='text-m w-full text-center font-bold text-gray-600 dark:text-neutral-100'>
-              There are unsaved changes in your <strong>project</strong>. Do you want to save before closing?
+              {trRich('There are unsaved changes in your {{project}}. Do you want to save before closing?', {
+                project: <strong>{tr('project')}</strong>,
+              })}
             </p>
           </div>
 
@@ -164,7 +168,7 @@ const SaveChangesModal = ({
                 }}
                 className='w-full rounded-lg bg-brand px-4 py-2 text-center font-medium text-white '
               >
-                Save and close
+                {tr('Save and close')}
               </button>
               <button
                 onClick={() => {
@@ -172,14 +176,14 @@ const SaveChangesModal = ({
                 }}
                 className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Close without saving
+                {tr('Close without saving')}
               </button>
             </div>
             <button
               onClick={() => handleCancelModal()}
               className='w-full rounded-lg bg-neutral-100 px-4 py-2 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
             >
-              Cancel
+              {tr('Cancel')}
             </button>
           </div>
         </div>

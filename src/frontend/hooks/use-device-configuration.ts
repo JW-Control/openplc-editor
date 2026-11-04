@@ -10,6 +10,7 @@ import {
 import { generateDefaultChannelMappings, pdoToChannels } from '@root/backend/shared/ethercat/esi-parser'
 import { extractDefaultSdoConfigurations } from '@root/backend/shared/ethercat/sdo-config-defaults'
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStoreApi } from '@root/frontend/store'
 import type {
   ConfiguredEtherCATDevice,
@@ -141,9 +142,10 @@ export function useDeviceConfiguration({
               coeFlags: migrated.config.coeFlags,
             })
             toast({
-              title: 'Project updated',
-              description:
+              title: tr('Project updated'),
+              description: tr(
                 'This EtherCAT slave was saved under the previous schema. Its CoE flags and PDO defaults have been filled in from the ESI.',
+              ),
               variant: 'default',
             })
           } else if (lacksEsiStartupData(device, result.device)) {

@@ -1,4 +1,5 @@
 import * as Popover from '@radix-ui/react-popover'
+import { tr } from '@root/frontend/locales/tr'
 import { useMemo, useState } from 'react'
 
 import { useVersionControl } from '../../../../../middleware/shared/providers'
@@ -67,7 +68,7 @@ export function CreateBranchPopover({ projectId, onCreated, onCloseParent }: Cre
         // No write permission ⇒ warn instead of opening a branch form the
         // backend would reject anyway.
         if (open && !canEdit) {
-          notifyNoWritePermission('create branches in')
+          notifyNoWritePermission(tr('create branches in'))
           return
         }
         setIsOpen(open)

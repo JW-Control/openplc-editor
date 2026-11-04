@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { Node } from '@xyflow/react'
 import { ComponentPropsWithRef, forwardRef, useEffect, useMemo, useState } from 'react'
 
@@ -179,8 +180,8 @@ const FBDBlockAutoComplete = forwardRef<HTMLDivElement, FBDBlockAutoCompleteProp
     const submitAddVariable = ({ variableName }: { variableName: string }) => {
       if (!variableName.trim()) {
         toast({
-          title: 'Invalid variable name',
-          description: 'Variable name cannot be empty',
+          title: tr('Invalid variable name'),
+          description: tr('Variable name cannot be empty'),
           variant: 'fail',
         })
         return

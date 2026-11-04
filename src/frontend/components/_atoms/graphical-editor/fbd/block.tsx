@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { FocusEvent, memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { PLCVariable } from '../../../../../middleware/shared/ports/types'
@@ -146,7 +147,7 @@ export const BlockNodeElement = <T extends object>({
 
     if (!libraryBlock) {
       setBlockNameValue(validBlockNameValue)
-      toast({ title: 'Invalid name', description: 'The name could not be changed', variant: 'fail' })
+      toast({ title: tr('Invalid name'), description: tr('The name could not be changed'), variant: 'fail' })
       return
     }
 
@@ -158,8 +159,8 @@ export const BlockNodeElement = <T extends object>({
     if (libraryBlock && pou.pouType === 'function' && (libraryBlock as BlockVariant).type !== 'function') {
       setWrongName(true)
       toast({
-        title: 'Can not add block',
-        description: 'You can not add a function block to a function POU',
+        title: tr('Can not add block'),
+        description: tr('You can not add a function block to a function POU'),
         variant: 'fail',
       })
       return
@@ -513,8 +514,8 @@ const Block = <T extends object>(block: BlockProps<T>) => {
 
     if (!rung || !node) {
       toast({
-        title: 'Error',
-        description: 'Could not find the related rung or node',
+        title: tr('Error'),
+        description: tr('Could not find the related rung or node'),
         variant: 'fail',
       })
       return
@@ -713,10 +714,11 @@ const Block = <T extends object>(block: BlockProps<T>) => {
     const ambiguous = ambiguousInOutFeeds(node, rung.edges)
     if (ambiguous.length > 0) {
       toast({
-        title: 'Cannot update this block yet',
-        description:
-          `${ambiguous.join(', ')} ${ambiguous.length === 1 ? 'is' : 'are'} connected to more than one ` +
-          `variable. A VAR_IN_OUT parameter takes exactly one — remove the extra connection(s), then update.`,
+        title: tr('Cannot update this block yet'),
+        description: tr(
+          'These pins are connected to more than one variable: {{pins}}. A VAR_IN_OUT parameter takes exactly one — remove the extra connections, then update.',
+          { pins: ambiguous.join(', ') },
+        ),
         variant: 'fail',
       })
       return
@@ -871,7 +873,7 @@ const Block = <T extends object>(block: BlockProps<T>) => {
                 <RefreshIcon />
               </TooltipTrigger>
               <TooltipContent side='top' className='text-xs'>
-                Update node
+                {tr('Update node')}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

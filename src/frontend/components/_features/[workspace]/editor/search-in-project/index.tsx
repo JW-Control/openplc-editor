@@ -1,5 +1,6 @@
 import * as Checkbox from '@radix-ui/react-checkbox'
 import { CheckIcon } from '@radix-ui/react-icons'
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -158,8 +159,8 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
   const handleSearch = () => {
     if (!searchQuery.trim()) {
       toast({
-        title: 'No search query',
-        description: 'Please enter a search query to search.',
+        title: tr('No search query'),
+        description: tr('Please enter a search query to search.'),
         variant: 'warn',
       })
       return
@@ -186,8 +187,8 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
 
     if (!result.ok) {
       toast({
-        title: 'Invalid Regular Expression',
-        description: 'The regular expression provided is invalid.',
+        title: tr('Invalid Regular Expression'),
+        description: tr('The regular expression provided is invalid.'),
         variant: 'warn',
       })
       return
@@ -195,8 +196,8 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
 
     if (result.matches.length === 0) {
       toast({
-        title: 'No results found',
-        description: 'No matches were found for your search.',
+        title: tr('No results found'),
+        description: tr('No matches were found for your search.'),
         variant: 'warn',
       })
       return
@@ -226,11 +227,11 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
     <div className='flex h-full w-full flex-col gap-8'>
       <div className='flex h-[57px] w-full gap-6'>
         <div className='flex w-full flex-col justify-between'>
-          <p className='text-base font-medium text-neutral-950 dark:text-white'>Pattern to Search</p>
+          <p className='text-base font-medium text-neutral-950 dark:text-white'>{tr('Pattern to Search')}</p>
           <InputWithRef
             className='h-[30px] w-full rounded-lg border border-neutral-300 px-[10px] text-xs text-neutral-700 outline-none focus:border-brand dark:border-neutral-850 dark:bg-neutral-900 dark:text-neutral-100'
             value={typedSearchQuery}
-            placeholder='Search'
+            placeholder={tr('Search')}
             onBlur={handleSearchQueryChange}
             onChange={(event) => {
               setTypedSearchQuery(event.target.value)
@@ -240,7 +241,7 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
         <div className='flex flex-col justify-between'>
           <CheckboxOption
             id='case-sensitive'
-            label='Case Sensitive'
+            label={tr('Case Sensitive')}
             checked={sensitiveCaseOption}
             onChange={() => {
               setSensitiveCaseOption(!sensitiveCaseOption)
@@ -251,7 +252,7 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
           />
           <CheckboxOption
             id='regular-expression'
-            label='Regular Expression'
+            label={tr('Regular Expression')}
             checked={regularExpressionOption}
             onChange={() => {
               setRegularExpressionOption(!regularExpressionOption)
@@ -265,7 +266,7 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
       <div className='h-[183px] w-full px-2 py-4'>
         <div className='flex h-full w-full gap-4'>
           <div className='flex flex-col gap-4'>
-            <span className='text-base font-medium text-neutral-950 dark:text-white'>Scope:</span>
+            <span className='text-base font-medium text-neutral-950 dark:text-white'>{tr('Scope:')}</span>
             {scopeElements.map((element) => (
               <RadioOption
                 key={element.value}
@@ -300,14 +301,14 @@ export default function SearchInProject({ onClose }: SearchInProjectModalProps) 
           className='h-full w-full items-center rounded-lg bg-neutral-100 text-center font-medium text-neutral-1000 dark:bg-neutral-850 dark:text-neutral-100'
           onClick={handleClose}
         >
-          Close
+          {tr('Close')}
         </button>
         <button
           className='h-full w-full items-center rounded-lg bg-brand text-center font-medium text-white disabled:cursor-not-allowed disabled:opacity-50'
           onClick={handleSearch}
           disabled={noElementSelected}
         >
-          Find
+          {tr('Find')}
         </button>
       </div>
     </div>

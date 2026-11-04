@@ -1,4 +1,5 @@
 import { i18n } from '@root/frontend/locales/i18n'
+import { tr } from '@root/frontend/locales/tr'
 import { BrowserWindow, Menu, MenuItemConstructorOptions, nativeTheme, shell } from 'electron'
 
 import { ProjectService } from '../backend/editor/services'
@@ -63,9 +64,7 @@ export default class MenuBuilder {
         click: () => void updates?.checkNow(),
       },
       {
-        // English only, like "Board Package Manager...": menu.json is shared with
-        // openplc-web byte for byte, and the web has no updater.
-        label: 'Check for Updates Automatically',
+        label: tr('Check for Updates Automatically'),
         type: 'checkbox',
         checked: updates?.isAutoCheckEnabled() ?? false,
         enabled: updates !== undefined,
@@ -182,7 +181,7 @@ export default class MenuBuilder {
    */
   private developerMenuItems(): MenuItemConstructorOptions[] {
     if (process.env.NODE_ENV !== 'development') return []
-    return [{ type: 'separator' }, { label: 'I/O Image Diagnostics', click: () => this.handleOpenDiagnostics() }]
+    return [{ type: 'separator' }, { label: tr('I/O Image Diagnostics'), click: () => this.handleOpenDiagnostics() }]
   }
 
   async handleOpenExternalLink(link: string) {
@@ -382,7 +381,7 @@ export default class MenuBuilder {
         ...this.updateItems(),
         { type: 'separator' },
         {
-          label: 'Board Package Manager...',
+          label: tr('Board Package Manager...'),
           click: () => this.mainWindow.webContents.send('packages:open-manager'),
           enabled: this.projectOpen,
         },
@@ -491,7 +490,7 @@ export default class MenuBuilder {
         },
         { type: 'separator' },
         {
-          label: 'Zoom', // Todo: i18n.t('menu:display.submenu.zoom') have to be added
+          label: tr('Zoom'),
           enabled: false,
           submenu: [
             {
@@ -698,7 +697,7 @@ export default class MenuBuilder {
           ...this.updateItems(),
           { type: 'separator' },
           {
-            label: 'Board Package Manager...',
+            label: tr('Board Package Manager...'),
             click: () => this.mainWindow.webContents.send('packages:open-manager'),
             enabled: this.projectOpen,
           },
@@ -816,7 +815,7 @@ export default class MenuBuilder {
           },
           { type: 'separator' },
           {
-            label: 'Zoom',
+            label: tr('Zoom'),
             enabled: false,
             submenu: [
               {

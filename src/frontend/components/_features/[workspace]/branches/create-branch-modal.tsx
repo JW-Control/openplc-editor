@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useEffect, useState } from 'react'
 
 import { useVersionControl } from '../../../../../middleware/shared/providers'
@@ -41,7 +42,7 @@ export function CreateBranchModal({ isOpen, projectId, onClose, onCreated }: Cre
 
     // No write permission ⇒ skip the doomed backend write and warn.
     if (!canEdit) {
-      notifyNoWritePermission('create branches in')
+      notifyNoWritePermission(tr('create branches in'))
       return
     }
 

@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import type {
   CoordinateExtent,
   DefaultEdgeOptions,
@@ -440,8 +441,8 @@ export const RungBody = ({
         const nodes = removePlaceholderElements(rungLocal.nodes)
         setRungLocal((rung) => ({ ...rung, nodes }))
         toast({
-          title: 'Can not add block',
-          description: `The block type ${blockType} does not exist in the library`,
+          title: tr('Can not add block'),
+          description: tr('The block type {{blockType}} does not exist in the library', { blockType }),
           variant: 'fail',
         })
         return

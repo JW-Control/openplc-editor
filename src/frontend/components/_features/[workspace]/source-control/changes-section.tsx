@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { File, Folder, FolderOpen } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -385,7 +386,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
     if (!canCommit || !versionControl) return
     // No write permission ⇒ skip the doomed backend commit and warn.
     if (!canEdit) {
-      notifyNoWritePermission('commit to')
+      notifyNoWritePermission(tr('commit to'))
       return
     }
 
@@ -453,7 +454,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
     if (!versionControl) return
     // No write permission ⇒ skip the doomed backend discard and warn.
     if (!canEdit) {
-      notifyNoWritePermission('discard changes in')
+      notifyNoWritePermission(tr('discard changes in'))
       return
     }
 
@@ -474,7 +475,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
           sharedWorkspaceActions.handleOpenProjectResponse(result.data)
         }
       } catch {
-        toast({ title: 'Failed to reload project after discard', variant: 'fail' })
+        toast({ title: tr('Failed to reload project after discard'), variant: 'fail' })
       }
       await fetchChanges()
     } catch (error) {
@@ -490,7 +491,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
     if (!versionControl) return
     // No write permission ⇒ skip the doomed backend stash and warn.
     if (!canEdit) {
-      notifyNoWritePermission('stash changes in')
+      notifyNoWritePermission(tr('stash changes in'))
       return
     }
 
@@ -512,10 +513,10 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
           sharedWorkspaceActions.handleOpenProjectResponse(result.data)
         }
       } catch {
-        toast({ title: 'Failed to reload project after stash', variant: 'fail' })
+        toast({ title: tr('Failed to reload project after stash'), variant: 'fail' })
       }
       await fetchChanges()
-      toast({ title: 'Changes stashed' })
+      toast({ title: tr('Changes stashed') })
     } catch (error) {
       setShowStashModal(false)
       const msg = error instanceof Error ? error.message : 'Failed to stash changes'
@@ -566,7 +567,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
             void fetchChanges()
           }}
           disabled={isFetching}
-          title='Sync changes'
+          title={tr('Sync changes')}
           className='rounded p-1 transition-colors duration-150 hover:bg-neutral-100 disabled:opacity-40 dark:hover:bg-neutral-800'
         >
           <svg
@@ -592,7 +593,9 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
       {/* File tree */}
       <div className='min-h-0 flex-1 overflow-y-auto'>
         {!hasChanges ? (
-          <p className='px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400'>No changes to commit</p>
+          <p className='px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400'>
+            {tr('No changes to commit')}
+          </p>
         ) : (
           <div className='py-1'>
             {tree.map((node) => (
@@ -633,7 +636,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value.slice(0, 500))}
-            placeholder='Commit message...'
+            placeholder={tr('Commit message...')}
             rows={3}
             className='w-full resize-none rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder-neutral-500'
           />
@@ -652,7 +655,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
           <button
             onClick={() => setShowStashModal(true)}
             disabled={selectedFiles.size === 0 || isStashing}
-            title='Stash selected changes for later'
+            title={tr('Stash selected changes for later')}
             className='rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors duration-150 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-blue-900/30 dark:hover:text-blue-400'
           >
             {isStashing ? 'Stashing...' : 'Stash'}
@@ -662,7 +665,7 @@ export function ChangesSection({ projectId }: ChangesSectionProps) {
             disabled={selectedFiles.size === 0 || isDiscarding}
             className='rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors duration-150 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-red-900/30 dark:hover:text-red-400'
           >
-            Discard
+            {tr('Discard')}
           </button>
         </div>
       </div>

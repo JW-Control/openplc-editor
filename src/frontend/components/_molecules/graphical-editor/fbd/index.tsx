@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import {
   addEdge,
   applyEdgeChanges,
@@ -507,8 +508,8 @@ export const FBDBody = ({ rung, nodeDivergences = [], isDebuggerActive = false }
 
       if (!pouLibrary) {
         toast({
-          title: 'Can not add block',
-          description: `The block type ${library} does not exist in the library`,
+          title: tr('Can not add block'),
+          description: tr('The block type {{library}} does not exist in the library', { library }),
           variant: 'fail',
         })
         return
@@ -524,8 +525,8 @@ export const FBDBody = ({ rung, nodeDivergences = [], isDebuggerActive = false }
 
     if (!newNode) {
       toast({
-        title: 'Can not add block',
-        description: `Internal error`,
+        title: tr('Can not add block'),
+        description: tr('Internal error'),
         variant: 'fail',
       })
       return
@@ -600,10 +601,11 @@ export const FBDBody = ({ rung, nodeDivergences = [], isDebuggerActive = false }
     const occupiedInOutPin = findOccupiedInOutPin(connection, rungLocal)
     if (occupiedInOutPin) {
       toast({
-        title: 'Can not connect',
-        description:
-          `The '${occupiedInOutPin}' pin already has a connection. An in-out pin takes exactly ` +
-          'one variable — remove the existing connection first.',
+        title: tr('Can not connect'),
+        description: tr(
+          "The '{{occupiedInOutPin}}' pin already has a connection. An in-out pin takes exactly one variable — remove the existing connection first.",
+          { occupiedInOutPin },
+        ),
         variant: 'fail',
       })
       return

@@ -1,6 +1,7 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { toast } from '@root/frontend/components/_features/[app]/toast/use-toast'
 import { useEthercatAliasEdit } from '@root/frontend/hooks/use-ethercat-alias-edit'
+import { tr } from '@root/frontend/locales/tr'
 import { useOpenPLCStore, useOpenPLCStoreApi } from '@root/frontend/store'
 import { cn } from '@root/frontend/utils/cn'
 import type {
@@ -149,13 +150,13 @@ const EtherCATModuleEditor = ({ busName, deviceId, moduleId }: EtherCATModuleEdi
         }
         const repoItem = summary.items.find((it) => it.id === moduleRepoId)
         if (!repoItem) {
-          setEsiError('ESI file for this module is not in the repository.')
+          setEsiError(tr('ESI file for this module is not in the repository.'))
           setIsLoadingEsi(false)
           return
         }
         const resolved = await resolveEsiModule(esi, repoItem, moduleIdent)
         if (cancelled) return
-        if (resolved === undefined) setEsiError('Module definition not found in its ESI file.')
+        if (resolved === undefined) setEsiError(tr('Module definition not found in its ESI file.'))
         else setEsiModule(resolved)
         setIsLoadingEsi(false)
       } catch (e) {
@@ -224,7 +225,7 @@ const EtherCATModuleEditor = ({ busName, deviceId, moduleId }: EtherCATModuleEdi
   if (!device || !module) {
     return (
       <div aria-label='EtherCAT module editor container' className='flex h-full w-full items-center justify-center p-6'>
-        <p className='text-sm text-neutral-500 dark:text-neutral-400'>Module not found in this project.</p>
+        <p className='text-sm text-neutral-500 dark:text-neutral-400'>{tr('Module not found in this project.')}</p>
       </div>
     )
   }
@@ -249,10 +250,14 @@ const EtherCATModuleEditor = ({ busName, deviceId, moduleId }: EtherCATModuleEdi
         className='flex min-h-0 flex-1 flex-col overflow-hidden'
       >
         <Tabs.List className='flex shrink-0 border-b border-neutral-200 dark:border-neutral-700'>
-          <TabItem value='channel-mappings' label='Channel Mappings' isActive={activeTab === 'channel-mappings'} />
-          <TabItem value='info' label='Device Info' isActive={activeTab === 'info'} />
-          <TabItem value='process-data' label='Process Data' isActive={activeTab === 'process-data'} />
-          <TabItem value='startup-params' label='Startup Parameters' isActive={activeTab === 'startup-params'} />
+          <TabItem
+            value='channel-mappings'
+            label={tr('Channel Mappings')}
+            isActive={activeTab === 'channel-mappings'}
+          />
+          <TabItem value='info' label={tr('Device Info')} isActive={activeTab === 'info'} />
+          <TabItem value='process-data' label={tr('Process Data')} isActive={activeTab === 'process-data'} />
+          <TabItem value='startup-params' label={tr('Startup Parameters')} isActive={activeTab === 'startup-params'} />
         </Tabs.List>
 
         <Tabs.Content
@@ -277,35 +282,35 @@ const EtherCATModuleEditor = ({ busName, deviceId, moduleId }: EtherCATModuleEdi
           <div className='flex-1 overflow-auto p-4'>
             <div className='grid grid-cols-2 gap-x-6 gap-y-3 text-xs'>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Name</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Name')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{module.name}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Slot</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Slot')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{module.slot}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Ident</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Ident')}</span>
                 <span className='font-mono text-neutral-700 dark:text-neutral-300'>{module.ident}</span>
               </div>
               {esiModule?.moduleClass && (
                 <div className='flex flex-col gap-0.5'>
-                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>Class</span>
+                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Class')}</span>
                   <span className='text-neutral-700 dark:text-neutral-300'>{esiModule.moduleClass}</span>
                 </div>
               )}
               {esiModule?.description && (
                 <div className='col-span-2 flex flex-col gap-0.5'>
-                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>Description</span>
+                  <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Description')}</span>
                   <span className='text-neutral-700 dark:text-neutral-300'>{esiModule.description}</span>
                 </div>
               )}
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Coupler</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Coupler')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{device.name}</span>
               </div>
               <div className='flex flex-col gap-0.5'>
-                <span className='font-medium text-neutral-500 dark:text-neutral-400'>Bus</span>
+                <span className='font-medium text-neutral-500 dark:text-neutral-400'>{tr('Bus')}</span>
                 <span className='text-neutral-700 dark:text-neutral-300'>{busName}</span>
               </div>
             </div>

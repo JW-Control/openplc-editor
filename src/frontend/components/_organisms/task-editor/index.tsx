@@ -1,3 +1,4 @@
+import { tr } from '@root/frontend/locales/tr'
 import { useCallback, useEffect, useState } from 'react'
 
 import type { PLCTask } from '../../../../middleware/shared/ports/types'
@@ -237,13 +238,13 @@ const TaskEditor = () => {
       }
 
       handleFileAndWorkspaceSavedState('Resource')
-      toast({ title: 'Update tables', description: 'Changes applied successfully.' })
+      toast({ title: tr('Update tables'), description: tr('Changes applied successfully.') })
       setParseError(null)
       return true
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unexpected syntax error.'
       setParseError(message)
-      toast({ title: 'Syntax error', description: message, variant: 'fail' })
+      toast({ title: tr('Syntax error'), description: message, variant: 'fail' })
       return false
     }
   }
@@ -311,9 +312,9 @@ const TaskEditor = () => {
         <ViewModeToggle
           display={editorTasks.display}
           onDisplayChange={handleVisualizationTypeChange}
-          containerLabel='Tasks visualization switch container'
-          tableLabel='Tasks table visualization'
-          codeLabel='Tasks code visualization'
+          containerLabel={tr('Tasks visualization switch container')}
+          tableLabel={tr('Tasks table visualization')}
+          codeLabel={tr('Tasks code visualization')}
           className={cn('flex-1', { 'absolute right-0': editorTasks.display === 'code' })}
         />
       </div>

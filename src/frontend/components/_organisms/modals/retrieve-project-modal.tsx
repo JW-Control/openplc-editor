@@ -24,6 +24,8 @@
  * switch.
  */
 
+import { tr } from '@root/frontend/locales/tr'
+import { trRich } from '@root/frontend/locales/tr-rich'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { FetchedProject, RetrievableDevice } from '../../../../middleware/shared/ports'
@@ -111,7 +113,7 @@ const RetrieveProjectModal = () => {
 
   const runScan = useCallback(async () => {
     if (!runtime.listRetrievableDevices) {
-      setError('Retrieving a project is not available on this platform.')
+      setError(tr('Retrieving a project is not available on this platform.'))
       return
     }
     setError('')
@@ -217,7 +219,7 @@ const RetrieveProjectModal = () => {
       }
       if (!opened?.success) {
         toast({
-          title: 'The retrieved project could not be opened',
+          title: tr('The retrieved project could not be opened'),
           description: opened?.error || 'The device sent a project this editor could not open.',
           variant: 'fail',
         })
@@ -235,15 +237,15 @@ const RetrieveProjectModal = () => {
         await offerLibraries(project)
       } catch (error) {
         toast({
-          title: 'Some libraries could not be installed',
+          title: tr('Some libraries could not be installed'),
           description: error instanceof Error ? error.message : String(error),
           variant: 'fail',
         })
       }
 
       toast({
-        title: `Retrieved "${project.projectName || 'project'}"`,
-        description: 'This project has no location yet — use Save As to keep it.',
+        title: tr('Retrieved "{{project}}"', { project: project.projectName || 'project' }),
+        description: tr('This project has no location yet — use Save As to keep it.'),
         variant: 'default',
       })
     },
@@ -254,13 +256,18 @@ const RetrieveProjectModal = () => {
   const retrieveAndOpen = useCallback(
     async (device: RetrievableDevice) => {
       if (!runtime.fetchRetrievableProject || !runtime.openFetchedProject) {
-        setError('Retrieving a project is not available on this platform.')
+        setError(tr('Retrieving a project is not available on this platform.'))
         setStep('pick')
         return
       }
 
       setStep('working')
-      setBusyMessage(`Retrieving ${device.projectName ?? 'the project'} from ${device.name}...`)
+      setBusyMessage(
+        tr('Retrieving {{projectName}} from {{name}}...', {
+          projectName: device.projectName ?? 'the project',
+          name: device.name,
+        }),
+      )
 
       const fetched = await runtime.fetchRetrievableProject(device)
       if (!fetched.success) {
@@ -270,7 +277,7 @@ const RetrieveProjectModal = () => {
         return
       }
 
-      setBusyMessage('Opening the project...')
+      setBusyMessage(tr('Opening the project...'))
 
       // The open project is replaced, so unsaved work gets its dialog first --
       // after the fetch, never before, so a device that turns out to have
@@ -296,7 +303,7 @@ const RetrieveProjectModal = () => {
           // which reads as being about the save.
           onActionAborted: (reason: 'save-failed' | 'cancelled') => {
             toast({
-              title: 'Retrieve stopped',
+              title: tr('Retrieve stopped'),
               description:
                 reason === 'save-failed'
                   ? 'Your project could not be saved, so nothing was replaced. Retrieve again and choose "Close without saving" to go ahead, or save this project another way first.'
@@ -361,7 +368,7 @@ const RetrieveProjectModal = () => {
     if (!selected) return
     setError('')
     setStep('working')
-    setBusyMessage(`Signing in to ${selected.name}...`)
+    setBusyMessage(tr('Signing in to {{name}}...', { name: selected.name }))
 
     // The platform was pointed at this device before we got here: its adapter
     // reads the target to know what to authenticate against, so the target has
@@ -388,13 +395,14 @@ const RetrieveProjectModal = () => {
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && close()}>
       <ModalContent className='flex h-[520px] w-[520px] select-none flex-col rounded-lg p-6'>
-        <ModalTitle className='mb-2 text-xl font-semibold'>Retrieve Project from PLC</ModalTitle>
+        <ModalTitle className='mb-2 text-xl font-semibold'>{tr('Retrieve Project from PLC')}</ModalTitle>
 
         {step === 'pick' && (
           <>
             <p className='mb-4 text-sm text-neutral-600 dark:text-neutral-400'>
-              Choose a device to retrieve its stored project. Retrieving requires an administrator account on that
-              device.
+              {tr(
+                'Choose a device to retrieve its stored project. Retrieving requires an administrator account on that device.',
+              )}
             </p>
 
             <div className='mb-3 flex items-center justify-between'>
@@ -408,7 +416,7 @@ const RetrieveProjectModal = () => {
                 disabled={scanning}
                 className='rounded-md bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-850 dark:text-neutral-100'
               >
-                Refresh
+                {tr('Refresh')}
               </button>
             </div>
 
@@ -457,11 +465,13 @@ const RetrieveProjectModal = () => {
         {step === 'confirm-disconnect' && selected && (
           <div data-testid='retrieve-confirm-disconnect' className='text-sm text-neutral-850 dark:text-neutral-300'>
             <p>
-              You are signed in to <strong>{connectedDeviceLabel}</strong>. Retrieving from{' '}
-              <strong>{selected.name}</strong> signs you out of it.
+              {trRich('You are signed in to {{connected}}. Retrieving from {{selected}} signs you out of it.', {
+                connected: <strong>{connectedDeviceLabel}</strong>,
+                selected: <strong>{selected.name}</strong>,
+              })}
             </p>
             <p className='mt-2 text-neutral-600 dark:text-neutral-400'>
-              One device is connected at a time, so continuing ends the session you are using.
+              {tr('One device is connected at a time, so continuing ends the session you are using.')}
             </p>
           </div>
         )}
@@ -469,20 +479,21 @@ const RetrieveProjectModal = () => {
         {step === 'credentials' && selected && (
           <div className='flex flex-col gap-3'>
             <p className='text-sm text-neutral-850 dark:text-neutral-300'>
-              Sign in to <strong>{selected.name}</strong>. Retrieving a project requires an administrator account on
-              that device.
+              {trRich('Sign in to {{device}}. Retrieving a project requires an administrator account on that device.', {
+                device: <strong>{selected.name}</strong>,
+              })}
             </p>
             <input
               autoFocus
               type='text'
-              placeholder='Username'
+              placeholder={tr('Username')}
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               className='rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100'
             />
             <input
               type='password'
-              placeholder='Password'
+              placeholder={tr('Password')}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className='rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100'
@@ -513,7 +524,7 @@ const RetrieveProjectModal = () => {
               disabled={!selected}
               className='flex-1 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark disabled:opacity-50'
             >
-              Continue
+              {tr('Continue')}
             </button>
           )}
           {step === 'confirm-disconnect' && (
@@ -522,7 +533,7 @@ const RetrieveProjectModal = () => {
               onClick={confirmDisconnect}
               className='flex-1 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark'
             >
-              Disconnect and continue
+              {tr('Disconnect and continue')}
             </button>
           )}
           {step === 'credentials' && (
@@ -532,7 +543,7 @@ const RetrieveProjectModal = () => {
               disabled={!username || !password}
               className='flex-1 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-medium-dark disabled:opacity-50'
             >
-              Sign in and retrieve
+              {tr('Sign in and retrieve')}
             </button>
           )}
           <button
@@ -541,7 +552,7 @@ const RetrieveProjectModal = () => {
             disabled={step === 'working'}
             className='flex-1 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-1000 hover:bg-neutral-200 disabled:opacity-50 dark:bg-neutral-850 dark:text-neutral-100'
           >
-            Cancel
+            {tr('Cancel')}
           </button>
         </div>
       </ModalContent>
