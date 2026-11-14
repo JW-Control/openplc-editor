@@ -41,7 +41,7 @@ import { store } from './modules/store'
 import { applyUiLanguage, readSavedUiLanguage } from './modules/ui-language'
 import { createElectronUpdateService } from './modules/updater'
 import { createVendorDocumentHandler, leavesVendorDocument } from './modules/vendor-document/serve'
-import { openProjectArg } from './open-project-arg'
+import { closeRequested, openProjectArg } from './open-project-arg'
 
 enableMapSet()
 
@@ -448,7 +448,8 @@ if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 
 // Ensure only one instance of the application is running;
-if (!app.requestSingleInstanceLock()) {
+// JWPLC Edition: --jwsim-close only talks to the running instance (second-instance).
+if (!app.requestSingleInstanceLock() || closeRequested(process.argv)) {
   app.quit()
   process.exit(0)
 }
@@ -531,6 +532,11 @@ app.on('window-all-closed', () => {
  */
 // Handle second instance of the app;
 app.on('second-instance', (_event, argv, workingDirectory) => {
+  // JWPLC Edition: JWPLC Sim se cerró y pide cerrar el editor (--jwsim-close).
+  if (closeRequested(argv)) {
+    quitCoordinator.requestQuit()
+    return
+  }
   // JWPLC Edition: la otra instancia pudo pedir un proyecto (--open-project).
   const projectPath = openProjectArg(argv, workingDirectory)
   if (mainWindow) {

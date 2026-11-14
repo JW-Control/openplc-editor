@@ -25,3 +25,13 @@ export function openProjectArg(argv: readonly string[], cwd: string = process.cw
   if (existsSync(dir) && statSync(dir).isFile() && dir.toLowerCase().endsWith('project.json')) dir = resolve(dir, '..')
   return existsSync(join(dir, 'project.json')) ? dir : null
 }
+
+/**
+ * `--jwsim-close`: JWPLC Sim se cierra y pide cerrar el editor con el que
+ * trabajaba. Llega a la instancia abierta por second-instance y la cierra como
+ * Archivo ▸ Salir (con el aviso de cambios sin guardar). Si no hay editor
+ * abierto, la instancia nueva termina sin mostrar nada.
+ */
+export const CLOSE_FLAG = '--jwsim-close'
+
+export const closeRequested = (argv: readonly string[]): boolean => argv.includes(CLOSE_FLAG)

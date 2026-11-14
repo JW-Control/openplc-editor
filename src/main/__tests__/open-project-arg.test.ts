@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { openProjectArg } from '../open-project-arg'
+import { closeRequested, openProjectArg } from '../open-project-arg'
 
 describe('openProjectArg (--open-project, JWPLC Edition)', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-project-'))
@@ -27,5 +27,13 @@ describe('openProjectArg (--open-project, JWPLC Edition)', () => {
 
   it('con varios, vale el último (second-instance trae el argv completo)', () => {
     expect(openProjectArg([`--open-project=${root}`, `--open-project=${project}`])).toBe(project)
+  })
+})
+
+describe('closeRequested (--jwsim-close, JWPLC Edition)', () => {
+  it('solo con la bandera exacta', () => {
+    expect(closeRequested(['editor.exe', '--jwsim-close'])).toBe(true)
+    expect(closeRequested(['editor.exe', '--open-project=x'])).toBe(false)
+    expect(closeRequested(['editor.exe', '--jwsim-closed'])).toBe(false)
   })
 })
