@@ -11,6 +11,7 @@ import { isWebUrl } from '@root/backend/editor/utils/is-web-url'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import Installer from 'electron-devtools-installer'
 import log from 'electron-log'
+import { existsSync } from 'fs'
 import { enableMapSet } from 'immer'
 import { homedir, platform, release } from 'os'
 import { join, resolve } from 'path'
@@ -111,6 +112,16 @@ const titlebarOptionsMap: Record<string, OptTitlebar> = {
 }
 
 const titlebarStyles = titlebarOptionsMap[systemInfo] || titlebarOptionsMap.default
+
+/**
+ * Preload of the main window. Unpackaged it is the dev bundle in configs/dll,
+ * but the production bundle run unpackaged (electron release/app/dist/main/main.js,
+ * as JWPLC Sim does with the editor repo) only has dist/main/preload.js.
+ */
+const preloadPath = () => {
+  const dev = join(__dirname, '../../configs/dll/preload.js')
+  return app.isPackaged || !existsSync(dev) ? join(__dirname, 'preload.js') : dev
+}
 
 const isDebug = process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true'
 
@@ -251,7 +262,7 @@ const createMainWindow = async () => {
     ...titlebarStyles,
     webPreferences: {
       sandbox: true,
-      preload: app.isPackaged ? join(__dirname, 'preload.js') : join(__dirname, '../../configs/dll/preload.js'),
+      preload: preloadPath(),
       // Only for the JWPLC HMI Designer tab: hmiDesignerHost lets no other page attach.
       webviewTag: true,
     },
