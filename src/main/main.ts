@@ -40,6 +40,7 @@ import { store } from './modules/store'
 import { applyUiLanguage, readSavedUiLanguage } from './modules/ui-language'
 import { createElectronUpdateService } from './modules/updater'
 import { createVendorDocumentHandler, leavesVendorDocument } from './modules/vendor-document/serve'
+import { openProjectArg } from './open-project-arg'
 
 enableMapSet()
 
@@ -181,6 +182,13 @@ async function completeProviderSignIn(provider: EdgeOAuthProviderId): Promise<vo
   }
 }
 
+// JWPLC Edition: proyecto pedido con --open-project (p. ej. por JWPLC Sim).
+let pendingOpenProject: string | null = openProjectArg(process.argv)
+/** Abre el proyecto como «Abrir reciente» (pasa por el aviso de cambios sin guardar). */
+const requestOpenProject = (projectPath: string) => {
+  mainWindow?.webContents.send('project:open-recent-accelerator', projectPath)
+}
+
 const createMainWindow = async () => {
   // Check if the application is on debug method, install the extensions
   if (isDebug) {
@@ -281,6 +289,12 @@ const createMainWindow = async () => {
       }
       splash.close()
       mainWindow?.show()
+      // El renderer ya escucha los aceleradores: se abre el proyecto pedido.
+      if (pendingOpenProject) {
+        const projectPath = pendingOpenProject
+        pendingOpenProject = null
+        setTimeout(() => requestOpenProject(projectPath), 800)
+      }
     }, 3000)
   })
 
@@ -505,11 +519,17 @@ app.on('window-all-closed', () => {
  * -> Second-instance event (https://www.electronjs.org/docs/latest/api/app#event-second-instance)
  */
 // Handle second instance of the app;
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv, workingDirectory) => {
+  // JWPLC Edition: la otra instancia pudo pedir un proyecto (--open-project).
+  const projectPath = openProjectArg(argv, workingDirectory)
   if (mainWindow) {
     // Focus on the main window if the user tried to open another
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
+    if (projectPath) {
+      if (mainWindow.isVisible()) requestOpenProject(projectPath)
+      else pendingOpenProject = projectPath
+    }
   }
 })
 
