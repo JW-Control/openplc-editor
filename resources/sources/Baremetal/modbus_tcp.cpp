@@ -48,8 +48,12 @@ modbus_tcp.cpp - Modbus TCP transport (Ethernet / WiFi / ESP ETH)
 // Modbus TCP compiled a firmware that never configured the interface -- fine on
 // a USB board, fatal on one reached only over Ethernet.
 #if defined(MBETH_JWPLC)
-// JWPLC Basic: true once JWPLC_Ethernet has a link or an address.
+// JWPLC Basic: jwplc_net_configured once mbconfig_ethernet_iface() ran;
+// jwplc_net_ready follows JWPLC_Ethernet.isReady(), which the runtime keeps
+// retrying in the background (link down at boot, cable, W5500 reset).
+static bool jwplc_net_configured = false;
 static bool jwplc_net_ready = false;
+static void jwplc_net_refresh(void);
 #endif
 
 #if defined(OPLC_NET_ENABLED) && defined(MBETH_JWPLC)
@@ -134,6 +138,7 @@ static void jwplc_discovery_task()
 
 void jwplc_net_service(void)
 {
+    jwplc_net_refresh();
     if (!jwplc_net_ready)
         return;
 
@@ -157,6 +162,7 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
             // JWPLC Basic: W5500 on the shared SPI bus. Never ETH.begin() nor a
             // direct Ethernet.begin(): JWPLC_Ethernet sets up CS, SPI, timeouts,
             // DHCP/static IP, link and W5500 state.
+            jwplc_net_configured = false;
             jwplc_net_ready = false;
             jwplc_discovery_ready = false;
 
@@ -197,9 +203,12 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
             Serial.println(JWPLC_Ethernet.statusString());
         #endif
 
-            jwplc_net_ready = ethOk || hasIp;
-            if (jwplc_net_ready)
-                jwplc_discovery_ready = (jwplc_discovery_udp.begin(JWPLC_DISCOVERY_PORT) == 1);
+            (void)ethOk;
+            (void)hasIp;
+            // begin() fails fast with the link still down; the runtime retries
+            // with this same config, so readiness is tracked in jwplc_net_refresh().
+            jwplc_net_configured = true;
+            jwplc_net_refresh();
             return;
 
         #elif defined(BOARD_ESP32)
@@ -277,6 +286,110 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
 
 #endif  // OPLC_NET_ENABLED
 
+#if defined(MBETH_JWPLC)
+#ifdef MB_TCP_ACTIVE
+static bool jwplc_mbtcp_wanted = false;
+#endif
+
+/** Open the discovery socket and the Modbus listener when JWPLC_Ethernet becomes
+ *  ready, and forget them when it stops being ready (a W5500 reset closes every
+ *  socket, so they are reopened on the next READY). */
+static void jwplc_net_refresh(void)
+{
+    if (!jwplc_net_configured)
+        return;
+
+    const bool up = JWPLC_Ethernet.isReady();
+    if (up == jwplc_net_ready)
+        return;
+
+    jwplc_net_ready = up;
+    #if defined(OPLC_NET_ENABLED)
+        jwplc_discovery_ready = up && (jwplc_discovery_udp.begin(JWPLC_DISCOVERY_PORT) == 1);
+    #endif
+    #ifdef MB_TCP_ACTIVE
+        if (up && jwplc_mbtcp_wanted)
+            mb_server.begin();
+    #endif
+}
+#endif
+
+#if defined(MBETH_JWPLC) && defined(MB_TCP_ACTIVE)
+#ifndef JWPLC_MBTCP_FRAME_TIMEOUT_MS
+    #define JWPLC_MBTCP_FRAME_TIMEOUT_MS 1000UL
+#endif
+
+/* Per-socket MBAP reassembly. TCP is a byte stream: a request can arrive in
+ * several segments, and reading only what is available drops it and leaves the
+ * rest of the stream misaligned. Each W5500 socket keeps its partial ADU here. */
+typedef struct {
+    uint8_t  buf[MBAP_SIZE + MAX_MB_FRAME];
+    uint16_t len;
+    uint16_t port;      /* remote port: a reused socket starts a new stream */
+    uint32_t last_ms;
+} jwplc_mbtcp_rx_t;
+
+static jwplc_mbtcp_rx_t jwplc_mbtcp_rx[MAX_SOCK_NUM];
+
+static void jwplc_handle_tcp_client(EthernetClient &client)
+{
+    const uint8_t sock = client.getSocketNumber();
+    if (sock >= MAX_SOCK_NUM)
+        return;
+
+    jwplc_mbtcp_rx_t &rx = jwplc_mbtcp_rx[sock];
+    const uint32_t now = millis();
+    const uint16_t port = client.remotePort();
+    if (rx.len > 0 && (rx.port != port || (uint32_t)(now - rx.last_ms) >= JWPLC_MBTCP_FRAME_TIMEOUT_MS))
+        rx.len = 0;   // stale partial frame: other connection, or abandoned
+    rx.port = port;
+    rx.last_ms = now;
+
+    uint16_t need = MBAP_SIZE;
+    for (;;)
+    {
+        if (rx.len >= MBAP_SIZE)
+        {
+            const uint16_t pid = (uint16_t)(rx.buf[2] << 8 | rx.buf[3]);
+            const uint16_t len = (uint16_t)(rx.buf[4] << 8 | rx.buf[5]);
+            if (pid != 0 || len < 2 || len > MAX_MB_FRAME)
+            {
+                rx.len = 0;      // not Modbus/TCP: the stream cannot be resynced
+                client.stop();
+                return;
+            }
+            need = (uint16_t)(MBAP_SIZE + len);
+        }
+        if (rx.len >= need)
+            break;
+        const int avail = client.available();
+        if (avail <= 0)
+            return;      // wait for the rest of the ADU
+        uint16_t chunk = (uint16_t)(need - rx.len);
+        if ((uint16_t)avail < chunk)
+            chunk = (uint16_t)avail;
+        const int got = client.read(&rx.buf[rx.len], chunk);
+        if (got <= 0)
+            return;
+        rx.len = (uint16_t)(rx.len + got);
+    }
+
+    memcpy(mb_mbap, rx.buf, MBAP_SIZE);
+    mb_frame_len = (uint16_t)(need - MBAP_SIZE);
+    memcpy(mb_frame, &rx.buf[MBAP_SIZE], mb_frame_len);
+    rx.len = 0;
+
+    process_mbpacket();
+    mb_mbap[4] = (mb_frame_len) >> 8;
+    mb_mbap[5] = (mb_frame_len) & 0x00FF;
+
+    uint8_t sendbuffer[MAX_MB_FRAME + MBAP_SIZE];
+    memcpy(sendbuffer, mb_mbap, MBAP_SIZE);
+    memcpy(&sendbuffer[MBAP_SIZE], mb_frame, mb_frame_len);
+    client.write(sendbuffer, mb_frame_len + MBAP_SIZE);
+}
+#endif
+
 #ifdef MB_TCP_ACTIVE
 /** Start listening for Modbus TCP. Separate from the link bring-up above
  *  because a board can have a network without serving Modbus over it -- the
@@ -284,7 +397,8 @@ void mbconfig_ethernet_iface(uint8_t *mac, uint8_t *ip, uint8_t *dns, uint8_t *g
 void mbtcp_server_begin(void)
 {
     #if defined(MBETH_JWPLC)
-        // No listener without a link: handle_tcp() stays idle as before.
+        // Without a link yet, jwplc_net_refresh() opens it on the next READY.
+        jwplc_mbtcp_wanted = true;
         if (!jwplc_net_ready) return;
     #endif
     #if defined(MBTCP_WIFI) && (defined(BOARD_ESP8266) || defined(BOARD_ESP32))
@@ -297,8 +411,11 @@ void handle_tcp()
 {
     #ifdef MBTCP_ETHERNET
         #if defined(MBETH_JWPLC)
+            jwplc_net_refresh();
             if (!jwplc_net_ready) return;
             EthernetClient client = mb_server.available();
+            if (client) jwplc_handle_tcp_client(client);
+            return;
         #elif defined(BOARD_ESP32)
             WiFiClient client = mb_server.available();
         #else
