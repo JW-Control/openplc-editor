@@ -124,7 +124,7 @@ jobs:
           for f in desktop.html designer-save-flow.js designer-openplc-host.js; do
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
           done
-          grep -q '2.1.0-alpha.16' resources/jwplc-hmi-designer/poc/desktop.html
+          grep -q '2.1.0-alpha.17' resources/jwplc-hmi-designer/poc/desktop.html
           # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4) and the light/dark theme.
           for f in designer-openplc-bindings.js designer-theme.js designer-light-theme.css; do
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
