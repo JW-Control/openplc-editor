@@ -479,13 +479,31 @@ interface JwhmiBindable {
   id?: unknown
   variable?: unknown
   plcBinding?: unknown
+  ch2Enabled?: unknown
+  ch2Variable?: unknown
+  ch2PlcBinding?: unknown
+  ch3Enabled?: unknown
+  ch3Variable?: unknown
+  ch3PlcBinding?: unknown
+  balizaMode?: unknown
+  tierCount?: unknown
+  tierVariables?: unknown
+  tierBindings?: unknown
   nodes?: unknown
+}
+
+/** Name or id of a Designer object for messages; `fallback` when neither is text. */
+function labelOf(object: JwhmiBindable, fallback: string): string {
+  if (typeof object.name === 'string' && object.name) return object.name
+  if (typeof object.id === 'string' && object.id) return object.id
+  return fallback
 }
 
 /**
  * Links declared in the Designer project: `plcBinding: { var, access }` on
- * fields and on MENU nodes (contract section 2). Objects without `plcBinding`
- * are skipped (static objects, or an Arduino-mode project).
+ * fields, TREND channels, independent Baliza tiers, and MENU nodes (contract
+ * section 2). Objects without `plcBinding` are skipped (static objects, or an
+ * Arduino-mode project).
  */
 export function extractJwhmiBindings(jwhmiJson: string): BindingLink[] | string {
   const file = `${JWPLC_HMI_PROJECT_DIR}/${JWPLC_HMI_PROJECT_FILE}`
@@ -501,7 +519,45 @@ export function extractJwhmiBindings(jwhmiJson: string): BindingLink[] | string 
   const objects: JwhmiBindable[] = []
   for (const field of fields as Array<JwhmiBindable | null>) {
     if (field === null || typeof field !== 'object') continue
+    if (field.type === 'ICON' && field.balizaMode === 'independent') {
+      // Same tier count and default names as the Designer (designer-icons-core.js).
+      const requested = Number(field.tierCount) || 4
+      const tierCount = Math.max(1, Math.min(4, Math.trunc(requested)))
+      const tierVars: unknown[] = Array.isArray(field.tierVariables) ? field.tierVariables : []
+      const tierBinds: unknown[] = Array.isArray(field.tierBindings) ? field.tierBindings : []
+      const baseVar = typeof field.variable === 'string' && field.variable.trim() ? field.variable.trim() : 'torre'
+      const baseName = labelOf(field, 'ICON')
+      for (let t = 0; t < tierCount; t += 1) {
+        const tierEntry = tierBinds[t] as { plcBinding?: unknown } | null | undefined
+        if (tierEntry && typeof tierEntry === 'object' && tierEntry.plcBinding !== undefined) {
+          const tierVar = tierVars[t]
+          objects.push({
+            name: `${baseName} (piso ${t + 1})`,
+            variable: typeof tierVar === 'string' && tierVar.trim() ? tierVar : `${baseVar}_p${t + 1}`,
+            plcBinding: tierEntry.plcBinding,
+          })
+        }
+      }
+      continue
+    }
     objects.push(field)
+    if (field.type === 'TREND') {
+      const baseName = labelOf(field, 'TREND')
+      if (field.ch2Enabled && field.ch2PlcBinding !== undefined) {
+        objects.push({
+          name: `${baseName} (canal 2)`,
+          variable: field.ch2Variable,
+          plcBinding: field.ch2PlcBinding,
+        })
+      }
+      if (field.ch3Enabled && field.ch3PlcBinding !== undefined) {
+        objects.push({
+          name: `${baseName} (canal 3)`,
+          variable: field.ch3Variable,
+          plcBinding: field.ch3PlcBinding,
+        })
+      }
+    }
     if (field.type === 'MENU' && Array.isArray(field.nodes)) objects.push(...(field.nodes as JwhmiBindable[]))
   }
 

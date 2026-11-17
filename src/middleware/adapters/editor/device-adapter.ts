@@ -31,6 +31,7 @@ import type {
   JwplcDeviceDiscoveryResult,
   OpenHmiDesignerArgs,
   OpenHmiDesignerResult,
+  OpenInJwplcSimResult,
   PrepareHmiDesignerResult,
 } from '../../shared/ports/device-port'
 import type { BoardInfo, CommunicationPort, DebugConnectionConfig } from '../../shared/ports/types'
@@ -60,6 +61,10 @@ export function createEditorDeviceAdapter(): DevicePort {
 
     getPreviewImage(imageName: string, packagePath?: string): Promise<string> {
       return window.bridge.getPreviewImage(imageName, packagePath)
+    },
+
+    openInJwplcSim(projectPath: string): Promise<OpenInJwplcSimResult> {
+      return window.bridge.openInJwplcSim(projectPath)
     },
 
     prepareHmiDesigner(args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult> {

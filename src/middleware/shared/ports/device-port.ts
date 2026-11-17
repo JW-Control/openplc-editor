@@ -164,6 +164,9 @@ export type OpenHmiDesignerArgs = {
 
 export type OpenHmiDesignerResult = { ok: true } | { ok: false; error: string }
 
+/** No `error` when the user cancelled locating JWPLC Sim. */
+export type OpenInJwplcSimResult = { ok: true } | { ok: false; error?: string }
+
 /** The HMI Designer tab loads `url` in its `<webview>`. */
 export type PrepareHmiDesignerResult = { ok: true; url: string } | { ok: false; error: string }
 
@@ -236,6 +239,9 @@ export interface DevicePort {
    * Editor only; web leaves the HMI Designer calls undefined.
    */
   prepareHmiDesigner?(args: OpenHmiDesignerArgs): Promise<PrepareHmiDesignerResult>
+
+  /** Open the saved project in JWPLC Sim, which compiles it with its own pinned editor chain. Editor only. */
+  openInJwplcSim?(projectPath: string): Promise<OpenInJwplcSimResult>
 
   /** Open (or focus) the full Designer in its own window, linked to the same project. */
   openHmiDesignerWindow?(args: OpenHmiDesignerArgs): Promise<OpenHmiDesignerResult>
