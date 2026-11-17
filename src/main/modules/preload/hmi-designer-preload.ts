@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld('JWPLCHMINative', {
     ipcRenderer.send('jwplc-hmi:serial-port-chosen', { requestId, portId: portId || '' }),
 })
 
+let lastEditorWindowOpen: boolean | null = null
+const editorWindowListeners = new Set<(open: boolean) => void>()
+ipcRenderer.on('jwplc-hmi-host:editor-window', (_event, open: boolean) => {
+  lastEditorWindowOpen = Boolean(open)
+  for (const listener of editorWindowListeners) listener(lastEditorWindowOpen)
+})
+
 // OpenPLC host: project context, PLC variables and the saved project.
 contextBridge.exposeInMainWorld('JWPLCHMIHost', {
   version: 1,
@@ -59,7 +66,9 @@ contextBridge.exposeInMainWorld('JWPLCHMIHost', {
   setDirty: (dirty: boolean) => ipcRenderer.send('jwplc-hmi-host:dirty', Boolean(dirty)),
   // Binding view: "Editar diseño…" opens the editor window; while it is open the view is read-only.
   openEditor: () => ipcRenderer.invoke('jwplc-hmi-host:open-editor'),
+  isEditorWindowOpen: () => ipcRenderer.invoke('jwplc-hmi-host:is-editor-open'),
   onEditorWindow: (callback: (open: boolean) => void) => {
-    ipcRenderer.on('jwplc-hmi-host:editor-window', (_event, open: boolean) => callback(Boolean(open)))
+    editorWindowListeners.add(callback)
+    if (lastEditorWindowOpen !== null) callback(lastEditorWindowOpen)
   },
 })
