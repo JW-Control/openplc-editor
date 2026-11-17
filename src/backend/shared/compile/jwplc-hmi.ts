@@ -492,6 +492,13 @@ interface JwhmiBindable {
   nodes?: unknown
 }
 
+/** Name or id of a Designer object for messages; `fallback` when neither is text. */
+function labelOf(object: JwhmiBindable, fallback: string): string {
+  if (typeof object.name === 'string' && object.name) return object.name
+  if (typeof object.id === 'string' && object.id) return object.id
+  return fallback
+}
+
 /**
  * Links declared in the Designer project: `plcBinding: { var, access }` on
  * fields, TREND channels, independent Baliza tiers, and MENU nodes (contract
@@ -513,17 +520,20 @@ export function extractJwhmiBindings(jwhmiJson: string): BindingLink[] | string 
   for (const field of fields as Array<JwhmiBindable | null>) {
     if (field === null || typeof field !== 'object') continue
     if (field.type === 'ICON' && field.balizaMode === 'independent') {
-      const tierCount = Math.max(1, Math.min(4, Number(field.tierCount || 4)))
-      const tierVars = Array.isArray(field.tierVariables) ? field.tierVariables : []
-      const tierBinds = Array.isArray(field.tierBindings) ? field.tierBindings : []
+      // Same tier count and default names as the Designer (designer-icons-core.js).
+      const requested = Number(field.tierCount) || 4
+      const tierCount = Math.max(1, Math.min(4, Math.trunc(requested)))
+      const tierVars: unknown[] = Array.isArray(field.tierVariables) ? field.tierVariables : []
+      const tierBinds: unknown[] = Array.isArray(field.tierBindings) ? field.tierBindings : []
       const baseVar = typeof field.variable === 'string' && field.variable.trim() ? field.variable.trim() : 'torre'
-      const baseName = String(field.name ?? field.id ?? 'ICON')
+      const baseName = labelOf(field, 'ICON')
       for (let t = 0; t < tierCount; t += 1) {
         const tierEntry = tierBinds[t] as { plcBinding?: unknown } | null | undefined
         if (tierEntry && typeof tierEntry === 'object' && tierEntry.plcBinding !== undefined) {
+          const tierVar = tierVars[t]
           objects.push({
             name: `${baseName} (piso ${t + 1})`,
-            variable: typeof tierVars[t] === 'string' && tierVars[t].trim() ? tierVars[t] : `${baseVar}_p${t + 1}`,
+            variable: typeof tierVar === 'string' && tierVar.trim() ? tierVar : `${baseVar}_p${t + 1}`,
             plcBinding: tierEntry.plcBinding,
           })
         }
@@ -532,7 +542,7 @@ export function extractJwhmiBindings(jwhmiJson: string): BindingLink[] | string 
     }
     objects.push(field)
     if (field.type === 'TREND') {
-      const baseName = String(field.name ?? field.id ?? 'TREND')
+      const baseName = labelOf(field, 'TREND')
       if (field.ch2Enabled && field.ch2PlcBinding !== undefined) {
         objects.push({
           name: `${baseName} (canal 2)`,

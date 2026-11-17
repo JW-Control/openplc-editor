@@ -643,7 +643,8 @@ class HmiDesignerHost {
       const { header, project, clean } = (await guest.executeJavaScript(
         `(async () => {
           const api = window.JWPLCHMIProject;
-          if (!api || !api.serialize || window.__jwplcNativeProjectLoaded === false) return { header: '', project: '' };
+          if (!api || !api.serialize) return { header: '', project: '' };
+          if (window.__jwplcNativeProjectLoaded === false) return { header: '', project: '', clean: true };
           if (!window.JWPLCHMISaveFlow || typeof window.JWPLCHMISaveFlow.isDirty !== 'function' || !window.JWPLCHMISaveFlow.isDirty()) {
             return { header: '', project: '', clean: true };
           }

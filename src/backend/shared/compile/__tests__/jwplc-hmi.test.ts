@@ -315,6 +315,26 @@ describe('generateJwplcHmi with plcBinding in the .jwhmi (F3)', () => {
     expect(result.messages).toContain('HMI: rele_q0_0 <- RELE (%QX0.0)')
   })
 
+  it('reads a non-numeric Baliza tierCount as 4 tiers with default names', () => {
+    const result = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: undefined,
+      jwhmiJson: jwhmi([
+        {
+          type: 'ICON',
+          name: 'Baliza',
+          balizaMode: 'independent',
+          tierCount: 'x',
+          variable: 'torre',
+          tierBindings: [null, null, null, { plcBinding: { var: 'RELE' } }],
+        },
+      ]),
+      projectData: memory(),
+    })
+    // The 4th tier is read and named torre_p4 (not in the F0 header, hence the error).
+    expect(result.errors).toEqual(['HMI: "torre_p4" no es una variable de JWPLC_HMI_Generated.h.'])
+  })
+
   it('merges bindings.json and rejects the same HMI variable twice', () => {
     const merged = generateJwplcHmi({
       header: F0_HEADER,
