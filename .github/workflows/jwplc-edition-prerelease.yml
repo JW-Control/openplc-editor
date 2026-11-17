@@ -22,8 +22,9 @@ on:
 env:
   NODE_VERSION: '22.x'
   PLATFORM_REPO: https://github.com/JW-Control/platform-jwplc.git
-  # v2.1.0-alpha.17/JWPLC-Sim/main @ 4cb23c5 (Designer: temas claro/oscuro, indicadores de nivel, vista embebida en OpenPLC)
-  PLATFORM_DESIGNER_SHA: 4cb23c5c990100cc362df909596a65c83130a024
+  # v2.1.0-alpha.17/JWPLC-Sim/main @ 3f29398 (Designer de alpha.17: TREND, QR, multipágina con subvistas, popups,
+  # menú CARDS, 64 campos e iconos nativos JWPLC_Icons)
+  PLATFORM_DESIGNER_SHA: 3f293987a4c612ecd61aca85d4407babff544777
   # v2.1.0-alpha.17/Editor-Upstream/main @ 0647a84 (VPP 2.1.0-alpha.17, pantallas 4.3, firma jwcontrol-2026
   # verificada, mismo árbol que cfb5908).
   PLATFORM_VPP_SHA: 0647a84c15cb24f024021a0ea9402a9876fed2d2
@@ -123,7 +124,7 @@ jobs:
           for f in desktop.html designer-save-flow.js designer-openplc-host.js; do
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
           done
-          grep -q '2.1.0-alpha.16' resources/jwplc-hmi-designer/poc/desktop.html
+          grep -q '2.1.0-alpha.17' resources/jwplc-hmi-designer/poc/desktop.html
           # Binding view of the OpenPLC tab (jwplc-hmi-host 1.4) and the light/dark theme.
           for f in designer-openplc-bindings.js designer-theme.js designer-light-theme.css; do
             test -f "resources/jwplc-hmi-designer/poc/$f" || { echo "::error::Designer file $f missing"; exit 1; }
