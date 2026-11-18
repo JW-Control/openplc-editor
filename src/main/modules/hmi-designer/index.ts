@@ -104,10 +104,11 @@ interface SerialPortRequest {
 
 type DesignerRoot = { root: string } | { error: string }
 
-const designerPreloadPath = () =>
-  app.isPackaged
-    ? join(__dirname, 'hmi-designer-preload.js')
-    : join(__dirname, '../../configs/dll/hmi-designer-preload.js')
+/** Same fallback as the main window: the production bundle run unpackaged only has dist/main/. */
+const designerPreloadPath = () => {
+  const dev = join(__dirname, '../../configs/dll/hmi-designer-preload.js')
+  return app.isPackaged || !existsSync(dev) ? join(__dirname, 'hmi-designer-preload.js') : dev
+}
 
 const designerCandidates = () =>
   [
