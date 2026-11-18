@@ -11,6 +11,7 @@ import { isWebUrl } from '@root/backend/editor/utils/is-web-url'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import Installer from 'electron-devtools-installer'
 import log from 'electron-log'
+import { existsSync } from 'fs'
 import { enableMapSet } from 'immer'
 import { homedir, platform, release } from 'os'
 import { join, resolve } from 'path'
@@ -34,11 +35,13 @@ import MenuBuilder from './menu'
 import { hmiDesignerHost } from './modules/hmi-designer'
 import MainProcessBridge from './modules/ipc/main'
 import { installBundledVpp } from './modules/jwplc-bundled-vpp'
+import { registerJwplcSim } from './modules/jwplc-sim'
 import { createQuitCoordinator } from './modules/lifecycle/quit-coordinator'
 import { store } from './modules/store'
 import { applyUiLanguage, readSavedUiLanguage } from './modules/ui-language'
 import { createElectronUpdateService } from './modules/updater'
 import { createVendorDocumentHandler, leavesVendorDocument } from './modules/vendor-document/serve'
+import { closeRequested, openProjectArg } from './open-project-arg'
 
 enableMapSet()
 
@@ -110,6 +113,16 @@ const titlebarOptionsMap: Record<string, OptTitlebar> = {
 
 const titlebarStyles = titlebarOptionsMap[systemInfo] || titlebarOptionsMap.default
 
+/**
+ * Preload of the main window. Unpackaged it is the dev bundle in configs/dll,
+ * but the production bundle run unpackaged (electron release/app/dist/main/main.js,
+ * as JWPLC Sim does with the editor repo) only has dist/main/preload.js.
+ */
+const preloadPath = () => {
+  const dev = join(__dirname, '../../configs/dll/preload.js')
+  return app.isPackaged || !existsSync(dev) ? join(__dirname, 'preload.js') : dev
+}
+
 const isDebug = process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true'
 
 if (isDebug) {
@@ -180,6 +193,13 @@ async function completeProviderSignIn(provider: EdgeOAuthProviderId): Promise<vo
   }
 }
 
+// JWPLC Edition: proyecto pedido con --open-project (p. ej. por JWPLC Sim).
+let pendingOpenProject: string | null = openProjectArg(process.argv)
+/** Abre el proyecto como «Abrir reciente» (pasa por el aviso de cambios sin guardar). */
+const requestOpenProject = (projectPath: string) => {
+  mainWindow?.webContents.send('project:open-recent-accelerator', projectPath)
+}
+
 const createMainWindow = async () => {
   // Check if the application is on debug method, install the extensions
   if (isDebug) {
@@ -242,7 +262,7 @@ const createMainWindow = async () => {
     ...titlebarStyles,
     webPreferences: {
       sandbox: true,
-      preload: app.isPackaged ? join(__dirname, 'preload.js') : join(__dirname, '../../configs/dll/preload.js'),
+      preload: preloadPath(),
       // Only for the JWPLC HMI Designer tab: hmiDesignerHost lets no other page attach.
       webviewTag: true,
     },
@@ -280,6 +300,12 @@ const createMainWindow = async () => {
       }
       splash.close()
       mainWindow?.show()
+      // El renderer ya escucha los aceleradores: se abre el proyecto pedido.
+      if (pendingOpenProject) {
+        const projectPath = pendingOpenProject
+        pendingOpenProject = null
+        setTimeout(() => requestOpenProject(projectPath), 800)
+      }
     }, 3000)
   })
 
@@ -412,6 +438,7 @@ const createMainWindow = async () => {
   mainIpcModule.setupMainIpcListener()
   // JWPLC HMI Designer window (Alpha14 F3). Registers its channels once.
   hmiDesignerHost.register(ipcMain)
+  registerJwplcSim(ipcMain)
 }
 
 // Disable GPU Acceleration for Windows 7;
@@ -421,7 +448,8 @@ if (release().startsWith('6.1')) app.disableHardwareAcceleration()
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 
 // Ensure only one instance of the application is running;
-if (!app.requestSingleInstanceLock()) {
+// JWPLC Edition: --jwsim-close only talks to the running instance (second-instance).
+if (!app.requestSingleInstanceLock() || closeRequested(process.argv)) {
   app.quit()
   process.exit(0)
 }
@@ -503,11 +531,22 @@ app.on('window-all-closed', () => {
  * -> Second-instance event (https://www.electronjs.org/docs/latest/api/app#event-second-instance)
  */
 // Handle second instance of the app;
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv, workingDirectory) => {
+  // JWPLC Edition: JWPLC Sim se cerró y pide cerrar el editor (--jwsim-close).
+  if (closeRequested(argv)) {
+    quitCoordinator.requestQuit()
+    return
+  }
+  // JWPLC Edition: la otra instancia pudo pedir un proyecto (--open-project).
+  const projectPath = openProjectArg(argv, workingDirectory)
   if (mainWindow) {
     // Focus on the main window if the user tried to open another
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
+    if (projectPath) {
+      if (mainWindow.isVisible()) requestOpenProject(projectPath)
+      else pendingOpenProject = projectPath
+    }
   }
 })
 

@@ -281,6 +281,60 @@ describe('generateJwplcHmi with plcBinding in the .jwhmi (F3)', () => {
     expect(result.warnings).toEqual([])
   })
 
+  it('links TREND extra channels and independent Baliza tiers from .jwhmi', () => {
+    const result = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: undefined,
+      jwhmiJson: jwhmi([
+        {
+          type: 'TREND',
+          name: 'Curvas',
+          variable: 'nivel',
+          plcBinding: { var: 'LIMITE' },
+          ch2Enabled: true,
+          ch2Variable: 'limite',
+          ch2PlcBinding: { var: 'LIMITE' },
+          ch3Enabled: false,
+          ch3Variable: 'ignorado',
+          ch3PlcBinding: { var: 'LIMITE' },
+        },
+        {
+          type: 'ICON',
+          name: 'Baliza',
+          balizaMode: 'independent',
+          tierCount: 2,
+          tierVariables: ['rele_q0_0', 'piso_2'],
+          tierBindings: [{ plcBinding: { var: 'RELE' } }, null],
+        },
+      ]),
+      projectData: memory(),
+    })
+    expect(result.errors).toEqual([])
+    expect(result.messages).toContain('HMI: nivel <- LIMITE (%MW1)')
+    expect(result.messages).toContain('HMI: limite <- LIMITE (%MW1)')
+    expect(result.messages).toContain('HMI: rele_q0_0 <- RELE (%QX0.0)')
+  })
+
+  it('reads a non-numeric Baliza tierCount as 4 tiers with default names', () => {
+    const result = generateJwplcHmi({
+      header: F0_HEADER,
+      bindingsJson: undefined,
+      jwhmiJson: jwhmi([
+        {
+          type: 'ICON',
+          name: 'Baliza',
+          balizaMode: 'independent',
+          tierCount: 'x',
+          variable: 'torre',
+          tierBindings: [null, null, null, { plcBinding: { var: 'RELE' } }],
+        },
+      ]),
+      projectData: memory(),
+    })
+    // The 4th tier is read and named torre_p4 (not in the F0 header, hence the error).
+    expect(result.errors).toEqual(['HMI: "torre_p4" no es una variable de JWPLC_HMI_Generated.h.'])
+  })
+
   it('merges bindings.json and rejects the same HMI variable twice', () => {
     const merged = generateJwplcHmi({
       header: F0_HEADER,

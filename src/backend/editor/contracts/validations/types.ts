@@ -28,6 +28,8 @@ const StoreSchema = z.object({
   auto_update_check: z.boolean(),
   // UI language chosen in Display > Language ('es' | 'en'); absent means the default.
   language: z.string().optional(),
+  // Program chosen for JWPLC Sim, kept once it starts; absent means the default install folders.
+  jwplc_sim_path: z.string().optional(),
 })
 
 export { StoreSchema, ThemeSchema }

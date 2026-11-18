@@ -104,10 +104,11 @@ interface SerialPortRequest {
 
 type DesignerRoot = { root: string } | { error: string }
 
-const designerPreloadPath = () =>
-  app.isPackaged
-    ? join(__dirname, 'hmi-designer-preload.js')
-    : join(__dirname, '../../configs/dll/hmi-designer-preload.js')
+/** Same fallback as the main window: the production bundle run unpackaged only has dist/main/. */
+const designerPreloadPath = () => {
+  const dev = join(__dirname, '../../configs/dll/hmi-designer-preload.js')
+  return app.isPackaged || !existsSync(dev) ? join(__dirname, 'hmi-designer-preload.js') : dev
+}
 
 const designerCandidates = () =>
   [
@@ -259,6 +260,10 @@ class HmiDesignerHost {
         if (this.owner && !this.owner.isDestroyed()) await this.openWindow(this.owner)
         return { ok: true }
       }),
+    )
+    ipcMain.handle(
+      'jwplc-hmi-host:is-editor-open',
+      fromDesigner(() => this.windowOpen()),
     )
 
     // Unsaved changes of the design: the OpenPLC tab shows them like any other file.
@@ -423,10 +428,12 @@ class HmiDesignerHost {
     const session = this.session
     if (!session) return true
     if (this.windowOpen()) {
+      if (!this.dirty.window) return true
       const saved = await this.saveOpenProject(session, this.window!.webContents)
       if (saved) this.reloadTabSoon()
       return saved
     }
+    if (!this.dirty.tab) return true
     return this.live(this.tab) ? this.saveOpenProject(session, this.tab) : true
   }
 
@@ -439,7 +446,7 @@ class HmiDesignerHost {
     const session = this.session
     if (!session) return
     // What the binding view has (links not saved yet) is what the window opens.
-    if (this.live(this.tab) && this.dirty.tab) await this.saveOpenProject(session, this.tab)
+    if (this.live(this.tab)) await this.saveOpenProject(session, this.tab)
 
     const parent = BrowserWindow.fromWebContents(owner)
     const window = new BrowserWindow({
@@ -634,21 +641,31 @@ class HmiDesignerHost {
   private async saveOpenProject(session: Session, guest: WebContents): Promise<boolean> {
     if (guest.isDestroyed()) return false
     try {
-      const { header, project } = (await guest.executeJavaScript(
+      const { header, project, clean } = (await guest.executeJavaScript(
         `(async () => {
           const api = window.JWPLCHMIProject;
           if (!api || !api.serialize) return { header: '', project: '' };
+          if (window.__jwplcNativeProjectLoaded === false) return { header: '', project: '', clean: true };
+          if (!window.JWPLCHMISaveFlow || typeof window.JWPLCHMISaveFlow.isDirty !== 'function' || !window.JWPLCHMISaveFlow.isDirty()) {
+            return { header: '', project: '', clean: true };
+          }
           let header = '';
           try { header = await window.JWPLCHMIProjectIntegrationFix.buildHeader(); } catch (_) { header = ''; }
           return { header: header || '', project: JSON.stringify(api.serialize(), null, 2) + '\\n' };
         })()`,
         true,
-      )) as { header: string; project: string }
+      )) as { header: string; project: string; clean?: boolean }
+      if (clean) return true
       if (!project) return false
       if (header) await this.writeHeader(session, { text: header })
       const result = await this.writeProject(session, { text: project })
       if (result.ok && !guest.isDestroyed()) {
         await guest.executeJavaScript('window.JWPLCHMISaveFlow && window.JWPLCHMISaveFlow.markSaved()', true)
+        const which = this.pageOf(guest)
+        if (which) {
+          this.dirty[which] = false
+          this.sendDirty()
+        }
       }
       return result.ok
     } catch {
